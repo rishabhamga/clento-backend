@@ -1,0 +1,147 @@
+---
+description: Clento Backend Service Coding Standards
+globs: "**/*.{js,ts}"
+alwaysApply: true
+---
+
+# Clento Backend Coding Standards
+
+## **Code Structure and Organization**
+- **Keep Functions Small and Focused**
+  - Functions should do one thing and do it well
+  - Aim for less than 15 lines per function
+  - Extract complex logic into separate helper functions
+
+- **Naming Conventions**
+  - Use descriptive, meaningful names for variables, functions, and classes
+  - Controllers should end with `Controller` suffix
+  - Services should end with `Service` suffix
+  - DTOs should end with `Dto` suffix
+  - Repositories should end with `Repository` suffix
+
+- **File Organization**
+  - One class/component per file
+  - Group related files in directories by feature
+  - Keep directory structure flat when possible
+
+## **Code Quality**
+- **Minimize Code Complexity**
+  - Prefer simple, readable code over clever solutions
+  - Avoid deep nesting (maximum 3 levels)
+  - Use early returns to reduce nesting
+
+- **Error Handling**
+  - Use custom error classes for different error types
+  - Always catch and properly handle errors
+  - Provide meaningful error messages
+
+- **Asynchronous Code**
+  - Use async/await over Promise chains
+  - Handle promise rejections properly
+  ```typescript
+  // ✅ DO: Use async/await with proper error handling
+  async function getData() {
+    try {
+      const result = await fetchData();
+      return result;
+    } catch (error) {
+      logger.error('Failed to fetch data', error);
+      throw new AppError('Failed to fetch data', 500);
+    }
+  }
+  
+  // ❌ DON'T: Use unhandled promises or complex chains
+  function getData() {
+    return fetchData()
+      .then(result => processResult(result))
+      .then(processed => {
+        // Complex logic here
+      });
+  }
+  ```
+
+## **API Design**
+- **RESTful Principles**
+  - Use appropriate HTTP methods (GET, POST, PUT, DELETE)
+  - Return appropriate status codes
+  - Use consistent URL patterns
+
+- **Swagger Documentation**
+  - Document all API endpoints with Swagger annotations
+  - Include request/response examples
+  - Document all possible response status codes
+
+- **Request Validation**
+  - Validate all incoming requests using DTOs
+  - Return clear validation error messages
+
+## **Database Access**
+- **Repository Pattern**
+  - Use repositories to abstract database access
+  - Keep SQL queries in repositories, not in services
+  - Use parameterized queries to prevent SQL injection
+
+- **Transaction Management**
+  - Use transactions for operations that modify multiple records
+  - Ensure proper error handling within transactions
+
+## **Security**
+- **Authentication and Authorization**
+  - Use Clerk for authentication
+  - Implement proper authorization checks
+  - Never expose sensitive data in responses
+
+- **Input Sanitization**
+  - Sanitize all user inputs
+  - Use parameterized queries for database operations
+  - Validate request payloads against schemas
+
+## **Testing**
+- **Unit Tests**
+  - Write tests for all business logic
+  - Mock external dependencies
+  - Aim for high code coverage
+
+- **Integration Tests**
+  - Test API endpoints with real HTTP requests
+  - Use separate test database
+
+## **Performance**
+- **Optimize Database Queries**
+  - Use indexes for frequently queried columns
+  - Avoid N+1 query problems
+  - Use pagination for large result sets
+
+- **Caching**
+  - Cache frequently accessed, rarely changing data
+  - Use appropriate cache invalidation strategies
+
+## **Logging**
+- **Structured Logging**
+  - Use structured logging format (JSON)
+  - Include relevant context in log entries
+  - Use appropriate log levels (debug, info, warn, error)
+
+- **Error Logging**
+  - Log all errors with stack traces
+  - Include request context in error logs
+  - Don't log sensitive information
+
+## **Configuration**
+- **Environment Variables**
+  - Use environment variables for configuration
+  - Provide sensible defaults
+  - Validate required environment variables on startup
+
+## **Coding**
+- **writing new code**
+  - Before writing any new code, scan in the repo if we already have some code for it, do not just blindly create new code, verify if that can be used by modifying a little.
+  - When you modify a existing code for new functionality, verify it that code is being use somewhere and does not break that
+
+- **Code Cleanup**
+  - Remove unused code, files, and dependencies
+  - Delete old implementations when replacing with new ones
+  - Always verify code is not used elsewhere before removing it
+  - Keep imports clean by removing unused imports
+  - Remove commented out code that is no longer needed
+  - Document why code is kept if it appears unused but serves a purpose
