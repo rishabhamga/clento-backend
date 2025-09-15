@@ -9,7 +9,6 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "lint": "eslint . --ext .ts",
     "test": "jest",
-    "migrate": "node dist/scripts/migrate.js"
   },
   "dependencies": {
     "@clerk/clerk-sdk-node": "^4.13.4",
