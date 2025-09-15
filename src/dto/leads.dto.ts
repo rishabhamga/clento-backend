@@ -340,6 +340,148 @@ export const PublishLeadListResponseDto = z.object({
   fileUrl: z.string().optional(), // Make optional since we might not have GCS configured yet
 });
 
+/**
+ * DTO for lead response (matches database Row type)
+ */
+export const LeadResponseDto = z.object({
+  id: z.string().uuid(),
+  lead_list_id: z.string().uuid(),
+  organization_id: z.string().uuid(),
+  first_name: z.string().nullable(),
+  last_name: z.string().nullable(),
+  email: z.string().email().nullable(),
+  phone: z.string().nullable(),
+  company: z.string().nullable(),
+  title: z.string().nullable(),
+  linkedin_url: z.string().url().nullable(),
+  website: z.string().url().nullable(),
+  location: z.string().nullable(),
+  industry: z.string().nullable(),
+  company_size: z.string().nullable(),
+  status: z.enum(['new', 'contacted', 'replied', 'connected', 'unqualified', 'qualified']),
+  source: z.string().nullable(),
+  notes: z.string().nullable(),
+  tags: z.array(z.string()),
+  custom_fields: z.record(z.any()),
+  metadata: z.record(z.any()),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+});
+
+/**
+ * DTO for lead insert (matches database Insert type)
+ */
+export const LeadInsertDto = z.object({
+  id: z.string().uuid().optional(),
+  lead_list_id: z.string().uuid(),
+  organization_id: z.string().uuid(),
+  first_name: z.string().nullable().optional(),
+  last_name: z.string().nullable().optional(),
+  email: z.string().email().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  company: z.string().nullable().optional(),
+  title: z.string().nullable().optional(),
+  linkedin_url: z.string().url().nullable().optional(),
+  website: z.string().url().nullable().optional(),
+  location: z.string().nullable().optional(),
+  industry: z.string().nullable().optional(),
+  company_size: z.string().nullable().optional(),
+  status: z.enum(['new', 'contacted', 'replied', 'connected', 'unqualified', 'qualified']).optional(),
+  source: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  custom_fields: z.record(z.any()).optional(),
+  metadata: z.record(z.any()).optional(),
+  created_at: z.string().datetime().optional(),
+  updated_at: z.string().datetime().optional(),
+});
+
+/**
+ * DTO for lead update (matches database Update type)
+ */
+export const LeadUpdateDto = z.object({
+  id: z.string().uuid().optional(),
+  lead_list_id: z.string().uuid().optional(),
+  organization_id: z.string().uuid().optional(),
+  first_name: z.string().nullable().optional(),
+  last_name: z.string().nullable().optional(),
+  email: z.string().email().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  company: z.string().nullable().optional(),
+  title: z.string().nullable().optional(),
+  linkedin_url: z.string().url().nullable().optional(),
+  website: z.string().url().nullable().optional(),
+  location: z.string().nullable().optional(),
+  industry: z.string().nullable().optional(),
+  company_size: z.string().nullable().optional(),
+  status: z.enum(['new', 'contacted', 'replied', 'connected', 'unqualified', 'qualified']).optional(),
+  source: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  custom_fields: z.record(z.any()).optional(),
+  metadata: z.record(z.any()).optional(),
+  created_at: z.string().datetime().optional(),
+  updated_at: z.string().datetime().optional(),
+});
+
+/**
+ * DTO for lead list insert (matches database Insert type)
+ */
+export const LeadListInsertDto = z.object({
+  id: z.string().uuid().optional(),
+  organization_id: z.string().uuid(),
+  creator_id: z.string().uuid(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  source: z.enum(['csv_import', 'filter_search', 'api', 'manual']),
+  status: z.enum(['draft', 'processing', 'completed', 'failed', 'archived']).optional(),
+  total_leads: z.number().int().min(0).optional(),
+  processed_leads: z.number().int().min(0).optional(),
+  failed_leads: z.number().int().min(0).optional(),
+  original_filename: z.string().nullable().optional(),
+  csv_file_url: z.string().url().nullable().optional(),
+  sample_csv_url: z.string().url().nullable().optional(),
+  file_size: z.number().int().min(0).nullable().optional(),
+  processing_started_at: z.string().datetime().nullable().optional(),
+  processing_completed_at: z.string().datetime().nullable().optional(),
+  error_message: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  filters: z.record(z.any()).optional(),
+  metadata: z.record(z.any()).optional(),
+  stats: z.record(z.any()).optional(),
+  created_at: z.string().datetime().optional(),
+  updated_at: z.string().datetime().optional(),
+});
+
+/**
+ * DTO for lead list update (matches database Update type)
+ */
+export const LeadListUpdateDto = z.object({
+  id: z.string().uuid().optional(),
+  organization_id: z.string().uuid().optional(),
+  creator_id: z.string().uuid().optional(),
+  name: z.string().optional(),
+  description: z.string().nullable().optional(),
+  source: z.enum(['csv_import', 'filter_search', 'api', 'manual']).optional(),
+  status: z.enum(['draft', 'processing', 'completed', 'failed', 'archived']).optional(),
+  total_leads: z.number().int().min(0).optional(),
+  processed_leads: z.number().int().min(0).optional(),
+  failed_leads: z.number().int().min(0).optional(),
+  original_filename: z.string().nullable().optional(),
+  csv_file_url: z.string().url().nullable().optional(),
+  sample_csv_url: z.string().url().nullable().optional(),
+  file_size: z.number().int().min(0).nullable().optional(),
+  processing_started_at: z.string().datetime().nullable().optional(),
+  processing_completed_at: z.string().datetime().nullable().optional(),
+  error_message: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  filters: z.record(z.any()).optional(),
+  metadata: z.record(z.any()).optional(),
+  stats: z.record(z.any()).optional(),
+  created_at: z.string().datetime().optional(),
+  updated_at: z.string().datetime().optional(),
+});
+
 // ============================================================================
 // TYPE EXPORTS
 // ============================================================================
@@ -364,3 +506,8 @@ export type BulkUpdateLeadsDto = z.infer<typeof BulkUpdateLeadsDto>;
 export type LeadListResponseDto = z.infer<typeof LeadListResponseDto>;
 export type CsvPreviewResponseDto = z.infer<typeof CsvPreviewResponseDto>;
 export type PublishLeadListResponseDto = z.infer<typeof PublishLeadListResponseDto>;
+export type LeadResponseDto = z.infer<typeof LeadResponseDto>;
+export type LeadInsertDto = z.infer<typeof LeadInsertDto>;
+export type LeadUpdateDto = z.infer<typeof LeadUpdateDto>;
+export type LeadListInsertDto = z.infer<typeof LeadListInsertDto>;
+export type LeadListUpdateDto = z.infer<typeof LeadListUpdateDto>;

@@ -1,17 +1,16 @@
 import { BaseRepository } from './BaseRepository';
 import { DatabaseError, NotFoundError } from '../errors/AppError';
-import { Database } from '../types/database';
 import logger from '../utils/logger';
-
-// Define types from the Database interface
-type UserProfile = Database['public']['Tables']['user_profile']['Row'];
-type UserProfileInsert = Database['public']['Tables']['user_profile']['Insert'];
-type UserProfileUpdate = Database['public']['Tables']['user_profile']['Update'];
+import {
+  UserProfileResponseDto,
+  UserProfileInsertDto,
+  UserProfileUpdateDto
+} from '../dto/users.dto';
 
 /**
  * Repository for user_profile table operations
  */
-export class UserProfileRepository extends BaseRepository<UserProfile, UserProfileInsert, UserProfileUpdate> {
+export class UserProfileRepository extends BaseRepository<UserProfileResponseDto, UserProfileInsertDto, UserProfileUpdateDto> {
   constructor() {
     super('user_profile');
   }
@@ -19,7 +18,7 @@ export class UserProfileRepository extends BaseRepository<UserProfile, UserProfi
   /**
    * Get user profile by user ID
    */
-  async findByUserId(userId: string): Promise<UserProfile | null> {
+  async findByUserId(userId: string): Promise<UserProfileResponseDto | null> {
     try {
       return await this.findOneByField('user_id', userId);
     } catch (error) {
@@ -31,7 +30,7 @@ export class UserProfileRepository extends BaseRepository<UserProfile, UserProfi
   /**
    * Create or update user profile (upsert)
    */
-  async upsert(profile: UserProfileInsert): Promise<UserProfile> {
+  async upsert(profile: UserProfileInsertDto): Promise<UserProfileResponseDto> {
     try {
       const { data, error } = await this.client
         .from(this.tableName)
@@ -44,7 +43,7 @@ export class UserProfileRepository extends BaseRepository<UserProfile, UserProfi
         throw new DatabaseError('Failed to upsert user profile');
       }
 
-      return data as UserProfile;
+      return data as UserProfileResponseDto;
     } catch (error) {
       logger.error('Error in upsert', { error, profile });
       throw error instanceof DatabaseError ? error : new DatabaseError('Failed to upsert user profile');
@@ -54,7 +53,7 @@ export class UserProfileRepository extends BaseRepository<UserProfile, UserProfi
   /**
    * Update user profile by user ID
    */
-  async updateByUserId(userId: string, profile: UserProfileUpdate): Promise<UserProfile> {
+  async updateByUserId(userId: string, profile: UserProfileUpdateDto): Promise<UserProfileResponseDto> {
     try {
       const existingProfile = await this.findByUserId(userId);
       if (!existingProfile) {

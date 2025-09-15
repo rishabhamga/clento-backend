@@ -1,11 +1,9 @@
 import { Webhook } from 'svix';
 import { UserRepository } from '../repositories/UserRepository';
 import { OrganizationRepository } from '../repositories/OrganizationRepository';
-import { Database } from '../types/database';
+import { UserUpdateDto } from '../dto/users.dto';
 import logger from '../utils/logger';
 import env from '../config/env';
-
-type UserUpdate = Database['public']['Tables']['users']['Update'];
 
 /**
  * Service for handling Clerk webhooks
@@ -86,7 +84,7 @@ export class ClerkWebhookService {
         await this.userRepository.update(user.id, {
           email: primaryEmail.email_address,
           full_name: fullName || null,
-        } as UserUpdate);
+        } as UserUpdateDto);
 
         logger.info('User updated from webhook', { clerkId: id, email: primaryEmail.email_address });
       } else {

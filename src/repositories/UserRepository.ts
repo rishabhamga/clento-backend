@@ -1,22 +1,20 @@
-import { Database } from '../types/database';
 import { BaseRepository } from './BaseRepository';
 import { UserProfileRepository } from './UserProfileRepository';
 import { NotFoundError } from '../errors/AppError';
 import logger from '../utils/logger';
-
-// Define types from the Database interface
-type User = Database['public']['Tables']['users']['Row'];
-type UserInsert = Database['public']['Tables']['users']['Insert'];
-type UserUpdate = Database['public']['Tables']['users']['Update'];
-
-type UserProfile = Database['public']['Tables']['user_profile']['Row'];
-type UserProfileInsert = Database['public']['Tables']['user_profile']['Insert'];
-type UserProfileUpdate = Database['public']['Tables']['user_profile']['Update'];
+import {
+  UserResponseDto,
+  UserInsertDto,
+  UserUpdateDto,
+  UserProfileResponseDto,
+  UserProfileInsertDto,
+  UserProfileUpdateDto
+} from '../dto/users.dto';
 
 /**
  * Repository for user-related database operations
  */
-export class UserRepository extends BaseRepository<User, UserInsert, UserUpdate> {
+export class UserRepository extends BaseRepository<UserResponseDto, UserInsertDto, UserUpdateDto> {
   private profileRepository: UserProfileRepository;
 
   constructor() {
@@ -27,21 +25,21 @@ export class UserRepository extends BaseRepository<User, UserInsert, UserUpdate>
   /**
    * Find user by Clerk ID
    */
-  async findByClerkId(clerkId: string): Promise<User | null> {
+  async findByClerkId(clerkId: string): Promise<UserResponseDto | null> {
     return this.findOneByField('external_id', clerkId);
   }
 
   /**
    * Find user by email
    */
-  async findByEmail(email: string): Promise<User | null> {
+  async findByEmail(email: string): Promise<UserResponseDto | null> {
     return this.findOneByField('email', email);
   }
 
   /**
    * Get user profile by user ID
    */
-  async getUserProfile(userId: string): Promise<UserProfile | null> {
+  async getUserProfile(userId: string): Promise<UserProfileResponseDto | null> {
     try {
       return await this.profileRepository.findByUserId(userId);
     } catch (error) {
@@ -53,7 +51,7 @@ export class UserRepository extends BaseRepository<User, UserInsert, UserUpdate>
   /**
    * Create or update user profile
    */
-  async upsertUserProfile(profile: UserProfileInsert): Promise<UserProfile> {
+  async upsertUserProfile(profile: UserProfileInsertDto): Promise<UserProfileResponseDto> {
     try {
       return await this.profileRepository.upsert(profile);
     } catch (error) {
@@ -65,7 +63,7 @@ export class UserRepository extends BaseRepository<User, UserInsert, UserUpdate>
   /**
    * Update user profile
    */
-  async updateUserProfile(userId: string, profile: UserProfileUpdate): Promise<UserProfile> {
+  async updateUserProfile(userId: string, profile: UserProfileUpdateDto): Promise<UserProfileResponseDto> {
     try {
       return await this.profileRepository.updateByUserId(userId, profile);
     } catch (error) {
@@ -77,7 +75,7 @@ export class UserRepository extends BaseRepository<User, UserInsert, UserUpdate>
   /**
    * Get user with profile
    */
-  async getUserWithProfile(userId: string): Promise<{ user: User; profile: UserProfile | null }> {
+  async getUserWithProfile(userId: string): Promise<{ user: UserResponseDto; profile: UserProfileResponseDto | null }> {
     const user = await this.findById(userId);
     const profile = await this.getUserProfile(userId);
 
@@ -90,19 +88,19 @@ export class UserRepository extends BaseRepository<User, UserInsert, UserUpdate>
   /**
    * Create user from Clerk data
    */
-  async createFromClerk(clerkId: string, email: string, fullName?: string): Promise<User> {
+  async createFromClerk(clerkId: string, email: string, fullName?: string): Promise<UserResponseDto> {
     return this.create({
       external_id: clerkId,
       email,
       full_name: fullName || null,
-    } as UserInsert);
+    } as UserInsertDto);
 }
 
   /**
    * Sync user from Clerk
    * Creates if doesn't exist, updates if it does
    */
-  async syncFromClerk(clerkId: string, email: string, fullName?: string): Promise<User> {
+  async syncFromClerk(clerkId: string, email: string, fullName?: string): Promise<UserResponseDto> {
     // Check if user exists
     const existingUser = await this.findByClerkId(clerkId);
 
@@ -111,7 +109,7 @@ export class UserRepository extends BaseRepository<User, UserInsert, UserUpdate>
       return this.update(existingUser.id, {
         email,
         full_name: fullName || null,
-      } as UserUpdate);
+      } as UserUpdateDto);
     }
 
     // Create new user

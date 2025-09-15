@@ -164,7 +164,7 @@ export class UnipileService {
 
     try {
       // Use the correct SDK method to get account details
-      const account = await this.client.account.retrieve(accountId);
+      const account = await this.client.account.getOne(accountId);
 
       logger.info('Account retrieved from Unipile via SDK', { accountId });
 
@@ -184,11 +184,11 @@ export class UnipileService {
     }
 
     try {
-      const response = await this.client.account.listAccounts();
+      const response = await this.client.account.getAll();
 
-      logger.info('Accounts listed from Unipile via SDK', { count: response.accounts?.length || 0 });
+      logger.info('Accounts listed from Unipile via SDK', { count: response.items?.length || 0 });
 
-      return response.accounts || [];
+      return response.items || [];
     } catch (error) {
       logger.error('Error listing accounts from Unipile via SDK', { error });
       throw new ExternalAPIError('Failed to list accounts');
@@ -204,7 +204,7 @@ export class UnipileService {
     }
 
     try {
-      await this.client.account.deleteAccount(accountId);
+      await this.client.account.delete(accountId);
 
       logger.info('Account deleted from Unipile via SDK', { accountId });
     } catch (error) {
@@ -256,20 +256,20 @@ export class UnipileService {
       logger.info('=== UNIPILE SDK: Profile retrieved successfully ===', {
         accountId,
         profileKeys: Object.keys(profile || {}),
-        hasEmail: !!profile?.email,
-        hasName: !!(profile?.first_name || profile?.last_name || profile?.full_name),
+        hasEmail: !!(profile && typeof profile === 'object' && 'email' in profile),
+        hasName: !!(profile && typeof profile === 'object' && ('first_name' in profile || 'last_name' in profile || 'full_name' in profile)),
         profileData: profile
       });
 
       return profile;
-    } catch (error) {
+    } catch (error: any) {
       logger.error('=== UNIPILE SDK: Profile fetch failed ===', {
         accountId,
         error: error,
-        errorBody: error?.body,
-        errorStatus: error?.body?.status,
-        errorType: error?.body?.type,
-        errorDetail: error?.body?.detail,
+        errorBody: error && typeof error === 'object' && 'body' in error ? error.body : undefined,
+        errorStatus: error && typeof error === 'object' && 'body' in error && error.body && typeof error.body === 'object' && 'status' in error.body ? error.body.status : undefined,
+        errorType: error && typeof error === 'object' && 'body' in error && error.body && typeof error.body === 'object' && 'type' in error.body ? error.body.type : undefined,
+        errorDetail: error && typeof error === 'object' && 'body' in error && error.body && typeof error.body === 'object' && 'detail' in error.body ? error.body.detail : undefined,
         sdkMethod: 'client.users.getOwnProfile'
       });
 
@@ -390,7 +390,7 @@ export class UnipileService {
       const response = await this.client.users.sendPostReaction({
         account_id: params.accountId,
         post_id: params.postId,
-        reaction_type: params.reactionType || 'like',
+        reaction_type: (params.reactionType === 'like' || params.reactionType === 'celebrate' || params.reactionType === 'support' || params.reactionType === 'love' || params.reactionType === 'insightful' || params.reactionType === 'funny') ? params.reactionType : 'like',
       });
 
       logger.info('LinkedIn post liked via SDK', {

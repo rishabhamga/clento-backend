@@ -1,7 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import env from './env';
 import logger from '../utils/logger';
-import { Database } from '../types/database';
 
 // Check if Supabase credentials are available
 const hasSupabaseCredentials = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.SUPABASE_ANON_KEY;
@@ -15,7 +14,7 @@ if (!hasSupabaseCredentials) {
  * Use this for server-side operations that require full database access
  */
 export const supabaseAdmin = hasSupabaseCredentials
-  ? createClient<Database>(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!)
+  ? createClient(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!)
   : null;
 
 /**
@@ -23,7 +22,7 @@ export const supabaseAdmin = hasSupabaseCredentials
  * Use this for operations that should respect RLS policies
  */
 export const supabaseAnon = hasSupabaseCredentials
-  ? createClient<Database>(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!)
+  ? createClient(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!)
   : null;
 
 /**
@@ -35,7 +34,7 @@ export const createAuthClient = (jwt: string) => {
   if (!hasSupabaseCredentials) {
     return null;
   }
-  return createClient<Database>(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!, {
+  return createClient(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!, {
     global: {
       headers: {
         Authorization: `Bearer ${jwt}`,
@@ -56,7 +55,7 @@ export const initSupabase = async (): Promise<void> => {
   try {
     // Test connection with a simple query
     const { data, error } = await supabaseAdmin!.from('users').select('id').limit(1);
-    
+
     if (error) {
       // If users table doesn't exist, that's ok for development
       logger.warn('Supabase connection test failed (table may not exist)', error.message);

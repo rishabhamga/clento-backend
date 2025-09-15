@@ -1,17 +1,16 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../config/supabase';
 import { NotFoundError } from '../errors/AppError';
-import { Database } from '../types/database';
 
 /**
  * Base repository class for Supabase operations
  * Provides common CRUD operations for a specific table
  */
 export abstract class BaseRepository<T, InsertT, UpdateT> {
-  protected client: SupabaseClient<Database>;
+  protected client: SupabaseClient<any>;
   protected tableName: string;
 
-  constructor(tableName: string, client?: SupabaseClient<Database>) {
+  constructor(tableName: string, client?: SupabaseClient<any>) {
     this.tableName = tableName;
     this.client = client || supabaseAdmin!;
   }
