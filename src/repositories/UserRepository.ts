@@ -1,6 +1,8 @@
 import { Database } from '../types/database';
 import { BaseRepository } from './BaseRepository';
+import { UserProfileRepository } from './UserProfileRepository';
 import { NotFoundError } from '../errors/AppError';
+import logger from '../utils/logger';
 
 // Define types from the Database interface
 type User = Database['public']['Tables']['users']['Row'];
@@ -15,15 +17,18 @@ type UserProfileUpdate = Database['public']['Tables']['user_profile']['Update'];
  * Repository for user-related database operations
  */
 export class UserRepository extends BaseRepository<User, UserInsert, UserUpdate> {
+  private profileRepository: UserProfileRepository;
+
   constructor() {
     super('users');
+    this.profileRepository = new UserProfileRepository();
   }
 
   /**
    * Find user by Clerk ID
    */
   async findByClerkId(clerkId: string): Promise<User | null> {
-    return this.findOneByField('clerk_id', clerkId);
+    return this.findOneByField('external_id', clerkId);
   }
 
   /**
@@ -37,60 +42,36 @@ export class UserRepository extends BaseRepository<User, UserInsert, UserUpdate>
    * Get user profile by user ID
    */
   async getUserProfile(userId: string): Promise<UserProfile | null> {
-    const { data, error } = await this.client
-      .from('user_profile')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        // No rows returned
-        return null;
-      }
+    try {
+      return await this.profileRepository.findByUserId(userId);
+    } catch (error) {
+      logger.error('Error getting user profile', { error, userId });
       throw error;
     }
-
-    return data as UserProfile;
   }
 
   /**
    * Create or update user profile
    */
   async upsertUserProfile(profile: UserProfileInsert): Promise<UserProfile> {
-    const { data, error } = await this.client
-      .from('user_profile')
-      .upsert(profile)
-      .select()
-      .single();
-
-    if (error) {
+    try {
+      return await this.profileRepository.upsert(profile);
+    } catch (error) {
+      logger.error('Error upserting user profile', { error, profile });
       throw error;
     }
-
-    return data as UserProfile;
   }
 
   /**
    * Update user profile
    */
   async updateUserProfile(userId: string, profile: UserProfileUpdate): Promise<UserProfile> {
-    const { data, error } = await this.client
-      .from('user_profile')
-      .update(profile)
-      .eq('user_id', userId)
-      .select()
-      .single();
-
-    if (error) {
+    try {
+      return await this.profileRepository.updateByUserId(userId, profile);
+    } catch (error) {
+      logger.error('Error updating user profile', { error, userId, profile });
       throw error;
     }
-
-    if (!data) {
-      throw new NotFoundError(`User profile for user ${userId} not found`);
-    }
-
-    return data as UserProfile;
   }
 
   /**
@@ -111,11 +92,11 @@ export class UserRepository extends BaseRepository<User, UserInsert, UserUpdate>
    */
   async createFromClerk(clerkId: string, email: string, fullName?: string): Promise<User> {
     return this.create({
-      clerk_id: clerkId,
+      external_id: clerkId,
       email,
       full_name: fullName || null,
-    });
-  }
+    } as UserInsert);
+}
 
   /**
    * Sync user from Clerk
@@ -130,8 +111,7 @@ export class UserRepository extends BaseRepository<User, UserInsert, UserUpdate>
       return this.update(existingUser.id, {
         email,
         full_name: fullName || null,
-        updated_at: new Date().toISOString(),
-      });
+      } as UserUpdate);
     }
 
     // Create new user

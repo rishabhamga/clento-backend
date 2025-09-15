@@ -1,6 +1,7 @@
 import { BaseRepository } from './BaseRepository';
 import { DatabaseError, NotFoundError } from '../errors/AppError';
 import logger from '../utils/logger';
+import { supabaseAdmin } from '../config/supabase';
 
 // Connected Account types based on actual database schema
 export interface ConnectedAccount {
@@ -16,6 +17,11 @@ export interface ConnectedAccount {
   capabilities: any[]; // JSONB array
   metadata: Record<string, any>; // JSONB object
   last_synced_at?: string;
+  daily_usage?: number;
+  usage_reset_at?: string;
+  connection_quality?: string;
+  last_error?: string;
+  daily_limit?: number;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +47,12 @@ export interface UpdateConnectedAccount {
   capabilities?: any[];
   metadata?: Record<string, any>;
   last_synced_at?: string;
+  daily_usage?: number;
+  daily_limit?: number;
+  usage_reset_at?: string;
+  connection_quality?: string;
+  provider_account_id?: string;
+  last_error?: string;
 }
 
 /**
@@ -69,10 +81,10 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
 
       return data as ConnectedAccount | null;
     } catch (error) {
-      logger.error('Error finding connected account by provider account ID', { 
-        error, 
-        provider, 
-        providerAccountId 
+      logger.error('Error finding connected account by provider account ID', {
+        error,
+        provider,
+        providerAccountId
       });
       throw new DatabaseError('Failed to find connected account by provider account ID');
     }
@@ -106,17 +118,17 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
         const isPending = account.provider_account_id?.startsWith('pending-') ||
                          !account.email ||
                          account.email.trim() === '';
-        
+
         const metadata = account.metadata as any;
         const connectionStatus = metadata?.connection_status;
         const isPendingStatus = connectionStatus === 'pending';
-        
+
         return isPending || isPendingStatus;
       });
 
-      logger.info('Retrieved pending accounts', { 
-        userId, 
-        organizationId, 
+      logger.info('Retrieved pending accounts', {
+        userId,
+        organizationId,
         pendingCount: pendingAccounts.length
       });
 
@@ -147,39 +159,39 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
 
       if (error) {
         logger.error('Database error getting user accounts', { error, userId, organizationId });
-        
+
         // Handle specific error cases
         if (error.code === '22P02') {
           // Invalid UUID format
           logger.warn('Invalid UUID format for user_id', { userId });
           return []; // Return empty array instead of throwing
         }
-        
+
         if (error.code === '42P01') {
           // Table doesn't exist
           logger.warn('Connected accounts table does not exist');
           return [];
         }
-        
+
         throw error;
       }
 
       // Filter out pending/incomplete accounts
       const connectedAccounts = (data || []).filter((account: ConnectedAccount) => {
         // Check if account is truly connected
-        const isConnected = account.status === 'connected' && 
-                           account.email && 
+        const isConnected = account.status === 'connected' &&
+                           account.email &&
                            account.email.trim() !== '' &&
                            account.provider_account_id &&
                            !account.provider_account_id.startsWith('pending-');
-        
+
         // Also check metadata for connection_status
         const metadata = account.metadata as any;
         const connectionStatus = metadata?.connection_status;
         const isNotPending = connectionStatus !== 'pending';
-        
+
         const shouldInclude = isConnected && isNotPending;
-        
+
         if (!shouldInclude) {
           logger.info('Filtering out pending/incomplete account', {
             accountId: account.id,
@@ -190,13 +202,13 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
             connectionStatus: connectionStatus
           });
         }
-        
+
         return shouldInclude;
       });
 
-      logger.info('Successfully retrieved user accounts', { 
-        userId, 
-        organizationId, 
+      logger.info('Successfully retrieved user accounts', {
+        userId,
+        organizationId,
         totalAccounts: data?.length || 0,
         connectedAccounts: connectedAccounts.length,
         filteredOut: (data?.length || 0) - connectedAccounts.length
@@ -205,13 +217,13 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
       return connectedAccounts as ConnectedAccount[];
     } catch (error) {
       logger.error('Error getting user connected accounts', { error, userId, organizationId });
-      
+
       // For development, return empty array instead of throwing
       if (process.env.NODE_ENV === 'development') {
         logger.warn('Returning empty accounts array for development');
         return [];
       }
-      
+
       throw new DatabaseError('Failed to get user connected accounts');
     }
   }
@@ -289,16 +301,16 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
   async updateUsage(id: string, usage: number): Promise<ConnectedAccount> {
     try {
       const now = new Date().toISOString();
-      
+
       // Get current account to check if we need to reset daily usage
       const account = await this.findById(id);
       const resetTime = account.usage_reset_at ? new Date(account.usage_reset_at) : new Date();
       const shouldReset = resetTime <= new Date();
 
       const updateData: UpdateConnectedAccount = {
-        daily_usage: shouldReset ? usage : account.daily_usage + usage,
+        daily_usage: shouldReset ? usage : (account.daily_usage || 0) + usage,
         usage_reset_at: shouldReset ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : account.usage_reset_at,
-        last_synced_at: now,
+        last_synced_at: now
       };
 
       return await this.update(id, updateData);

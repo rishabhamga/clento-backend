@@ -1,8 +1,11 @@
 import { Webhook } from 'svix';
 import { UserRepository } from '../repositories/UserRepository';
 import { OrganizationRepository } from '../repositories/OrganizationRepository';
+import { Database } from '../types/database';
 import logger from '../utils/logger';
 import env from '../config/env';
+
+type UserUpdate = Database['public']['Tables']['users']['Update'];
 
 /**
  * Service for handling Clerk webhooks
@@ -39,14 +42,14 @@ export class ClerkWebhookService {
     try {
       const { id, email_addresses, first_name, last_name } = data;
       const primaryEmail = email_addresses.find((email: any) => email.id === data.primary_email_address_id);
-      
+
       if (!primaryEmail) {
         logger.warn('No primary email found for user', { clerkId: id });
         return;
       }
 
       const fullName = [first_name, last_name].filter(Boolean).join(' ');
-      
+
       // Create or update user in database
       await this.userRepository.syncFromClerk(
         id,
@@ -68,23 +71,22 @@ export class ClerkWebhookService {
     try {
       const { id, email_addresses, first_name, last_name } = data;
       const primaryEmail = email_addresses.find((email: any) => email.id === data.primary_email_address_id);
-      
+
       if (!primaryEmail) {
         logger.warn('No primary email found for user', { clerkId: id });
         return;
       }
 
       const fullName = [first_name, last_name].filter(Boolean).join(' ');
-      
+
       // Update user in database
       const user = await this.userRepository.findByClerkId(id);
-      
+
       if (user) {
         await this.userRepository.update(user.id, {
           email: primaryEmail.email_address,
           full_name: fullName || null,
-          updated_at: new Date().toISOString(),
-        });
+        } as UserUpdate);
 
         logger.info('User updated from webhook', { clerkId: id, email: primaryEmail.email_address });
       } else {
@@ -94,7 +96,7 @@ export class ClerkWebhookService {
           primaryEmail.email_address,
           fullName || undefined
         );
-        
+
         logger.info('User created from update webhook', { clerkId: id, email: primaryEmail.email_address });
       }
     } catch (error) {
@@ -109,10 +111,10 @@ export class ClerkWebhookService {
   async handleUserDeleted(data: any): Promise<void> {
     try {
       const { id } = data;
-      
+
       // Find user by Clerk ID
       const user = await this.userRepository.findByClerkId(id);
-      
+
       if (user) {
         // We don't actually delete the user, just log the event
         // This is to maintain data integrity with related records
@@ -130,7 +132,7 @@ export class ClerkWebhookService {
   async handleOrganizationCreated(data: any): Promise<void> {
     try {
       const { id, name, created_by } = data;
-      
+
       if (!created_by) {
         logger.warn('No creator found for organization', { clerkOrgId: id });
         return;
@@ -138,7 +140,7 @@ export class ClerkWebhookService {
 
       // Find creator user
       const creator = await this.userRepository.findByClerkId(created_by);
-      
+
       if (!creator) {
         logger.warn('Creator user not found', { clerkUserId: created_by, clerkOrgId: id });
         return;
@@ -164,15 +166,14 @@ export class ClerkWebhookService {
   async handleOrganizationUpdated(data: any): Promise<void> {
     try {
       const { id, name } = data;
-      
+
       // Find organization by Clerk ID
       const organization = await this.organizationRepository.findByClerkOrgId(id);
-      
+
       if (organization) {
         // Update organization
         await this.organizationRepository.update(organization.id, {
           name,
-          updated_at: new Date().toISOString(),
         });
 
         logger.info('Organization updated from webhook', { clerkOrgId: id, name });
@@ -191,10 +192,10 @@ export class ClerkWebhookService {
   async handleOrganizationDeleted(data: any): Promise<void> {
     try {
       const { id } = data;
-      
+
       // Find organization by Clerk ID
       const organization = await this.organizationRepository.findByClerkOrgId(id);
-      
+
       if (organization) {
         // We don't actually delete the organization, just log the event
         // This is to maintain data integrity with related records
@@ -212,7 +213,7 @@ export class ClerkWebhookService {
   async handleOrganizationMembershipCreated(data: any): Promise<void> {
     try {
       const { organization, public_user_data, role } = data;
-      
+
       if (!organization || !public_user_data) {
         logger.warn('Missing organization or user data', { data });
         return;
@@ -243,7 +244,11 @@ export class ClerkWebhookService {
       }
 
       // Add member to organization
-      await this.organizationRepository.addMember(org.id, user.id, role.toLowerCase());
+      await this.organizationRepository.addMember({
+        organization_id: org.id,
+        user_id: user.id,
+        role: role.toLowerCase()
+      });
 
       logger.info('Organization member added from webhook', {
         clerkOrgId: organization.id,

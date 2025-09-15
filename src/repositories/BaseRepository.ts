@@ -13,7 +13,7 @@ export abstract class BaseRepository<T, InsertT, UpdateT> {
 
   constructor(tableName: string, client?: SupabaseClient<Database>) {
     this.tableName = tableName;
-    this.client = client || supabaseAdmin;
+    this.client = client || supabaseAdmin!;
   }
 
   /**
@@ -78,7 +78,7 @@ export abstract class BaseRepository<T, InsertT, UpdateT> {
    * Create a new record
    */
   async create(data: InsertT): Promise<T> {
-    const { data: result, error } = await this.client
+    const { data: result, error } = await (this.client as any)
       .from(this.tableName)
       .insert(data)
       .select()
@@ -95,7 +95,7 @@ export abstract class BaseRepository<T, InsertT, UpdateT> {
    * Update an existing record
    */
   async update(id: string, data: UpdateT): Promise<T> {
-    const { data: result, error } = await this.client
+    const { data: result, error } = await (this.client as any)
       .from(this.tableName)
       .update(data)
       .eq('id', id)

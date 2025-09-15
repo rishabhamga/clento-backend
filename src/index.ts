@@ -14,10 +14,23 @@ const app = express();
 
 // Apply middleware
 app.use(helmet());
-app.use(cors({
-  origin: env.CORS_ORIGIN,
+
+// Configure CORS based on environment
+const corsOptions = {
+  origin: env.NODE_ENV === 'development'
+    ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+        // Allow all localhost origins in development
+        if (!origin || origin.match(/^http:\/\/localhost:\d+$/)) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      }
+    : env.CORS_ORIGIN,
   credentials: true,
-}));
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -44,13 +57,13 @@ const startServer = async () => {
   try {
     // Initialize Supabase connection
     await supabase.initSupabase();
-    
+
     // Start server
     const server = app.listen(env.PORT, () => {
       logger.info(`Server running on port ${env.PORT} in ${env.NODE_ENV} mode`);
       logger.info(`API documentation available at http://localhost:${env.PORT}/api-docs`);
     });
-    
+
     // Handle unhandled promise rejections
     process.on('unhandledRejection', (err: Error) => {
       logger.error('Unhandled Rejection:', err);

@@ -27,7 +27,7 @@ export class CsvService {
   private static readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
   private static readonly MAX_ROWS = 10000;
   private static readonly REQUIRED_COLUMNS = ['linkedin_url'];
-  
+
   // Common column mappings
   private static readonly COLUMN_MAPPINGS = {
     linkedin: ['linkedin_url', 'linkedin', 'linkedin_profile', 'profile_url', 'linkedin_link'],
@@ -69,7 +69,7 @@ export class CsvService {
 
       // Get headers
       const headers = Object.keys(records[0] || {});
-      
+
       if (headers.length === 0) {
         throw new ValidationError('No columns found in CSV');
       }
@@ -78,11 +78,11 @@ export class CsvService {
       const validRows: Record<string, any>[] = [];
       const errors: string[] = [];
 
-      records.forEach((row, index) => {
+      records.forEach((row: any, index) => {
         try {
           // Clean row data
           const cleanedRow: Record<string, any> = {};
-          
+
           headers.forEach(header => {
             const value = row[header];
             if (value !== undefined && value !== null && value !== '') {
@@ -115,11 +115,11 @@ export class CsvService {
       };
     } catch (error) {
       logger.error('Error parsing CSV data', { error });
-      
+
       if (error instanceof ValidationError) {
         throw error;
       }
-      
+
       throw new BadRequestError('Invalid CSV format');
     }
   }
@@ -147,7 +147,7 @@ export class CsvService {
     // Validate LinkedIn URLs if column exists
     if (hasLinkedInColumn && linkedInColumn) {
       let validLinkedInUrls = 0;
-      
+
       data.forEach((row, index) => {
         const linkedInUrl = row[linkedInColumn];
         if (linkedInUrl && this.isValidLinkedInUrl(linkedInUrl)) {
@@ -182,9 +182,9 @@ export class CsvService {
     }
 
     // Check for required fields
-    const nameColumn = this.findColumnsByType(headers, 'name')[0] || 
+    const nameColumn = this.findColumnsByType(headers, 'name')[0] ||
                       this.findColumnsByType(headers, 'first_name')[0];
-    
+
     if (!nameColumn) {
       warnings.push('No name column detected. Names are recommended for personalization.');
     }
@@ -212,8 +212,8 @@ export class CsvService {
     const mapping: Record<string, string> = {};
 
     Object.entries(this.COLUMN_MAPPINGS).forEach(([standardField, possibleNames]) => {
-      const matchedHeader = headers.find(header => 
-        possibleNames.some(name => 
+      const matchedHeader = headers.find(header =>
+        possibleNames.some(name =>
           header.toLowerCase().includes(name.toLowerCase()) ||
           name.toLowerCase().includes(header.toLowerCase())
         )
@@ -265,9 +265,9 @@ export class CsvService {
    */
   private static findLinkedInColumn(headers: string[]): string | null {
     const linkedInPatterns = this.COLUMN_MAPPINGS.linkedin;
-    
-    return headers.find(header => 
-      linkedInPatterns.some(pattern => 
+
+    return headers.find(header =>
+      linkedInPatterns.some(pattern =>
         header.toLowerCase().includes(pattern.toLowerCase())
       )
     ) || null;
@@ -278,9 +278,9 @@ export class CsvService {
    */
   private static findColumnsByType(headers: string[], type: keyof typeof CsvService.COLUMN_MAPPINGS): string[] {
     const patterns = this.COLUMN_MAPPINGS[type];
-    
-    return headers.filter(header => 
-      patterns.some(pattern => 
+
+    return headers.filter(header =>
+      patterns.some(pattern =>
         header.toLowerCase().includes(pattern.toLowerCase())
       )
     );
@@ -292,7 +292,7 @@ export class CsvService {
   private static isValidLinkedInUrl(url: string): boolean {
     try {
       const urlObj = new URL(url);
-      return urlObj.hostname.includes('linkedin.com') && 
+      return urlObj.hostname.includes('linkedin.com') &&
              (urlObj.pathname.includes('/in/') || urlObj.pathname.includes('/company/'));
     } catch {
       return false;
@@ -317,7 +317,7 @@ export class CsvService {
     showingRows: number;
   } {
     const previewData = parseResult.data.slice(0, maxRows);
-    
+
     return {
       headers: parseResult.headers,
       data: previewData,

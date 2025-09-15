@@ -1,8 +1,18 @@
-import { UnipileClient } from 'unipile-node-sdk';
+import { PostHostedAuthLinkInput, SupportedProvider, UnipileClient } from 'unipile-node-sdk';
 import { ExternalAPIError, ServiceUnavailableError } from '../errors/AppError';
 import logger from '../utils/logger';
 import env from '../config/env';
 
+interface UnipileRequest {
+  type: 'create' | 'reconnect';
+  expiresOn: string;
+  api_url: string;
+  providers: string[];
+  success_redirect_url?: string;
+  failure_redirect_url?: string;
+  notify_url?: string;
+  name?: string;
+}
 /**
  * Unipile integration service for managing external accounts using Unipile Node SDK
  */
@@ -53,7 +63,7 @@ export class UnipileService {
    * Create hosted authentication link using Unipile SDK
    */
   async createHostedAuthLink(params: {
-    type: 'create' | 'reconnect';
+    type: 'create';
     providers: string[];
     expiresOn: string;
     successRedirectUrl?: string;
@@ -64,8 +74,8 @@ export class UnipileService {
   }): Promise<{ url: string }> {
     try {
       logger.info('=== UnipileService: createHostedAuthLink START ===', { params });
-      
-      logger.info('Checking Unipile configuration', { 
+
+      logger.info('Checking Unipile configuration', {
         isConfigured: this.isConfigured(),
         hasApiKey: !!env.UNIPILE_API_KEY,
         apiUrl: env.UNIPILE_API_URL
@@ -77,37 +87,37 @@ export class UnipileService {
 
       // Use actual Unipile SDK
       logger.info('Using actual Unipile SDK');
-      
+
       // Validate required parameters
       if (!params.providers || params.providers.length === 0) {
         throw new ExternalAPIError('Providers are required for hosted auth link');
       }
 
-      const unipileRequest = {
+      const unipileRequest: PostHostedAuthLinkInput = {
         type: params.type,
         expiresOn: params.expiresOn,
-        api_url: env.UNIPILE_API_URL,
-        providers: params.providers, // Unipile expects an array of strings
+        api_url: env.UNIPILE_API_URL!,
+        providers: params.providers as SupportedProvider[],
         success_redirect_url: params.successRedirectUrl,
         failure_redirect_url: params.failureRedirectUrl,
         notify_url: params.notifyUrl,
         name: params.name,
       };
-      
-      logger.info('Unipile SDK request', { 
+
+      logger.info('Unipile SDK request', {
         unipileRequest,
         clientExists: !!this.client,
         apiKeyLength: env.UNIPILE_API_KEY?.length || 0
       });
-      
+
       try {
         const response = await this.client!.account.createHostedAuthLink(unipileRequest);
         logger.info('Unipile SDK response', { response });
-        
+
         if (!response || !response.url) {
           throw new ExternalAPIError('Invalid response from Unipile API - missing URL');
         }
-        
+
         return { url: response.url };
       } catch (sdkError: any) {
         logger.error('Unipile SDK Error Details', {
@@ -119,26 +129,26 @@ export class UnipileService {
           errorResponse: sdkError?.response?.data,
           requestData: unipileRequest
         });
-        
+
         // Check for common authentication errors
         if (sdkError?.status === 401 || sdkError?.message?.includes('unauthorized')) {
           throw new ExternalAPIError('Unipile authentication failed. Please check your API key.');
         }
-        
+
         if (sdkError?.status === 403) {
           throw new ExternalAPIError('Unipile access forbidden. Please check your API permissions.');
         }
-        
+
         throw new ExternalAPIError(`Unipile API error: ${sdkError?.message || 'Unknown error'}`);
       }
     } catch (error) {
-      logger.error('=== UnipileService: createHostedAuthLink ERROR ===', { 
+      logger.error('=== UnipileService: createHostedAuthLink ERROR ===', {
         error: error instanceof Error ? {
           name: error.name,
           message: error.message,
           stack: error.stack
         } : error,
-        params 
+        params
       });
       throw new ExternalAPIError('Failed to create authentication link');
     }
@@ -153,17 +163,11 @@ export class UnipileService {
     }
 
     try {
-      // Note: The SDK doesn't seem to have a direct getAccount method
-      // We'll use the listAccounts and filter for the specific account
-      const response = await this.client.account.listAccounts();
-      const account = response.accounts?.find((acc: any) => acc.id === accountId);
-      
-      if (!account) {
-        throw new Error('Account not found');
-      }
-      
+      // Use the correct SDK method to get account details
+      const account = await this.client.account.retrieve(accountId);
+
       logger.info('Account retrieved from Unipile via SDK', { accountId });
-      
+
       return account;
     } catch (error) {
       logger.error('Error getting account from Unipile via SDK', { error, accountId });
@@ -181,9 +185,9 @@ export class UnipileService {
 
     try {
       const response = await this.client.account.listAccounts();
-      
+
       logger.info('Accounts listed from Unipile via SDK', { count: response.accounts?.length || 0 });
-      
+
       return response.accounts || [];
     } catch (error) {
       logger.error('Error listing accounts from Unipile via SDK', { error });
@@ -201,7 +205,7 @@ export class UnipileService {
 
     try {
       await this.client.account.deleteAccount(accountId);
-      
+
       logger.info('Account deleted from Unipile via SDK', { accountId });
     } catch (error) {
       logger.error('Error deleting account from Unipile via SDK', { error, accountId });
@@ -222,9 +226,9 @@ export class UnipileService {
         account_id: accountId,
         identifier: identifier,
       });
-      
+
       logger.info('User profile retrieved via SDK', { accountId, identifier });
-      
+
       return profile;
     } catch (error) {
       logger.error('Error getting user profile via SDK', { error, accountId, identifier });
@@ -241,25 +245,25 @@ export class UnipileService {
     }
 
     try {
-      logger.info('=== UNIPILE SDK: Getting own profile ===', { 
+      logger.info('=== UNIPILE SDK: Getting own profile ===', {
         accountId,
         sdkMethod: 'client.users.getOwnProfile',
         apiUrl: env.UNIPILE_API_URL
       });
 
       const profile = await this.client.users.getOwnProfile(accountId);
-      
-      logger.info('=== UNIPILE SDK: Profile retrieved successfully ===', { 
+
+      logger.info('=== UNIPILE SDK: Profile retrieved successfully ===', {
         accountId,
         profileKeys: Object.keys(profile || {}),
         hasEmail: !!profile?.email,
         hasName: !!(profile?.first_name || profile?.last_name || profile?.full_name),
         profileData: profile
       });
-      
+
       return profile;
     } catch (error) {
-      logger.error('=== UNIPILE SDK: Profile fetch failed ===', { 
+      logger.error('=== UNIPILE SDK: Profile fetch failed ===', {
         accountId,
         error: error,
         errorBody: error?.body,
@@ -268,7 +272,7 @@ export class UnipileService {
         errorDetail: error?.body?.detail,
         sdkMethod: 'client.users.getOwnProfile'
       });
-      
+
       // Re-throw the original error so the caller can handle specific error types
       throw error;
     }
@@ -294,12 +298,12 @@ export class UnipileService {
         text: params.text,
         options: params.options,
       });
-      
-      logger.info('Message sent via SDK', { 
-        accountId: params.accountId, 
-        attendeesCount: params.attendeesIds.length 
+
+      logger.info('Message sent via SDK', {
+        accountId: params.accountId,
+        attendeesCount: params.attendeesIds.length
       });
-      
+
       return response;
     } catch (error) {
       logger.error('Error sending message via SDK', { error, params });
@@ -325,12 +329,12 @@ export class UnipileService {
         provider_id: params.providerId,
         message: params.message,
       });
-      
-      logger.info('LinkedIn invitation sent via SDK', { 
-        accountId: params.accountId, 
-        providerId: params.providerId 
+
+      logger.info('LinkedIn invitation sent via SDK', {
+        accountId: params.accountId,
+        providerId: params.providerId
       });
-      
+
       return response;
     } catch (error) {
       logger.error('Error sending LinkedIn invitation via SDK', { error, params });
@@ -357,12 +361,12 @@ export class UnipileService {
         linkedin_sections: '*',
         notify: params.notify || true,
       });
-      
-      logger.info('LinkedIn profile visited via SDK', { 
-        accountId: params.accountId, 
-        identifier: params.identifier 
+
+      logger.info('LinkedIn profile visited via SDK', {
+        accountId: params.accountId,
+        identifier: params.identifier
       });
-      
+
       return response;
     } catch (error) {
       logger.error('Error visiting LinkedIn profile via SDK', { error, params });
@@ -388,12 +392,12 @@ export class UnipileService {
         post_id: params.postId,
         reaction_type: params.reactionType || 'like',
       });
-      
-      logger.info('LinkedIn post liked via SDK', { 
-        accountId: params.accountId, 
-        postId: params.postId 
+
+      logger.info('LinkedIn post liked via SDK', {
+        accountId: params.accountId,
+        postId: params.postId
       });
-      
+
       return response;
     } catch (error) {
       logger.error('Error liking LinkedIn post via SDK', { error, params });
@@ -419,12 +423,12 @@ export class UnipileService {
         post_id: params.postId,
         text: params.text,
       });
-      
-      logger.info('LinkedIn post commented via SDK', { 
-        accountId: params.accountId, 
-        postId: params.postId 
+
+      logger.info('LinkedIn post commented via SDK', {
+        accountId: params.accountId,
+        postId: params.postId
       });
-      
+
       return response;
     } catch (error) {
       logger.error('Error commenting on LinkedIn post via SDK', { error, params });
@@ -454,12 +458,12 @@ export class UnipileService {
         body: params.body,
         reply_to: params.replyTo,
       });
-      
-      logger.info('Email sent via SDK', { 
-        accountId: params.accountId, 
-        recipientCount: params.to.length 
+
+      logger.info('Email sent via SDK', {
+        accountId: params.accountId,
+        recipientCount: params.to.length
       });
-      
+
       return response;
     } catch (error) {
       logger.error('Error sending email via SDK', { error, params });
