@@ -1,15 +1,16 @@
-import { LeadListRepository, CreateLeadList, UpdateLeadList, LeadList } from '../repositories/LeadListRepository';
-import { LeadRepository, CreateLead, Lead } from '../repositories/LeadRepository';
+import { LeadListRepository } from '../repositories/LeadListRepository';
+import { LeadRepository } from '../repositories/LeadRepository';
 import { ConnectedAccountRepository } from '../repositories/ConnectedAccountRepository';
 import { CsvService, CsvParseResult, CsvValidationResult } from './CsvService';
 import { StorageService, UploadResult } from './StorageService';
 import {
-  CreateLeadListDto,
-  UpdateLeadListDto,
-  LeadListQueryDto,
-  UploadCsvDto,
   PreviewCsvDto,
-  PublishLeadListDto
+  PublishLeadListDto,
+  LeadListResponseDto,
+  LeadListInsertDto,
+  LeadListUpdateDto,
+  LeadInsertDto,
+  LeadListQueryDto
 } from '../dto/leads.dto';
 import { NotFoundError, ValidationError, BadRequestError } from '../errors/AppError';
 import logger from '../utils/logger';
@@ -34,12 +35,12 @@ export class LeadListService {
    * Create a new lead list
    */
   async createLeadList(
-    data: CreateLeadListDto,
+    data: LeadListInsertDto,
     organizationId: string,
     creatorId: string
-  ): Promise<LeadList> {
+  ): Promise<LeadListResponseDto> {
     try {
-      const leadListData: CreateLeadList = {
+      const leadListData:LeadListInsertDto  = {
         organization_id: organizationId,
         name: data.name,
         description: data.description,
@@ -63,7 +64,7 @@ export class LeadListService {
   /**
    * Get lead list by ID
    */
-  async getLeadListById(leadListId: string, organizationId: string): Promise<LeadList> {
+  async getLeadListById(leadListId: string, organizationId: string): Promise<LeadListResponseDto> {
     try {
       const leadList = await this.leadListRepository.findById(leadListId);
 
@@ -88,7 +89,7 @@ export class LeadListService {
   async getLeadLists(
     organizationId: string,
     query: LeadListQueryDto
-  ): Promise<{ data: LeadList[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
+  ): Promise<{ data: LeadListResponseDto[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
     try {
       const tags = query.tags ? query.tags.split(',').map(t => t.trim()) : undefined;
 
@@ -121,7 +122,7 @@ export class LeadListService {
   async getLeadListsWithStats(
     organizationId: string,
     query: LeadListQueryDto
-  ): Promise<{ data: (LeadList & { statistics: any })[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
+  ): Promise<{ data: (LeadListResponseDto & { statistics: any })[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
     try {
       const result = await this.leadListRepository.findWithStatistics(organizationId, {
         page: query.page,
@@ -150,14 +151,14 @@ export class LeadListService {
    */
   async updateLeadList(
     leadListId: string,
-    data: UpdateLeadListDto,
+    data: LeadListUpdateDto,
     organizationId: string
-  ): Promise<LeadList> {
+  ): Promise<LeadListResponseDto> {
     try {
       // Verify lead list exists and belongs to organization
       await this.getLeadListById(leadListId, organizationId);
 
-      const updateData: UpdateLeadList = {
+      const updateData: LeadListUpdateDto = {
         ...data,
       };
 
@@ -253,7 +254,7 @@ export class LeadListService {
     organizationId: string,
     creatorId: string
   ): Promise<{
-    leadList: LeadList;
+    leadList: LeadListResponseDto;
     importResult: {
       totalRows: number;
       importedLeads: number;
@@ -301,6 +302,8 @@ export class LeadListService {
           source: 'csv_import',
           tags: [],
           filters: {},
+          organization_id: organizationId,
+          creator_id: creatorId,
           metadata: {
             connected_account_id: data.connected_account_id,
             mapping: data.mapping,
@@ -338,14 +341,14 @@ export class LeadListService {
       );
 
       // Update lead list with processing results
-      const updateData: UpdateLeadList = {
+      const updateData: LeadListUpdateDto = {
         status: 'completed',
         total_leads: importResult.totalRows,
         processed_leads: importResult.importedLeads,
         failed_leads: importResult.totalRows - importResult.importedLeads - importResult.skippedRows,
         processing_completed_at: new Date().toISOString(),
         stats: {
-          import_duration_ms: Date.now() - new Date(leadList.created_at).getTime(),
+          import_duration_ms: Date.now() - new Date(leadList.created_at || new Date()).getTime(),
           success_rate: importResult.totalRows > 0 ? (importResult.importedLeads / importResult.totalRows) * 100 : 0,
           skipped_count: importResult.skippedRows,
           error_count: importResult.totalRows - importResult.importedLeads - importResult.skippedRows,
@@ -397,7 +400,7 @@ export class LeadListService {
     errors: string[];
   }> {
     const errors: string[] = [];
-    const leadsToCreate: CreateLead[] = [];
+    const leadsToCreate: LeadInsertDto[] = [];
     let skippedRows = 0;
 
     // Process each row
@@ -428,31 +431,23 @@ export class LeadListService {
         }
 
         // Create lead data
-        const leadData: CreateLead = {
+        const leadData: LeadInsertDto = {
           lead_list_id: leadListId,
-          organization_id: organizationId,
-          full_name: row.full_name || row.name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Unknown',
+          full_name: row.full_name,
           first_name: row.first_name,
           last_name: row.last_name,
           email: row.email,
           phone: row.phone,
           title: row.title,
           company: row.company,
-          company_size: row.company_size,
-          company_website: row.company_website,
-          company_linkedin_url: row.company_linkedin_url,
           industry: row.industry,
           location: row.location,
-          seniority_level: row.seniority_level,
-          years_experience: row.years_experience ? parseInt(row.years_experience) : undefined,
           linkedin_url: row.linkedin_url,
           linkedin_id: row.linkedin_id,
-          skills: row.skills ? (Array.isArray(row.skills) ? row.skills : [row.skills]) : [],
-          education: row.education ? (Array.isArray(row.education) ? row.education : [row.education]) : [],
           source: 'csv_import',
-          notes: row.notes,
-          tags: row.tags ? (Array.isArray(row.tags) ? row.tags : [row.tags]) : [],
-          custom_fields: row.custom_fields || {},
+          enrichment_data: row.enrichment_data || {},
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         };
 
         leadsToCreate.push(leadData);
@@ -524,7 +519,7 @@ export class LeadListService {
     newName: string,
     organizationId: string,
     creatorId: string
-  ): Promise<LeadList> {
+  ): Promise<LeadListResponseDto> {
     try {
       // Verify lead list exists and belongs to organization
       await this.getLeadListById(leadListId, organizationId);

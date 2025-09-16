@@ -1,64 +1,12 @@
-import { BaseRepository } from './BaseRepository';
-import { DatabaseError, NotFoundError } from '../errors/AppError';
+import { ConnectedAccountResponseDto, CreateConnectedAccountDto, UpdateConnectedAccountDto } from '../dto/accounts.dto';
+import { DatabaseError } from '../errors/AppError';
 import logger from '../utils/logger';
-import { supabaseAdmin } from '../config/supabase';
-
-// Connected Account types based on actual database schema
-export interface ConnectedAccount {
-  id: string;
-  user_id: string;
-  organization_id: string;
-  provider: string;
-  provider_account_id: string;
-  display_name: string;
-  email?: string;
-  profile_picture_url?: string;
-  status: string;
-  capabilities: any[]; // JSONB array
-  metadata: Record<string, any>; // JSONB object
-  last_synced_at?: string;
-  daily_usage?: number;
-  usage_reset_at?: string;
-  connection_quality?: string;
-  last_error?: string;
-  daily_limit?: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateConnectedAccount {
-  user_id: string;
-  organization_id: string;
-  provider: string;
-  provider_account_id: string;
-  display_name: string;
-  email?: string;
-  profile_picture_url?: string;
-  status?: string;
-  capabilities?: any[];
-  metadata?: Record<string, any>;
-}
-
-export interface UpdateConnectedAccount {
-  display_name?: string;
-  email?: string;
-  profile_picture_url?: string;
-  status?: string;
-  capabilities?: any[];
-  metadata?: Record<string, any>;
-  last_synced_at?: string;
-  daily_usage?: number;
-  daily_limit?: number;
-  usage_reset_at?: string;
-  connection_quality?: string;
-  provider_account_id?: string;
-  last_error?: string;
-}
+import { BaseRepository } from './BaseRepository';
 
 /**
  * Repository for connected account-related database operations
  */
-export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount, CreateConnectedAccount, UpdateConnectedAccount> {
+export class ConnectedAccountRepository extends BaseRepository<ConnectedAccountResponseDto, CreateConnectedAccountDto, UpdateConnectedAccountDto> {
   constructor() {
     super('connected_accounts');
   }
@@ -66,24 +14,14 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
   /**
    * Find connected account by provider account ID
    */
-  async findByProviderAccountId(provider: string, providerAccountId: string): Promise<ConnectedAccount | null> {
+  public async findByProviderAccountId(providerAccountId: string): Promise<ConnectedAccountResponseDto | null> {
     try {
-      const { data, error } = await this.client
-        .from(this.tableName)
-        .select('*')
-        .eq('provider', provider)
-        .eq('provider_account_id', providerAccountId)
-        .single();
+        const data = await this.findOneByField('provider_account_id', providerAccountId);
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-
-      return data as ConnectedAccount | null;
+        return data
     } catch (error) {
       logger.error('Error finding connected account by provider account ID', {
         error,
-        provider,
         providerAccountId
       });
       throw new DatabaseError('Failed to find connected account by provider account ID');
@@ -93,28 +31,14 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
   /**
    * Get user's pending/incomplete accounts (for debugging or status tracking)
    */
-  async getPendingAccounts(userId: string, organizationId?: string): Promise<ConnectedAccount[]> {
+  public async getPendingAccounts(userId: string, organizationId?: string): Promise<ConnectedAccountResponseDto[]> {
     try {
       logger.info('Getting user pending accounts', { userId, organizationId });
 
-      let query = this.client
-        .from(this.tableName)
-        .select('*')
-        .eq('user_id', userId);
-
-      if (organizationId) {
-        query = query.eq('organization_id', organizationId);
-      }
-
-      const { data, error } = await query.order('created_at', { ascending: false });
-
-      if (error) {
-        logger.error('Database error getting pending accounts', { error, userId, organizationId });
-        throw error;
-      }
+      const data = !organizationId ? await this.findByField('user_id', userId) : await this.findByField('organization_id', organizationId);
 
       // Filter for pending/incomplete accounts
-      const pendingAccounts = (data || []).filter((account: ConnectedAccount) => {
+      const pendingAccounts = (data || []).filter((account: ConnectedAccountResponseDto) => {
         const isPending = account.provider_account_id?.startsWith('pending-') ||
                          !account.email ||
                          account.email.trim() === '';
@@ -132,7 +56,7 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
         pendingCount: pendingAccounts.length
       });
 
-      return pendingAccounts as ConnectedAccount[];
+      return pendingAccounts;
     } catch (error) {
       logger.error('Error getting pending accounts', { error, userId, organizationId });
       throw new DatabaseError('Failed to get pending accounts');
@@ -142,42 +66,14 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
   /**
    * Get user's connected accounts
    */
-  async getUserAccounts(userId: string, organizationId?: string): Promise<ConnectedAccount[]> {
+  public async getUserAccounts(userId: string, organizationId?: string): Promise<ConnectedAccountResponseDto[]> {
     try {
       logger.info('Getting user connected accounts', { userId, organizationId });
 
-      let query = this.client
-        .from(this.tableName)
-        .select('*')
-        .eq('user_id', userId);
-
-      if (organizationId) {
-        query = query.eq('organization_id', organizationId);
-      }
-
-      const { data, error } = await query.order('created_at', { ascending: false });
-
-      if (error) {
-        logger.error('Database error getting user accounts', { error, userId, organizationId });
-
-        // Handle specific error cases
-        if (error.code === '22P02') {
-          // Invalid UUID format
-          logger.warn('Invalid UUID format for user_id', { userId });
-          return []; // Return empty array instead of throwing
-        }
-
-        if (error.code === '42P01') {
-          // Table doesn't exist
-          logger.warn('Connected accounts table does not exist');
-          return [];
-        }
-
-        throw error;
-      }
+      const data = !organizationId ? await this.findByField('user_id', userId) : await this.findByField('organization_id', organizationId);
 
       // Filter out pending/incomplete accounts
-      const connectedAccounts = (data || []).filter((account: ConnectedAccount) => {
+      const connectedAccounts = (data || []).filter((account: ConnectedAccountResponseDto) => {
         // Check if account is truly connected
         const isConnected = account.status === 'connected' &&
                            account.email &&
@@ -214,7 +110,7 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
         filteredOut: (data?.length || 0) - connectedAccounts.length
       });
 
-      return connectedAccounts as ConnectedAccount[];
+      return connectedAccounts as ConnectedAccountResponseDto[];
     } catch (error) {
       logger.error('Error getting user connected accounts', { error, userId, organizationId });
 
@@ -231,36 +127,25 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
   /**
    * Get organization's connected accounts
    */
-  async getOrganizationAccounts(organizationId: string, page = 1, limit = 20): Promise<{ data: ConnectedAccount[]; count: number }> {
+  public async getOrganizationAccounts(organizationId: string, page = 1, limit = 20): Promise<ReturnType<typeof this.findPaginatedWithFilters>> {
     try {
       const offset = (page - 1) * limit;
 
       // Get total count
-      const { count, error: countError } = await this.client
-        .from(this.tableName)
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId);
+      const count = (await this.findByField('organization_id', organizationId)).length;
 
-      if (countError) {
-        throw countError;
-      }
 
-      // Get paginated data
-      const { data, error } = await this.client
-        .from(this.tableName)
-        .select('*')
-        .eq('organization_id', organizationId)
-        .range(offset, offset + limit - 1)
-        .order('created_at', { ascending: false });
+      const data = await this.findPaginatedWithFilters({
+        filters: {
+          organization_id: organizationId
+        },
+        page,
+        limit,
+        sortBy: 'created_at',
+        sortOrder: 'desc'
+      })
 
-      if (error) {
-        throw error;
-      }
-
-      return {
-        data: (data || []) as ConnectedAccount[],
-        count: count || 0,
-      };
+      return data
     } catch (error) {
       logger.error('Error getting organization connected accounts', { error, organizationId });
       throw new DatabaseError('Failed to get organization connected accounts');
@@ -270,25 +155,11 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
   /**
    * Get accounts by provider
    */
-  async getAccountsByProvider(provider: string, organizationId?: string): Promise<ConnectedAccount[]> {
+  public async getAccountsByProvider(provider: string, organizationId?: string): Promise<ConnectedAccountResponseDto[]> {
     try {
-      let query = this.client
-        .from(this.tableName)
-        .select('*')
-        .eq('provider', provider)
-        .eq('status', 'connected');
+      const data = await this.findByMultipleFields({ provider, status: 'connected', organization_id: organizationId });
 
-      if (organizationId) {
-        query = query.eq('organization_id', organizationId);
-      }
-
-      const { data, error } = await query.order('created_at', { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
-      return (data || []) as ConnectedAccount[];
+      return data;
     } catch (error) {
       logger.error('Error getting accounts by provider', { error, provider, organizationId });
       throw new DatabaseError('Failed to get accounts by provider');
@@ -298,19 +169,21 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
   /**
    * Update account usage statistics
    */
-  async updateUsage(id: string, usage: number): Promise<ConnectedAccount> {
+  public async updateUsage(id: string, usage: number): Promise<ConnectedAccountResponseDto> {
     try {
       const now = new Date().toISOString();
 
       // Get current account to check if we need to reset daily usage
       const account = await this.findById(id);
-      const resetTime = account.usage_reset_at ? new Date(account.usage_reset_at) : new Date();
+      const resetTime = account.metadata?.usage_reset_at ? new Date(account.metadata.usage_reset_at) : new Date();
       const shouldReset = resetTime <= new Date();
 
-      const updateData: UpdateConnectedAccount = {
-        daily_usage: shouldReset ? usage : (account.daily_usage || 0) + usage,
-        usage_reset_at: shouldReset ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : account.usage_reset_at,
-        last_synced_at: now
+      const updateData: UpdateConnectedAccountDto = {
+        metadata: {
+            daily_usage: shouldReset ? usage : (account.metadata.daily_usage || 0) + usage,
+            usage_reset_at: shouldReset ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : account.metadata.usage_reset_at,
+            last_synced_at: now
+        }
       };
 
       return await this.update(id, updateData);
@@ -323,13 +196,15 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
   /**
    * Update account sync status
    */
-  async updateSyncStatus(id: string, status: string, error?: string): Promise<ConnectedAccount> {
+  public async updateSyncStatus(id: string, status: 'connected' | 'disconnected' | 'error' | 'expired', error?: string): Promise<ConnectedAccountResponseDto> {
     try {
-      const updateData: UpdateConnectedAccount = {
+      const updateData: UpdateConnectedAccountDto = {
         status,
-        last_synced_at: new Date().toISOString(),
-        connection_quality: error ? 'error' : 'good',
-        last_error: error || undefined,
+        metadata: {
+            last_synced_at: new Date().toISOString(),
+            last_error: error || undefined,
+            connection_quality: error ? 'error' : 'good',
+        }
       };
 
       return await this.update(id, updateData);
@@ -342,7 +217,7 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
   /**
    * Get accounts that need token refresh
    */
-  async getAccountsNeedingRefresh(): Promise<ConnectedAccount[]> {
+  public async getAccountsNeedingRefresh(): Promise<ConnectedAccountResponseDto[]> {
     try {
       const { data, error } = await this.client
         .from(this.tableName)
@@ -355,7 +230,7 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
         throw error;
       }
 
-      return (data || []) as ConnectedAccount[];
+      return (data || []) as ConnectedAccountResponseDto[];
     } catch (error) {
       logger.error('Error getting accounts needing refresh', { error });
       throw new DatabaseError('Failed to get accounts needing refresh');
@@ -365,53 +240,30 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
   /**
    * Get accounts by status
    */
-  async getAccountsByStatus(status: string, organizationId?: string): Promise<ConnectedAccount[]> {
+  public async getAccountsByStatus(status: string, organizationId?: string): Promise<ConnectedAccountResponseDto[]> {
     try {
-      let query = this.client
-        .from(this.tableName)
-        .select('*')
-        .eq('status', status);
-
+      const fields: Record<string, any> = { status };
       if (organizationId) {
-        query = query.eq('organization_id', organizationId);
+        fields.organization_id = organizationId;
       }
-
-      const { data, error } = await query.order('created_at', { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
-      return (data || []) as ConnectedAccount[];
+      const data = await this.findByMultipleFields(fields);
+      return (data || []) as ConnectedAccountResponseDto[];
     } catch (error) {
       logger.error('Error getting accounts by status', { error, status, organizationId });
       throw new DatabaseError('Failed to get accounts by status');
     }
   }
-
   /**
    * Check if user has account for provider
    */
-  async hasProviderAccount(userId: string, provider: string, organizationId?: string): Promise<boolean> {
+  public async hasProviderAccount(userId: string, provider: string, organizationId?: string): Promise<boolean> {
     try {
-      let query = this.client
-        .from(this.tableName)
-        .select('id')
-        .eq('user_id', userId)
-        .eq('provider', provider)
-        .eq('status', 'connected');
-
-      if (organizationId) {
-        query = query.eq('organization_id', organizationId);
-      }
-
-      const { data, error } = await query.single();
-
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-
-      return !!data;
+        const fields: Record<string, any> = { user_id: userId, provider, status: 'connected' };
+        if (organizationId) {
+          fields.organization_id = organizationId;
+        }
+        const data = await this.findByMultipleFields(fields);
+        return !!data;
     } catch (error) {
       logger.error('Error checking provider account', { error, userId, provider, organizationId });
       return false;
@@ -421,18 +273,11 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccount,
   /**
    * Get account usage statistics for organization
    */
-  async getOrganizationUsageStats(organizationId: string): Promise<Record<string, any>> {
+  public async getOrganizationUsageStats(organizationId: string): Promise<Record<string, any>> {
     try {
-      const { data, error } = await this.client
-        .from(this.tableName)
-        .select('provider, daily_usage, daily_limit, status')
-        .eq('organization_id', organizationId);
+      const data = await this.findByField('organization_id', organizationId);
 
-      if (error) {
-        throw error;
-      }
-
-      const stats = (data || []).reduce((acc: Record<string, any>, account: any) => {
+      const stats = data.reduce((acc: Record<string, any>, account: any) => {
         const provider = account.provider;
         if (!acc[provider]) {
           acc[provider] = {

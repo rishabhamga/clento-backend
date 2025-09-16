@@ -1,95 +1,12 @@
 import { BaseRepository } from './BaseRepository';
 import { DatabaseError, NotFoundError } from '../errors/AppError';
 import logger from '../utils/logger';
-
-export interface Lead {
-  id: string;
-  lead_list_id: string;
-  organization_id: string;
-  full_name: string;
-  first_name?: string;
-  last_name?: string;
-  email?: string;
-  phone?: string;
-  title?: string;
-  company?: string;
-  company_size?: string;
-  company_website?: string;
-  company_linkedin_url?: string;
-  industry?: string;
-  location?: string;
-  seniority_level?: string;
-  years_experience?: number;
-  linkedin_url?: string;
-  linkedin_id?: string;
-  skills: string[];
-  education: Record<string, any>[];
-  status: 'new' | 'contacted' | 'replied' | 'connected' | 'not_interested' | 'bounced';
-  source: string;
-  notes?: string;
-  tags: string[];
-  custom_fields: Record<string, any>;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateLead {
-  lead_list_id: string;
-  organization_id: string;
-  full_name: string;
-  first_name?: string;
-  last_name?: string;
-  email?: string;
-  phone?: string;
-  title?: string;
-  company?: string;
-  company_size?: string;
-  company_website?: string;
-  company_linkedin_url?: string;
-  industry?: string;
-  location?: string;
-  seniority_level?: string;
-  years_experience?: number;
-  linkedin_url?: string;
-  linkedin_id?: string;
-  skills?: string[];
-  education?: Record<string, any>[];
-  source: string;
-  notes?: string;
-  tags?: string[];
-  custom_fields?: Record<string, any>;
-}
-
-export interface UpdateLead {
-  full_name?: string;
-  first_name?: string;
-  last_name?: string;
-  email?: string;
-  phone?: string;
-  title?: string;
-  company?: string;
-  company_size?: string;
-  company_website?: string;
-  company_linkedin_url?: string;
-  industry?: string;
-  location?: string;
-  seniority_level?: string;
-  years_experience?: number;
-  linkedin_url?: string;
-  linkedin_id?: string;
-  skills?: string[];
-  education?: Record<string, any>[];
-  status?: 'new' | 'contacted' | 'replied' | 'connected' | 'not_interested' | 'bounced';
-  notes?: string;
-  tags?: string[];
-  custom_fields?: Record<string, any>;
-  updated_at?: string;
-}
+import { LeadResponseDto, LeadInsertDto, LeadUpdateDto } from '../dto/leads.dto';
 
 /**
  * Repository for leads table operations
  */
-export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead> {
+export class LeadRepository extends BaseRepository<LeadResponseDto, LeadInsertDto, LeadUpdateDto> {
   constructor() {
     super('leads');
   }
@@ -106,7 +23,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
       status?: string;
       tags?: string[];
     }
-  ): Promise<{ data: Lead[]; total: number; page: number; limit: number }> {
+  ): Promise<{ data: LeadResponseDto[]; total: number; page: number; limit: number }> {
     try {
       const page = options?.page || 1;
       const limit = options?.limit || 20;
@@ -174,7 +91,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
       createdFrom?: string;
       createdTo?: string;
     }
-  ): Promise<{ data: Lead[]; total: number; page: number; limit: number }> {
+  ): Promise<{ data: LeadResponseDto[]; total: number; page: number; limit: number }> {
     try {
       const page = options?.page || 1;
       const limit = options?.limit || 20;
@@ -268,7 +185,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
   /**
    * Find lead by LinkedIn URL
    */
-  async findByLinkedInUrl(linkedinUrl: string): Promise<Lead | null> {
+  async findByLinkedInUrl(linkedinUrl: string): Promise<LeadResponseDto | null> {
     try {
       const { data, error } = await this.client
         .from(this.tableName)
@@ -297,7 +214,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
   /**
    * Find lead by email
    */
-  async findByEmail(email: string): Promise<Lead | null> {
+  async findByEmail(email: string): Promise<LeadResponseDto | null> {
     try {
       const { data, error } = await this.client
         .from(this.tableName)
@@ -326,7 +243,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
   /**
    * Bulk create leads
    */
-  async bulkCreate(leads: CreateLead[]): Promise<Lead[]> {
+  async bulkCreate(leads: LeadInsertDto[]): Promise<LeadResponseDto[]> {
     try {
       const { data, error } = await this.client
         .from(this.tableName)
@@ -349,7 +266,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
   /**
    * Bulk update leads
    */
-  async bulkUpdate(leadIds: string[], updates: UpdateLead): Promise<void> {
+  async bulkUpdate(leadIds: string[], updates: LeadUpdateDto): Promise<void> {
     try {
         await this.bulkUpdate(leadIds, {
             ...updates,
@@ -364,7 +281,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
   /**
    * Update lead status
    */
-  async updateStatus(leadId: string, status: Lead['status']): Promise<void> {
+  async updateStatus(leadId: string, status: LeadResponseDto['status']): Promise<void> {
     try {
       this.update(leadId, {
         status: status as any,
@@ -375,61 +292,6 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
       throw error instanceof DatabaseError ? error : new DatabaseError('Failed to update lead status');
     }
   }
-
-  /**
-   * Add tags to lead
-   */
-  async addTags(leadId: string, tags: string[]): Promise<void> {
-    try {
-      // Get current lead
-      const lead = await this.findById(leadId);
-      if (!lead) {
-        throw new NotFoundError('Lead not found');
-      }
-
-      // Merge tags
-      const currentTags = lead.tags || [];
-      const newTags = [...new Set([...currentTags, ...tags])];
-
-      await this.update(leadId, {
-        tags: newTags as any,
-        updated_at: new Date().toISOString(),
-      });
-
-      logger.info('Tags added to lead', { leadId, tags });
-    } catch (error) {
-      logger.error('Error in addTags', { error, leadId, tags });
-      throw error instanceof DatabaseError ? error : new DatabaseError('Failed to add tags to lead');
-    }
-  }
-
-  /**
-   * Remove tags from lead
-   */
-  async removeTags(leadId: string, tags: string[]): Promise<void> {
-    try {
-      // Get current lead
-      const lead = await this.findById(leadId);
-      if (!lead) {
-        throw new NotFoundError('Lead not found');
-      }
-
-      // Remove tags
-      const currentTags = lead.tags || [];
-      const newTags = currentTags.filter(tag => !tags.includes(tag));
-
-      await this.update(leadId, {
-        tags: newTags as any,
-        updated_at: new Date().toISOString(),
-      });
-
-      logger.info('Tags removed from lead', { leadId, tags });
-    } catch (error) {
-      logger.error('Error in removeTags', { error, leadId, tags });
-      throw error instanceof DatabaseError ? error : new DatabaseError('Failed to remove tags from lead');
-    }
-  }
-
   /**
    * Get lead statistics by organization
    */

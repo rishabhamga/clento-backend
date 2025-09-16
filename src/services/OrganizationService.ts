@@ -49,10 +49,10 @@ export class OrganizationService {
         },
       });
 
-      logger.info('Organization created', { 
-        organizationId: organization.id, 
+      logger.info('Organization created', {
+        organizationId: organization.id,
         creatorId,
-        name: organization.name 
+        name: organization.name
       });
 
       return organization;
@@ -87,7 +87,7 @@ export class OrganizationService {
     try {
       // Verify user has admin access
       const membership = await this.organizationRepository.getMembership(id, userId);
-      if (!membership || !['owner', 'admin'].includes(membership.role)) {
+      if (!membership || !['owner', 'admin'].includes(membership.role || '')) {
         throw new ForbiddenError('Admin access required');
       }
 
@@ -101,10 +101,10 @@ export class OrganizationService {
 
       const organization = await this.organizationRepository.update(id, data);
 
-      logger.info('Organization updated', { 
-        organizationId: id, 
+      logger.info('Organization updated', {
+        organizationId: id,
         userId,
-        updates: Object.keys(data) 
+        updates: Object.keys(data)
       });
 
       return organization;
@@ -171,7 +171,7 @@ export class OrganizationService {
     try {
       // Verify requester has admin access
       const requesterMembership = await this.organizationRepository.getMembership(organizationId, requesterId);
-      if (!requesterMembership || !['owner', 'admin'].includes(requesterMembership.role)) {
+      if (!requesterMembership || !requesterMembership.role || !['owner', 'admin'].includes(requesterMembership.role || '')) {
         throw new ForbiddenError('Admin access required');
       }
 
@@ -204,21 +204,21 @@ export class OrganizationService {
         role,
       });
 
-      logger.info('Member added to organization', { 
-        organizationId, 
-        userIdToAdd, 
-        role, 
-        requesterId 
+      logger.info('Member added to organization', {
+        organizationId,
+        userIdToAdd,
+        role,
+        requesterId
       });
 
       return member;
     } catch (error) {
-      logger.error('Error adding member to organization', { 
-        error, 
-        organizationId, 
-        userIdToAdd, 
-        role, 
-        requesterId 
+      logger.error('Error adding member to organization', {
+        error,
+        organizationId,
+        userIdToAdd,
+        role,
+        requesterId
       });
       throw error;
     }
@@ -231,7 +231,7 @@ export class OrganizationService {
     try {
       // Verify requester has admin access
       const requesterMembership = await this.organizationRepository.getMembership(organizationId, requesterId);
-      if (!requesterMembership || !['owner', 'admin'].includes(requesterMembership.role)) {
+      if (!requesterMembership || !requesterMembership.role || !['owner', 'admin'].includes(requesterMembership.role|| '')) {
         throw new ForbiddenError('Admin access required');
       }
 
@@ -263,22 +263,22 @@ export class OrganizationService {
 
       const updatedMember = await this.organizationRepository.updateMember(organizationId, userIdToUpdate, { role });
 
-      logger.info('Member role updated', { 
-        organizationId, 
-        userIdToUpdate, 
+      logger.info('Member role updated', {
+        organizationId,
+        userIdToUpdate,
         oldRole: currentMembership.role,
-        newRole: role, 
-        requesterId 
+        newRole: role,
+        requesterId
       });
 
       return updatedMember;
     } catch (error) {
-      logger.error('Error updating member role', { 
-        error, 
-        organizationId, 
-        userIdToUpdate, 
-        role, 
-        requesterId 
+      logger.error('Error updating member role', {
+        error,
+        organizationId,
+        userIdToUpdate,
+        role,
+        requesterId
       });
       throw error;
     }
@@ -291,7 +291,7 @@ export class OrganizationService {
     try {
       // Verify requester has admin access
       const requesterMembership = await this.organizationRepository.getMembership(organizationId, requesterId);
-      if (!requesterMembership || !['owner', 'admin'].includes(requesterMembership.role)) {
+      if (!requesterMembership || !requesterMembership.role || !['owner', 'admin'].includes(requesterMembership.role|| '')) {
         throw new ForbiddenError('Admin access required');
       }
 
@@ -317,17 +317,17 @@ export class OrganizationService {
 
       await this.organizationRepository.removeMember(organizationId, userIdToRemove);
 
-      logger.info('Member removed from organization', { 
-        organizationId, 
-        userIdToRemove, 
-        requesterId 
+      logger.info('Member removed from organization', {
+        organizationId,
+        userIdToRemove,
+        requesterId
       });
     } catch (error) {
-      logger.error('Error removing member from organization', { 
-        error, 
-        organizationId, 
-        userIdToRemove, 
-        requesterId 
+      logger.error('Error removing member from organization', {
+        error,
+        organizationId,
+        userIdToRemove,
+        requesterId
       });
       throw error;
     }

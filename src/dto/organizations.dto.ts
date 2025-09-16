@@ -6,9 +6,7 @@ export const CreateOrganizationDto = z.object({
   slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/, 'Slug must contain only lowercase letters, numbers, and hyphens').optional(),
   logo_url: z.string().url().optional(),
   website_url: z.string().url().optional(),
-  industry: z.string().max(255).optional(),
-  company_size: z.enum(['startup', 'small', 'medium', 'large', 'enterprise']).optional(),
-  timezone: z.string().max(50).default('UTC'),
+  plan: z.string().max(50).default('free'),
   billing_email: z.string().email().optional(),
 });
 
@@ -17,11 +15,12 @@ export const UpdateOrganizationDto = z.object({
   slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/).optional(),
   logo_url: z.string().url().optional(),
   website_url: z.string().url().optional(),
-  industry: z.string().max(255).optional(),
-  company_size: z.enum(['startup', 'small', 'medium', 'large', 'enterprise']).optional(),
-  timezone: z.string().max(50).optional(),
+  plan: z.string().max(50).optional(),
   billing_email: z.string().email().optional(),
-  onboarding_completed: z.boolean().optional(),
+  subscription_status: z.string().max(50).optional(),
+  monthly_campaign_limit: z.number().int().min(0).optional(),
+  monthly_lead_limit: z.number().int().min(0).optional(),
+  user_limit: z.number().int().min(0).optional(),
   settings: z.record(z.any()).optional(),
 });
 
@@ -29,8 +28,8 @@ export const OrganizationQueryDto = z.object({
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(100).default(20),
   search: z.string().optional(),
-  plan: z.enum(['free', 'starter', 'professional', 'enterprise']).optional(),
-  company_size: z.enum(['startup', 'small', 'medium', 'large', 'enterprise']).optional(),
+  plan: z.string().max(50).optional(),
+  subscription_status: z.string().max(50).optional(),
 });
 
 // Organization Member DTOs
@@ -64,15 +63,12 @@ export const OrganizationUsageDto = z.object({
  */
 export const OrganizationResponseDto = z.object({
   id: z.string().uuid(),
-  clerk_org_id: z.string(),
   name: z.string(),
   slug: z.string().nullable(),
-  logo_url: z.string().url().nullable(),
-  website_url: z.string().url().nullable(),
-  industry: z.string().nullable(),
-  company_size: z.string().nullable(),
+  logo_url: z.string().nullable(),
+  website_url: z.string().nullable(),
   plan: z.string(),
-  billing_email: z.string().email().nullable(),
+  billing_email: z.string().nullable(),
   subscription_status: z.string(),
   monthly_campaign_limit: z.number().int().min(0),
   monthly_lead_limit: z.number().int().min(0),
@@ -80,7 +76,6 @@ export const OrganizationResponseDto = z.object({
   settings: z.record(z.any()),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
-  permissible_seats: z.number().int().min(0),
 });
 
 /**
@@ -88,23 +83,19 @@ export const OrganizationResponseDto = z.object({
  */
 export const OrganizationInsertDto = z.object({
   id: z.string().uuid().optional(),
-  clerk_org_id: z.string(),
   name: z.string(),
   slug: z.string().nullable().optional(),
-  logo_url: z.string().url().nullable().optional(),
-  website_url: z.string().url().nullable().optional(),
-  industry: z.string().nullable().optional(),
-  company_size: z.string().nullable().optional(),
-  plan: z.string().optional(),
-  billing_email: z.string().email().nullable().optional(),
-  subscription_status: z.string().optional(),
-  monthly_campaign_limit: z.number().int().min(0).optional(),
-  monthly_lead_limit: z.number().int().min(0).optional(),
-  user_limit: z.number().int().min(0).optional(),
-  settings: z.record(z.any()).optional(),
+  logo_url: z.string().nullable().optional(),
+  website_url: z.string().nullable().optional(),
+  plan: z.string().max(50).default('free').optional(),
+  billing_email: z.string().nullable().optional(),
+  subscription_status: z.string().max(50).default('active').optional(),
+  monthly_campaign_limit: z.number().int().min(0).default(5).optional(),
+  monthly_lead_limit: z.number().int().min(0).default(1000).optional(),
+  user_limit: z.number().int().min(0).default(5).optional(),
+  settings: z.record(z.any()).default({}).optional(),
   created_at: z.string().datetime().optional(),
   updated_at: z.string().datetime().optional(),
-  permissible_seats: z.number().int().min(0).optional(),
 });
 
 /**
@@ -112,23 +103,19 @@ export const OrganizationInsertDto = z.object({
  */
 export const OrganizationUpdateDto = z.object({
   id: z.string().uuid().optional(),
-  clerk_org_id: z.string().optional(),
   name: z.string().optional(),
   slug: z.string().nullable().optional(),
-  logo_url: z.string().url().nullable().optional(),
-  website_url: z.string().url().nullable().optional(),
-  industry: z.string().nullable().optional(),
-  company_size: z.string().nullable().optional(),
-  plan: z.string().optional(),
-  billing_email: z.string().email().nullable().optional(),
-  subscription_status: z.string().optional(),
+  logo_url: z.string().nullable().optional(),
+  website_url: z.string().nullable().optional(),
+  plan: z.string().max(50).optional(),
+  billing_email: z.string().nullable().optional(),
+  subscription_status: z.string().max(50).optional(),
   monthly_campaign_limit: z.number().int().min(0).optional(),
   monthly_lead_limit: z.number().int().min(0).optional(),
   user_limit: z.number().int().min(0).optional(),
   settings: z.record(z.any()).optional(),
   created_at: z.string().datetime().optional(),
   updated_at: z.string().datetime().optional(),
-  permissible_seats: z.number().int().min(0).optional(),
 });
 
 /**
@@ -136,16 +123,13 @@ export const OrganizationUpdateDto = z.object({
  */
 export const OrganizationMemberResponseDto = z.object({
   id: z.string().uuid(),
-  organization_id: z.string().uuid(),
-  user_id: z.string().uuid(),
-  role: z.string(),
-  permissions: z.record(z.any()),
-  status: z.string(),
-  invited_by: z.string().uuid().nullable(),
-  invited_at: z.string().datetime().nullable(),
-  joined_at: z.string().datetime(),
-  created_at: z.string().datetime(),
-  updated_at: z.string().datetime(),
+  organization_id: z.string().uuid().nullable(),
+  user_id: z.string().uuid().nullable(),
+  role: z.string().nullable(),
+  permissions: z.record(z.any()).nullable(),
+  status: z.string().nullable(),
+  created_at: z.string().datetime().nullable(),
+  updated_at: z.string().datetime().nullable(),
 });
 
 /**
@@ -153,14 +137,11 @@ export const OrganizationMemberResponseDto = z.object({
  */
 export const OrganizationMemberInsertDto = z.object({
   id: z.string().uuid().optional(),
-  organization_id: z.string().uuid(),
-  user_id: z.string().uuid(),
-  role: z.string().optional(),
-  permissions: z.record(z.any()).optional(),
-  status: z.string().optional(),
-  invited_by: z.string().uuid().nullable().optional(),
-  invited_at: z.string().datetime().nullable().optional(),
-  joined_at: z.string().datetime().optional(),
+  organization_id: z.string().uuid().nullable().optional(),
+  user_id: z.string().uuid().nullable().optional(),
+  role: z.string().max(50).default('member').optional(),
+  permissions: z.record(z.any()).default({}).optional(),
+  status: z.string().max(50).default('active').optional(),
   created_at: z.string().datetime().optional(),
   updated_at: z.string().datetime().optional(),
 });
@@ -170,14 +151,11 @@ export const OrganizationMemberInsertDto = z.object({
  */
 export const OrganizationMemberUpdateDto = z.object({
   id: z.string().uuid().optional(),
-  organization_id: z.string().uuid().optional(),
-  user_id: z.string().uuid().optional(),
-  role: z.string().optional(),
+  organization_id: z.string().uuid().nullable().optional(),
+  user_id: z.string().uuid().nullable().optional(),
+  role: z.string().max(50).optional(),
   permissions: z.record(z.any()).optional(),
-  status: z.string().optional(),
-  invited_by: z.string().uuid().nullable().optional(),
-  invited_at: z.string().datetime().nullable().optional(),
-  joined_at: z.string().datetime().optional(),
+  status: z.string().max(50).optional(),
   created_at: z.string().datetime().optional(),
   updated_at: z.string().datetime().optional(),
 });

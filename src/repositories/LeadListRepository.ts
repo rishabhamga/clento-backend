@@ -1,80 +1,11 @@
 import { BaseRepository } from './BaseRepository';
 import { DatabaseError, NotFoundError } from '../errors/AppError';
 import logger from '../utils/logger';
-
-export interface LeadList {
-  id: string;
-  organization_id: string;
-  creator_id: string;
-  name: string;
-  description?: string;
-  source: 'csv_import' | 'filter_search' | 'api' | 'manual';
-  status: 'draft' | 'processing' | 'completed' | 'failed' | 'archived' | 'active';
-  total_leads: number;
-  processed_leads: number;
-  failed_leads: number;
-  original_filename?: string;
-  csv_file_url?: string;
-  sample_csv_url?: string;
-  file_size?: number;
-  processing_started_at?: string;
-  processing_completed_at?: string;
-  error_message?: string;
-  tags: string[];
-  filters: Record<string, any>;
-  metadata: Record<string, any>;
-  stats: Record<string, any>;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateLeadList {
-  organization_id: string;
-  creator_id: string;
-  name: string;
-  description?: string;
-  source: 'csv_import' | 'filter_search' | 'api' | 'manual';
-  status?: 'draft' | 'processing' | 'completed' | 'failed' | 'archived';
-  total_leads?: number;
-  processed_leads?: number;
-  failed_leads?: number;
-  original_filename?: string;
-  csv_file_url?: string;
-  sample_csv_url?: string;
-  file_size?: number;
-  processing_started_at?: string;
-  processing_completed_at?: string;
-  error_message?: string;
-  tags?: string[];
-  filters?: Record<string, any>;
-  metadata?: Record<string, any>;
-  stats?: Record<string, any>;
-}
-
-export interface UpdateLeadList {
-  name?: string;
-  description?: string;
-  status?: 'draft' | 'processing' | 'completed' | 'failed' | 'archived' | 'active';
-  total_leads?: number;
-  processed_leads?: number;
-  failed_leads?: number;
-  original_filename?: string;
-  csv_file_url?: string;
-  sample_csv_url?: string;
-  file_size?: number;
-  processing_started_at?: string;
-  processing_completed_at?: string;
-  error_message?: string;
-  tags?: string[];
-  filters?: Record<string, any>;
-  metadata?: Record<string, any>;
-  stats?: Record<string, any>;
-}
-
+import { LeadListResponseDto, LeadListInsertDto, LeadListUpdateDto } from '../dto/leads.dto';
 /**
  * Repository for lead_lists table operations
  */
-export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList, UpdateLeadList> {
+export class LeadListRepository extends BaseRepository<LeadListResponseDto, LeadListInsertDto, LeadListUpdateDto> {
   constructor() {
     super('lead_lists');
   }
@@ -92,7 +23,7 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
       status?: string;
       tags?: string[];
     }
-  ): Promise<{ data: LeadList[]; total: number; page: number; limit: number }> {
+  ): Promise<{ data: LeadListResponseDto[]; total: number; page: number; limit: number }> {
     try {
       const page = options?.page || 1;
       const limit = options?.limit || 20;
@@ -146,21 +77,13 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
   /**
    * Find lead lists by creator ID
    */
-  async findByCreatorId(creatorId: string): Promise<LeadList[]> {
+  async findByCreatorId(creatorId: string): Promise<LeadListResponseDto[]> {
     try {
-      const { data, error } = await this.client
-        .from(this.tableName)
-        .select('*')
-        .eq('creator_id', creatorId)
-        .order('created_at', { ascending: false });
+        const data = await this.findByField('creator_id', creatorId);
 
-      if (error) {
-        logger.error('Error finding lead lists by creator', { error, creatorId });
-        throw new DatabaseError('Failed to retrieve lead lists');
-      }
-
-      return data || [];
-    } catch (error) {
+      return data;
+    }
+     catch (error) {
       logger.error('Error in findByCreatorId', { error, creatorId });
       throw error instanceof DatabaseError ? error : new DatabaseError('Failed to retrieve lead lists');
     }
@@ -172,7 +95,10 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
   async updateLeadCount(leadListId: string, count: number): Promise<void> {
     try {
       await this.update(leadListId, {
-        total_leads: count
+        stats: {
+          ...(await this.findById(leadListId)).stats,
+          total_leads: count
+        }
       });
 
       logger.info('Lead count updated', { leadListId, count });
@@ -194,26 +120,10 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
   }> {
     try {
       // Get total leads count
-      const { count: totalLeads, error: totalError } = await this.client
-        .from('leads')
-        .select('*', { count: 'exact', head: true })
-        .eq('lead_list_id', leadListId);
-
-      if (totalError) {
-        logger.error('Error getting total leads count', { error: totalError, leadListId });
-        throw new DatabaseError('Failed to get lead statistics');
-      }
+      const totalLeads = await this.countByField('lead_list_id', leadListId, 'exact', true);
 
       // Get leads by status
-      const { data: statusCounts, error: statusError } = await this.client
-        .from('leads')
-        .select('status')
-        .eq('lead_list_id', leadListId);
-
-      if (statusError) {
-        logger.error('Error getting leads by status', { error: statusError, leadListId });
-        throw new DatabaseError('Failed to get lead statistics');
-      }
+      const statusCounts = await this.findByField('lead_list_id', leadListId);
 
       // Count leads by status
       const statusMap = (statusCounts || []).reduce((acc, lead: any) => {
@@ -278,7 +188,7 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
       source?: string;
       status?: string;
     }
-  ): Promise<{ data: (LeadList & { statistics: any })[]; total: number; page: number; limit: number }> {
+  ): Promise<{ data: (LeadListResponseDto & { statistics: any })[]; total: number; page: number; limit: number }> {
     try {
       const result = await this.findByOrganizationId(organizationId, options);
 
@@ -311,7 +221,7 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
     newName: string,
     organizationId: string,
     creatorId: string
-  ): Promise<LeadList> {
+  ): Promise<LeadListResponseDto> {
     try {
       // Get original lead list
       const original = await this.findById(leadListId);
@@ -321,13 +231,15 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
 
       // Create new lead list
       const newLeadList = await this.create({
-        organization_id: organizationId,
         name: newName,
         description: `Copy of ${original.name}`,
         source: original.source,
+        organization_id: organizationId,
         tags: original.tags,
         filters: original.filters,
         creator_id: creatorId,
+        metadata: original.metadata,
+        stats: original.stats,
       });
 
       logger.info('Lead list duplicated', { originalId: leadListId, newId: newLeadList.id });

@@ -5,9 +5,9 @@ import { z } from 'zod';
  */
 export const CreateUserDto = z.object({
   externalId: z.string().nonempty('External ID is required'),
-  email: z.string().email('Invalid email format'),
+  email: z.string().nonempty('Email is required'),
   fullName: z.string().optional(),
-  avatarUrl: z.string().url().optional(),
+  avatarUrl: z.string().optional(),
 });
 
 export type CreateUserDtoType = z.infer<typeof CreateUserDto>;
@@ -17,7 +17,7 @@ export type CreateUserDtoType = z.infer<typeof CreateUserDto>;
  */
 export const UpdateUserDto = z.object({
   fullName: z.string().optional(),
-  avatarUrl: z.string().url().optional(),
+  avatarUrl: z.string().optional(),
 });
 
 export type UpdateUserDtoType = z.infer<typeof UpdateUserDto>;
@@ -28,9 +28,9 @@ export type UpdateUserDtoType = z.infer<typeof UpdateUserDto>;
 export const UserResponseDto = z.object({
   id: z.string().uuid(),
   external_id: z.string(),
-  email: z.string().email(),
+  email: z.string(),
   full_name: z.string().nullable(),
-  avatar_url: z.string().url().nullable(),
+  avatar_url: z.string().nullable(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
 });
@@ -57,13 +57,13 @@ export const UserProfileResponseDto = z.object({
  * DTO for user insert (matches database Insert type)
  */
 export const UserInsertDto = z.object({
-  id: z.string().uuid(),
+  id: z.string().uuid().optional(),
   external_id: z.string(),
-  email: z.string().email(),
-  full_name: z.string().nullable(),
-  avatar_url: z.string().url().nullable(),
-  created_at: z.string().datetime(),
-  updated_at: z.string().datetime(),
+  email: z.string(),
+  full_name: z.string().nullable().optional(),
+  avatar_url: z.string().nullable().optional(),
+  created_at: z.string().datetime().optional(),
+  updated_at: z.string().datetime().optional(),
 });
 
 /**
@@ -72,9 +72,9 @@ export const UserInsertDto = z.object({
 export const UserUpdateDto = z.object({
   id: z.string().uuid().optional(),
   external_id: z.string().optional(),
-  email: z.string().email().optional(),
+  email: z.string().optional(),
   full_name: z.string().nullable().optional(),
-  avatar_url: z.string().url().nullable().optional(),
+  avatar_url: z.string().nullable().optional(),
   created_at: z.string().datetime().optional(),
   updated_at: z.string().datetime().optional(),
 });

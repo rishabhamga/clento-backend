@@ -1,45 +1,12 @@
 import { BaseRepository } from './BaseRepository';
 import { DatabaseError, NotFoundError } from '../errors/AppError';
 import logger from '../utils/logger';
-
-export interface OrganizationMember {
-  id: string;
-  organization_id: string;
-  user_id: string;
-  role: string;
-  permissions: Record<string, any>;
-  status: string;
-  invited_by: string | null;
-  invited_at: string | null;
-  joined_at: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateOrganizationMember {
-  organization_id: string;
-  user_id: string;
-  role?: string;
-  permissions?: Record<string, any>;
-  status?: string;
-  invited_by?: string | null;
-  invited_at?: string | null;
-  joined_at?: string;
-}
-
-export interface UpdateOrganizationMember {
-  role?: string;
-  permissions?: Record<string, any>;
-  status?: string;
-  invited_by?: string | null;
-  invited_at?: string | null;
-  joined_at?: string;
-}
+import { OrganizationMemberResponseDto, OrganizationMemberInsertDto, OrganizationMemberUpdateDto } from '../dto/organizations.dto';
 
 /**
  * Repository for organization_members table operations
  */
-export class OrganizationMemberRepository extends BaseRepository<OrganizationMember, CreateOrganizationMember, UpdateOrganizationMember> {
+export class OrganizationMemberRepository extends BaseRepository<OrganizationMemberResponseDto, OrganizationMemberInsertDto, OrganizationMemberUpdateDto> {
   constructor() {
     super('organization_members');
   }
@@ -55,7 +22,7 @@ export class OrganizationMemberRepository extends BaseRepository<OrganizationMem
       status?: string;
       role?: string;
     }
-  ): Promise<{ data: OrganizationMember[]; total: number; page: number; limit: number }> {
+  ): Promise<{ data: OrganizationMemberResponseDto[]; total: number; page: number; limit: number }> {
     try {
       const page = options?.page || 1;
       const limit = options?.limit || 20;
@@ -101,7 +68,7 @@ export class OrganizationMemberRepository extends BaseRepository<OrganizationMem
   /**
    * Find members by user ID
    */
-  async findByUserId(userId: string): Promise<OrganizationMember[]> {
+  async findByUserId(userId: string): Promise<OrganizationMemberResponseDto[]> {
     try {
       const { data, error } = await this.client
         .from(this.tableName)
@@ -124,7 +91,7 @@ export class OrganizationMemberRepository extends BaseRepository<OrganizationMem
   /**
    * Find member by organization and user ID
    */
-  async findByOrganizationAndUser(organizationId: string, userId: string): Promise<OrganizationMember | null> {
+  async findByOrganizationAndUser(organizationId: string, userId: string): Promise<OrganizationMemberResponseDto | null> {
     try {
       const members = await this.findByField('organization_id', organizationId);
       return members.find(member => member.user_id === userId) || null;
@@ -205,7 +172,7 @@ export class OrganizationMemberRepository extends BaseRepository<OrganizationMem
   /**
    * Update member role
    */
-  async updateRole(organizationId: string, userId: string, role: string): Promise<OrganizationMember> {
+  async updateRole(organizationId: string, userId: string, role: string): Promise<OrganizationMemberResponseDto> {
     try {
       const member = await this.findByOrganizationAndUser(organizationId, userId);
       if (!member) {
@@ -222,7 +189,7 @@ export class OrganizationMemberRepository extends BaseRepository<OrganizationMem
   /**
    * Update member permissions
    */
-  async updatePermissions(organizationId: string, userId: string, permissions: Record<string, any>): Promise<OrganizationMember> {
+  async updatePermissions(organizationId: string, userId: string, permissions: Record<string, any>): Promise<OrganizationMemberResponseDto> {
     try {
       const member = await this.findByOrganizationAndUser(organizationId, userId);
       if (!member) {

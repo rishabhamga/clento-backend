@@ -1,7 +1,8 @@
 import { BaseRepository } from './BaseRepository';
-import { OrganizationMemberRepository, CreateOrganizationMember, UpdateOrganizationMember, OrganizationMember } from './OrganizationMemberRepository';
+import { OrganizationMemberRepository } from './OrganizationMemberRepository';
 import { DatabaseError, NotFoundError } from '../errors/AppError';
 import logger from '../utils/logger';
+import { OrganizationMemberInsertDto, OrganizationMemberResponseDto, OrganizationMemberUpdateDto } from '../dto/organizations.dto';
 
 // Organization types based on our enhanced schema
 export interface Organization {
@@ -151,7 +152,7 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
   /**
    * Add member to organization
    */
-  async addMember(data: CreateOrganizationMember): Promise<OrganizationMember> {
+  async addMember(data: OrganizationMemberInsertDto): Promise<OrganizationMemberResponseDto> {
     try {
       const memberData = {
         ...data,
@@ -171,7 +172,7 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
   /**
    * Update organization member
    */
-  async updateMember(organizationId: string, userId: string, data: UpdateOrganizationMember): Promise<OrganizationMember> {
+  async updateMember(organizationId: string, userId: string, data: OrganizationMemberUpdateDto): Promise<OrganizationMemberResponseDto> {
     try {
       const member = await this.memberRepository.findByOrganizationAndUser(organizationId, userId);
       if (!member) {
@@ -200,7 +201,7 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
   /**
    * Get member info
    */
-  async getMembership(organizationId: string, userId: string): Promise<OrganizationMember | null> {
+  async getMembership(organizationId: string, userId: string): Promise<OrganizationMemberResponseDto | null> {
     try {
       return await this.memberRepository.findByOrganizationAndUser(organizationId, userId);
     } catch (error) {
