@@ -38,7 +38,7 @@ GCS_BUCKET_NAME=clento-lead-lists
 
 ### CORS
 ```
-CORS_ORIGIN=http://localhost:3000,http://localhost:3004
+CORS_ORIGIN=http://localhost:3000,http://localhost:3001,http://localhost:3004
 ```
 
 ### Logging

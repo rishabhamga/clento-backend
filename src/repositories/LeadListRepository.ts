@@ -9,7 +9,7 @@ export interface LeadList {
   name: string;
   description?: string;
   source: 'csv_import' | 'filter_search' | 'api' | 'manual';
-  status: 'draft' | 'processing' | 'completed' | 'failed' | 'archived';
+  status: 'draft' | 'processing' | 'completed' | 'failed' | 'archived' | 'active';
   total_leads: number;
   processed_leads: number;
   failed_leads: number;
@@ -54,7 +54,7 @@ export interface CreateLeadList {
 export interface UpdateLeadList {
   name?: string;
   description?: string;
-  status?: 'draft' | 'processing' | 'completed' | 'failed' | 'archived';
+  status?: 'draft' | 'processing' | 'completed' | 'failed' | 'archived' | 'active';
   total_leads?: number;
   processed_leads?: number;
   failed_leads?: number;
@@ -171,18 +171,9 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
    */
   async updateLeadCount(leadListId: string, count: number): Promise<void> {
     try {
-      const { error } = await this.client
-        .from(this.tableName)
-        .update({ 
-          total_leads: count,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', leadListId);
-
-      if (error) {
-        logger.error('Error updating lead count', { error, leadListId, count });
-        throw new DatabaseError('Failed to update lead count');
-      }
+      await this.update(leadListId, {
+        total_leads: count
+      });
 
       logger.info('Lead count updated', { leadListId, count });
     } catch (error) {
@@ -225,7 +216,7 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
       }
 
       // Count leads by status
-      const statusMap = (statusCounts || []).reduce((acc, lead) => {
+      const statusMap = (statusCounts || []).reduce((acc, lead: any) => {
         acc[lead.status] = (acc[lead.status] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
@@ -248,18 +239,9 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
    */
   async archive(leadListId: string): Promise<void> {
     try {
-      const { error } = await this.client
-        .from(this.tableName)
-        .update({ 
-          status: 'archived',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', leadListId);
-
-      if (error) {
-        logger.error('Error archiving lead list', { error, leadListId });
-        throw new DatabaseError('Failed to archive lead list');
-      }
+      await this.update(leadListId, {
+        status: 'archived'
+      });
 
       logger.info('Lead list archived', { leadListId });
     } catch (error) {
@@ -273,18 +255,9 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
    */
   async activate(leadListId: string): Promise<void> {
     try {
-      const { error } = await this.client
-        .from(this.tableName)
-        .update({ 
-          status: 'active',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', leadListId);
-
-      if (error) {
-        logger.error('Error activating lead list', { error, leadListId });
-        throw new DatabaseError('Failed to activate lead list');
-      }
+      await this.update(leadListId, {
+        status: 'completed'
+      });
 
       logger.info('Lead list activated', { leadListId });
     } catch (error) {
@@ -308,7 +281,7 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
   ): Promise<{ data: (LeadList & { statistics: any })[]; total: number; page: number; limit: number }> {
     try {
       const result = await this.findByOrganizationId(organizationId, options);
-      
+
       // Get statistics for each lead list
       const dataWithStats = await Promise.all(
         result.data.map(async (leadList) => {
@@ -358,7 +331,7 @@ export class LeadListRepository extends BaseRepository<LeadList, CreateLeadList,
       });
 
       logger.info('Lead list duplicated', { originalId: leadListId, newId: newLeadList.id });
-      
+
       return newLeadList;
     } catch (error) {
       logger.error('Error in duplicate', { error, leadListId, newName });

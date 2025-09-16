@@ -1,4 +1,5 @@
 import { BaseRepository } from './BaseRepository';
+import { OrganizationMemberRepository, CreateOrganizationMember, UpdateOrganizationMember, OrganizationMember } from './OrganizationMemberRepository';
 import { DatabaseError, NotFoundError } from '../errors/AppError';
 import logger from '../utils/logger';
 
@@ -50,36 +51,16 @@ export interface UpdateOrganization {
   settings?: Record<string, any>;
 }
 
-export interface OrganizationMember {
-  id: string;
-  organization_id: string;
-  user_id: string;
-  role: string;
-  permissions: Record<string, any>;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateOrganizationMember {
-  organization_id: string;
-  user_id: string;
-  role?: string;
-  permissions?: Record<string, any>;
-}
-
-export interface UpdateOrganizationMember {
-  role?: string;
-  permissions?: Record<string, any>;
-  status?: string;
-}
 
 /**
  * Repository for organization-related database operations
  */
 export class OrganizationRepository extends BaseRepository<Organization, CreateOrganization, UpdateOrganization> {
+  private memberRepository: OrganizationMemberRepository;
+
   constructor() {
     super('organizations');
+    this.memberRepository = new OrganizationMemberRepository();
   }
 
   /**
@@ -156,48 +137,10 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
    */
   async getMembers(organizationId: string, page = 1, limit = 20): Promise<{ data: any[]; count: number }> {
     try {
-      const offset = (page - 1) * limit;
-
-      // Get total count
-      const { count, error: countError } = await this.client
-        .from('organization_members')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId);
-
-      if (countError) {
-        throw countError;
-      }
-
-      // Get paginated data with user info
-      const { data, error } = await this.client
-        .from('organization_members')
-        .select(`
-          id,
-          role,
-          permissions,
-          status,
-          created_at,
-          updated_at,
-          users (
-            id,
-            external_id,
-            email,
-            full_name,
-            avatar_url,
-            timezone
-          )
-        `)
-        .eq('organization_id', organizationId)
-        .range(offset, offset + limit - 1)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
+      const result = await this.memberRepository.getMembersWithUserInfo(organizationId, { page, limit });
       return {
-        data: data || [],
-        count: count || 0,
+        data: result.data,
+        count: result.total,
       };
     } catch (error) {
       logger.error('Error getting organization members', { error, organizationId });
@@ -210,21 +153,15 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
    */
   async addMember(data: CreateOrganizationMember): Promise<OrganizationMember> {
     try {
-      const { data: result, error } = await this.client
-        .from('organization_members')
-        .insert({
-          ...data,
-          role: data.role || 'member',
-          permissions: data.permissions || {},
-        })
-        .select()
-        .single();
+      const memberData = {
+        ...data,
+        role: data.role || 'member',
+        permissions: data.permissions || {},
+        status: 'active',
+        joined_at: new Date().toISOString(),
+      };
 
-      if (error) {
-        throw error;
-      }
-
-      return result as OrganizationMember;
+      return await this.memberRepository.create(memberData);
     } catch (error) {
       logger.error('Error adding organization member', { error, data });
       throw new DatabaseError('Failed to add organization member');
@@ -236,23 +173,12 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
    */
   async updateMember(organizationId: string, userId: string, data: UpdateOrganizationMember): Promise<OrganizationMember> {
     try {
-      const { data: result, error } = await this.client
-        .from('organization_members')
-        .update(data)
-        .eq('organization_id', organizationId)
-        .eq('user_id', userId)
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      if (!result) {
+      const member = await this.memberRepository.findByOrganizationAndUser(organizationId, userId);
+      if (!member) {
         throw new NotFoundError('Organization member not found');
       }
 
-      return result as OrganizationMember;
+      return await this.memberRepository.update(member.id, data);
     } catch (error) {
       logger.error('Error updating organization member', { error, organizationId, userId, data });
       throw new DatabaseError('Failed to update organization member');
@@ -264,15 +190,7 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
    */
   async removeMember(organizationId: string, userId: string): Promise<void> {
     try {
-      const { error } = await this.client
-        .from('organization_members')
-        .delete()
-        .eq('organization_id', organizationId)
-        .eq('user_id', userId);
-
-      if (error) {
-        throw error;
-      }
+      await this.memberRepository.removeMember(organizationId, userId);
     } catch (error) {
       logger.error('Error removing organization member', { error, organizationId, userId });
       throw new DatabaseError('Failed to remove organization member');
@@ -284,18 +202,7 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
    */
   async getMembership(organizationId: string, userId: string): Promise<OrganizationMember | null> {
     try {
-      const { data, error } = await this.client
-        .from('organization_members')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .eq('user_id', userId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-
-      return data as OrganizationMember | null;
+      return await this.memberRepository.findByOrganizationAndUser(organizationId, userId);
     } catch (error) {
       logger.error('Error getting organization membership', { error, organizationId, userId });
       throw new DatabaseError('Failed to get organization membership');
@@ -323,7 +230,7 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
       // This would typically involve complex queries across multiple tables
       // For now, return basic stats from the organization record
       const organization = await this.findById(organizationId);
-      
+
       // TODO: Implement actual usage calculation from campaigns, leads, etc.
       const stats = {
         campaigns_used: 0,
@@ -378,7 +285,11 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
       const organization = await this.create(orgData);
 
       // Add creator as owner
-      await this.addMember(organization.id, creatorUserId, 'owner');
+      await this.addMember({
+        organization_id: organization.id,
+        user_id: creatorUserId,
+        role: 'owner'
+      });
 
       return organization;
     } catch (error) {

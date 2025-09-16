@@ -1,19 +1,18 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../config/supabase';
 import { NotFoundError } from '../errors/AppError';
-import { Database } from '../types/database';
 
 /**
  * Base repository class for Supabase operations
  * Provides common CRUD operations for a specific table
  */
 export abstract class BaseRepository<T, InsertT, UpdateT> {
-  protected client: SupabaseClient<Database>;
+  protected client: SupabaseClient<any>;
   protected tableName: string;
 
-  constructor(tableName: string, client?: SupabaseClient<Database>) {
+  constructor(tableName: string, client?: SupabaseClient<any>) {
     this.tableName = tableName;
-    this.client = client || supabaseAdmin;
+    this.client = client || supabaseAdmin!;
   }
 
   /**
@@ -78,7 +77,7 @@ export abstract class BaseRepository<T, InsertT, UpdateT> {
    * Create a new record
    */
   async create(data: InsertT): Promise<T> {
-    const { data: result, error } = await this.client
+    const { data: result, error } = await (this.client as any)
       .from(this.tableName)
       .insert(data)
       .select()
@@ -95,7 +94,7 @@ export abstract class BaseRepository<T, InsertT, UpdateT> {
    * Update an existing record
    */
   async update(id: string, data: UpdateT): Promise<T> {
-    const { data: result, error } = await this.client
+    const { data: result, error } = await (this.client as any)
       .from(this.tableName)
       .update(data)
       .eq('id', id)

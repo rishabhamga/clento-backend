@@ -64,7 +64,7 @@ export class StorageService {
       // For development, return mock data
       if (env.NODE_ENV === 'development') {
         const mockUrl = `https://storage.googleapis.com/${this.bucketName}/lead-lists/${organizationId}/${leadListId}/${filename}`;
-        
+
         logger.info('Mock CSV file upload', {
           filename,
           organizationId,
@@ -86,7 +86,7 @@ export class StorageService {
 
       // Generate file path
       const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
-      
+
       // Get bucket
       const bucket = this.storage.bucket(this.bucketName);
       const file = bucket.file(filePath);
@@ -131,7 +131,7 @@ export class StorageService {
         organizationId,
         leadListId,
       });
-      
+
       throw new ExternalAPIError('Failed to upload CSV file');
     }
   }
@@ -161,7 +161,7 @@ export class StorageService {
 
       // Generate file path
       const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
-      
+
       // Get bucket and file
       const bucket = this.storage.bucket(this.bucketName);
       const file = bucket.file(filePath);
@@ -182,7 +182,7 @@ export class StorageService {
         organizationId,
         leadListId,
       });
-      
+
       // Don't throw error for file deletion failures
       // Just log the error as the file might already be deleted
     }
@@ -201,7 +201,7 @@ export class StorageService {
       // For development, return mock URL
       if (env.NODE_ENV === 'development') {
         const mockUrl = `https://storage.googleapis.com/${this.bucketName}/lead-lists/${organizationId}/${leadListId}/${filename}`;
-        
+
         logger.info('Mock signed URL generated', {
           filename,
           organizationId,
@@ -217,7 +217,7 @@ export class StorageService {
 
       // Generate file path
       const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
-      
+
       // Get bucket and file
       const bucket = this.storage.bucket(this.bucketName);
       const file = bucket.file(filePath);
@@ -244,7 +244,7 @@ export class StorageService {
         organizationId,
         leadListId,
       });
-      
+
       throw new ExternalAPIError('Failed to generate file URL');
     }
   }
@@ -269,14 +269,14 @@ export class StorageService {
 
       // Generate file path
       const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
-      
+
       // Get bucket and file
       const bucket = this.storage.bucket(this.bucketName);
       const file = bucket.file(filePath);
 
       // Check if file exists
       const [exists] = await file.exists();
-      
+
       return exists;
     } catch (error) {
       logger.error('Error checking file existence', {
@@ -285,7 +285,7 @@ export class StorageService {
         organizationId,
         leadListId,
       });
-      
+
       return false;
     }
   }
@@ -320,16 +320,16 @@ export class StorageService {
 
       // Generate file path
       const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
-      
+
       // Get bucket and file
       const bucket = this.storage.bucket(this.bucketName);
       const file = bucket.file(filePath);
 
       // Get metadata
       const [metadata] = await file.getMetadata();
-      
+
       return {
-        size: parseInt(metadata.size || '0'),
+        size: parseInt(metadata.size as string || '0'),
         contentType: metadata.contentType || 'text/csv',
         created: metadata.timeCreated || new Date().toISOString(),
         updated: metadata.updated || new Date().toISOString(),
@@ -341,7 +341,7 @@ export class StorageService {
         organizationId,
         leadListId,
       });
-      
+
       return null;
     }
   }

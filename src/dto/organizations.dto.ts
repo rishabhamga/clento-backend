@@ -59,6 +59,129 @@ export const OrganizationUsageDto = z.object({
   year: z.coerce.number().min(2020).max(2030).optional(),
 });
 
+/**
+ * DTO for organization response (matches database Row type)
+ */
+export const OrganizationResponseDto = z.object({
+  id: z.string().uuid(),
+  clerk_org_id: z.string(),
+  name: z.string(),
+  slug: z.string().nullable(),
+  logo_url: z.string().url().nullable(),
+  website_url: z.string().url().nullable(),
+  industry: z.string().nullable(),
+  company_size: z.string().nullable(),
+  plan: z.string(),
+  billing_email: z.string().email().nullable(),
+  subscription_status: z.string(),
+  monthly_campaign_limit: z.number().int().min(0),
+  monthly_lead_limit: z.number().int().min(0),
+  user_limit: z.number().int().min(0),
+  settings: z.record(z.any()),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+  permissible_seats: z.number().int().min(0),
+});
+
+/**
+ * DTO for organization insert (matches database Insert type)
+ */
+export const OrganizationInsertDto = z.object({
+  id: z.string().uuid().optional(),
+  clerk_org_id: z.string(),
+  name: z.string(),
+  slug: z.string().nullable().optional(),
+  logo_url: z.string().url().nullable().optional(),
+  website_url: z.string().url().nullable().optional(),
+  industry: z.string().nullable().optional(),
+  company_size: z.string().nullable().optional(),
+  plan: z.string().optional(),
+  billing_email: z.string().email().nullable().optional(),
+  subscription_status: z.string().optional(),
+  monthly_campaign_limit: z.number().int().min(0).optional(),
+  monthly_lead_limit: z.number().int().min(0).optional(),
+  user_limit: z.number().int().min(0).optional(),
+  settings: z.record(z.any()).optional(),
+  created_at: z.string().datetime().optional(),
+  updated_at: z.string().datetime().optional(),
+  permissible_seats: z.number().int().min(0).optional(),
+});
+
+/**
+ * DTO for organization update (matches database Update type)
+ */
+export const OrganizationUpdateDto = z.object({
+  id: z.string().uuid().optional(),
+  clerk_org_id: z.string().optional(),
+  name: z.string().optional(),
+  slug: z.string().nullable().optional(),
+  logo_url: z.string().url().nullable().optional(),
+  website_url: z.string().url().nullable().optional(),
+  industry: z.string().nullable().optional(),
+  company_size: z.string().nullable().optional(),
+  plan: z.string().optional(),
+  billing_email: z.string().email().nullable().optional(),
+  subscription_status: z.string().optional(),
+  monthly_campaign_limit: z.number().int().min(0).optional(),
+  monthly_lead_limit: z.number().int().min(0).optional(),
+  user_limit: z.number().int().min(0).optional(),
+  settings: z.record(z.any()).optional(),
+  created_at: z.string().datetime().optional(),
+  updated_at: z.string().datetime().optional(),
+  permissible_seats: z.number().int().min(0).optional(),
+});
+
+/**
+ * DTO for organization member response (matches database Row type)
+ */
+export const OrganizationMemberResponseDto = z.object({
+  id: z.string().uuid(),
+  organization_id: z.string().uuid(),
+  user_id: z.string().uuid(),
+  role: z.string(),
+  permissions: z.record(z.any()),
+  status: z.string(),
+  invited_by: z.string().uuid().nullable(),
+  invited_at: z.string().datetime().nullable(),
+  joined_at: z.string().datetime(),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+});
+
+/**
+ * DTO for organization member insert (matches database Insert type)
+ */
+export const OrganizationMemberInsertDto = z.object({
+  id: z.string().uuid().optional(),
+  organization_id: z.string().uuid(),
+  user_id: z.string().uuid(),
+  role: z.string().optional(),
+  permissions: z.record(z.any()).optional(),
+  status: z.string().optional(),
+  invited_by: z.string().uuid().nullable().optional(),
+  invited_at: z.string().datetime().nullable().optional(),
+  joined_at: z.string().datetime().optional(),
+  created_at: z.string().datetime().optional(),
+  updated_at: z.string().datetime().optional(),
+});
+
+/**
+ * DTO for organization member update (matches database Update type)
+ */
+export const OrganizationMemberUpdateDto = z.object({
+  id: z.string().uuid().optional(),
+  organization_id: z.string().uuid().optional(),
+  user_id: z.string().uuid().optional(),
+  role: z.string().optional(),
+  permissions: z.record(z.any()).optional(),
+  status: z.string().optional(),
+  invited_by: z.string().uuid().nullable().optional(),
+  invited_at: z.string().datetime().nullable().optional(),
+  joined_at: z.string().datetime().optional(),
+  created_at: z.string().datetime().optional(),
+  updated_at: z.string().datetime().optional(),
+});
+
 // Type exports
 export type CreateOrganizationDto = z.infer<typeof CreateOrganizationDto>;
 export type UpdateOrganizationDto = z.infer<typeof UpdateOrganizationDto>;
@@ -67,3 +190,9 @@ export type AddOrganizationMemberDto = z.infer<typeof AddOrganizationMemberDto>;
 export type UpdateOrganizationMemberDto = z.infer<typeof UpdateOrganizationMemberDto>;
 export type OrganizationMemberQueryDto = z.infer<typeof OrganizationMemberQueryDto>;
 export type OrganizationUsageDto = z.infer<typeof OrganizationUsageDto>;
+export type OrganizationResponseDto = z.infer<typeof OrganizationResponseDto>;
+export type OrganizationInsertDto = z.infer<typeof OrganizationInsertDto>;
+export type OrganizationUpdateDto = z.infer<typeof OrganizationUpdateDto>;
+export type OrganizationMemberResponseDto = z.infer<typeof OrganizationMemberResponseDto>;
+export type OrganizationMemberInsertDto = z.infer<typeof OrganizationMemberInsertDto>;
+export type OrganizationMemberUpdateDto = z.infer<typeof OrganizationMemberUpdateDto>;

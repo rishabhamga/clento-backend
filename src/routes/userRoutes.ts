@@ -11,7 +11,6 @@ const userController = new UserController();
  *   name: Users
  *   description: User management endpoints
  */
-
 /**
  * @swagger
  * /api/users/me:

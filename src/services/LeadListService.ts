@@ -3,15 +3,14 @@ import { LeadRepository, CreateLead, Lead } from '../repositories/LeadRepository
 import { ConnectedAccountRepository } from '../repositories/ConnectedAccountRepository';
 import { CsvService, CsvParseResult, CsvValidationResult } from './CsvService';
 import { StorageService, UploadResult } from './StorageService';
-import { 
-  CreateLeadListDto, 
-  UpdateLeadListDto, 
+import {
+  CreateLeadListDto,
+  UpdateLeadListDto,
   LeadListQueryDto,
   UploadCsvDto,
   PreviewCsvDto,
   PublishLeadListDto
 } from '../dto/leads.dto';
-import { PaginatedResponse } from '../dto/common.dto';
 import { NotFoundError, ValidationError, BadRequestError } from '../errors/AppError';
 import logger from '../utils/logger';
 
@@ -51,9 +50,9 @@ export class LeadListService {
       };
 
       const leadList = await this.leadListRepository.create(leadListData);
-      
+
       logger.info('Lead list created', { leadListId: leadList.id, organizationId });
-      
+
       return leadList;
     } catch (error) {
       logger.error('Error creating lead list', { error, data, organizationId });
@@ -67,7 +66,7 @@ export class LeadListService {
   async getLeadListById(leadListId: string, organizationId: string): Promise<LeadList> {
     try {
       const leadList = await this.leadListRepository.findById(leadListId);
-      
+
       if (!leadList) {
         throw new NotFoundError('Lead list not found');
       }
@@ -89,10 +88,10 @@ export class LeadListService {
   async getLeadLists(
     organizationId: string,
     query: LeadListQueryDto
-  ): Promise<PaginatedResponse<LeadList>> {
+  ): Promise<{ data: LeadList[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
     try {
       const tags = query.tags ? query.tags.split(',').map(t => t.trim()) : undefined;
-      
+
       const result = await this.leadListRepository.findByOrganizationId(organizationId, {
         page: query.page,
         limit: query.limit,
@@ -122,7 +121,7 @@ export class LeadListService {
   async getLeadListsWithStats(
     organizationId: string,
     query: LeadListQueryDto
-  ): Promise<PaginatedResponse<LeadList & { statistics: any }>> {
+  ): Promise<{ data: (LeadList & { statistics: any })[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
     try {
       const result = await this.leadListRepository.findWithStatistics(organizationId, {
         page: query.page,
@@ -160,17 +159,16 @@ export class LeadListService {
 
       const updateData: UpdateLeadList = {
         ...data,
-        updated_at: new Date().toISOString(),
       };
 
       const updatedLeadList = await this.leadListRepository.update(leadListId, updateData);
-      
+
       if (!updatedLeadList) {
         throw new NotFoundError('Lead list not found');
       }
 
       logger.info('Lead list updated', { leadListId, organizationId });
-      
+
       return updatedLeadList;
     } catch (error) {
       logger.error('Error updating lead list', { error, leadListId, data, organizationId });
@@ -187,7 +185,7 @@ export class LeadListService {
       const leadList = await this.getLeadListById(leadListId, organizationId);
 
       // Delete associated file if exists
-      if (leadList.file_url) {
+      if (leadList.csv_file_url) {
         try {
           await this.storageService.deleteCsvFile(
             organizationId,
@@ -201,7 +199,7 @@ export class LeadListService {
 
       // Delete lead list (this will cascade delete leads)
       await this.leadListRepository.delete(leadListId);
-      
+
       logger.info('Lead list deleted', { leadListId, organizationId });
     } catch (error) {
       logger.error('Error deleting lead list', { error, leadListId, organizationId });
@@ -220,13 +218,13 @@ export class LeadListService {
     try {
       // Parse CSV data
       const parseResult = CsvService.parseCsvData(data.csv_data);
-      
+
       // Validate CSV structure
       const validation = CsvService.validateCsv(parseResult);
-      
+
       // Generate field mapping
       const mapping = data.mapping || CsvService.generateMapping(parseResult.headers);
-      
+
       // Get preview data
       const preview = CsvService.getPreview(parseResult, 5);
 
@@ -267,14 +265,14 @@ export class LeadListService {
   }> {
     try {
       // Verify connected account exists
-      logger.info('Looking for connected account', { 
-        accountId: data.connected_account_id, 
-        organizationId 
+      logger.info('Looking for connected account', {
+        accountId: data.connected_account_id,
+        organizationId
       });
-      
+
       const connectedAccount = await this.connectedAccountRepository.findById(data.connected_account_id);
-      
-      logger.info('Found connected account', { 
+
+      logger.info('Found connected account', {
         account: connectedAccount ? {
           id: connectedAccount.id,
           organization_id: connectedAccount.organization_id,
@@ -282,7 +280,7 @@ export class LeadListService {
           provider: connectedAccount.provider
         } : null
       });
-      
+
       if (!connectedAccount || connectedAccount.organization_id !== organizationId) {
         throw new BadRequestError('Connected account not found');
       }
@@ -292,7 +290,7 @@ export class LeadListService {
       const validation = CsvService.validateCsv(parseResult);
 
       if (!validation.isValid) {
-        throw new ValidationError('CSV validation failed', validation.errors);
+        throw new ValidationError('CSV validation failed', validation.errors as any);
       }
 
       // Create lead list
@@ -301,7 +299,6 @@ export class LeadListService {
           name: data.name,
           description: data.description,
           source: 'csv_import',
-          status: 'processing',
           tags: [],
           filters: {},
           metadata: {
@@ -309,7 +306,6 @@ export class LeadListService {
             mapping: data.mapping,
             original_csv_size: data.csv_data.length,
           },
-          stats: {},
         },
         organizationId,
         creatorId
@@ -318,7 +314,7 @@ export class LeadListService {
       // Upload CSV file to storage
       const csvBuffer = Buffer.from(data.csv_data, 'utf8');
       const filename = `${leadList.name.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.csv`;
-      
+
       let uploadResult: UploadResult | null = null;
       try {
         uploadResult = await this.storageService.uploadCsvFile(
@@ -407,7 +403,7 @@ export class LeadListService {
     // Process each row
     for (let i = 0; i < mappedData.length; i++) {
       const row = mappedData[i];
-      
+
       try {
         // Validate required fields
         if (!row.linkedin_url && !row.email) {
@@ -495,7 +491,7 @@ export class LeadListService {
       await this.getLeadListById(leadListId, organizationId);
 
       await this.leadListRepository.archive(leadListId);
-      
+
       logger.info('Lead list archived', { leadListId, organizationId });
     } catch (error) {
       logger.error('Error archiving lead list', { error, leadListId, organizationId });
@@ -512,7 +508,7 @@ export class LeadListService {
       await this.getLeadListById(leadListId, organizationId);
 
       await this.leadListRepository.activate(leadListId);
-      
+
       logger.info('Lead list activated', { leadListId, organizationId });
     } catch (error) {
       logger.error('Error activating lead list', { error, leadListId, organizationId });
@@ -539,13 +535,13 @@ export class LeadListService {
         organizationId,
         creatorId
       );
-      
-      logger.info('Lead list duplicated', { 
-        originalId: leadListId, 
-        newId: duplicatedLeadList.id, 
-        organizationId 
+
+      logger.info('Lead list duplicated', {
+        originalId: leadListId,
+        newId: duplicatedLeadList.id,
+        organizationId
       });
-      
+
       return duplicatedLeadList;
     } catch (error) {
       logger.error('Error duplicating lead list', { error, leadListId, newName, organizationId });
@@ -562,7 +558,7 @@ export class LeadListService {
       await this.getLeadListById(leadListId, organizationId);
 
       const statistics = await this.leadListRepository.getStatistics(leadListId);
-      
+
       return statistics;
     } catch (error) {
       logger.error('Error getting lead list statistics', { error, leadListId, organizationId });

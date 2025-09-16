@@ -1,6 +1,5 @@
 import { UserRepository } from '../repositories/UserRepository';
-import { CreateUserDtoType, UpdateUserDtoType } from '../dto/users.dto';
-import { ConflictError } from '../errors/AppError';
+import { CreateUserDtoType, UpdateUserDtoType, UserInsertDto, UserUpdateDto } from '../dto/users.dto';
 
 /**
  * Service for user-related operations
@@ -25,23 +24,23 @@ export class UserService {
   async syncUser(userData: CreateUserDtoType) {
     // Check if user already exists
     const existingUser = await this.userRepository.findByClerkId(userData.externalId);
-    
+
     if (existingUser) {
       // Update existing user if needed
       return this.userRepository.update(existingUser.id, {
-        fullName: userData.fullName,
-        avatarUrl: userData.avatarUrl,
+        full_name: userData.fullName || null,
+        avatar_url: userData.avatarUrl || null,
       });
     }
-    
+
     // Create new user
-    return this.userRepository.create(userData);
+    return this.userRepository.create(userData as unknown as UserInsertDto);
   }
 
   /**
    * Update user profile
    */
   async updateUser(id: string, userData: UpdateUserDtoType) {
-    return this.userRepository.update(id, userData);
+    return this.userRepository.update(id, userData as unknown as UserUpdateDto);
   }
 }

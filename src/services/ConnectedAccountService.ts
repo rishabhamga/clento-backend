@@ -56,9 +56,9 @@ export class ConnectedAccountService {
           created_at: new Date().toISOString(),
         },
       };
-      
+
       logger.info('Account data to create', { accountData });
-      
+
       const pendingAccount = await this.connectedAccountRepository.create(accountData);
       logger.info('Pending account created', { pendingAccount });
 
@@ -73,7 +73,7 @@ export class ConnectedAccountService {
         notifyUrl: params.notifyUrl,
         name: pendingAccount.id, // Use our account ID for matching
       };
-      
+
       logger.info('Unipile params', { unipileParams });
       const authLink = await this.unipileService.createHostedAuthLink(unipileParams);
       logger.info('Unipile auth link created', { authLink });
@@ -100,13 +100,13 @@ export class ConnectedAccountService {
         pendingAccountId: pendingAccount.id,
       };
     } catch (error) {
-      logger.error('=== ConnectedAccountService: createHostedAuthLink ERROR ===', { 
+      logger.error('=== ConnectedAccountService: createHostedAuthLink ERROR ===', {
         error: error instanceof Error ? {
           name: error.name,
           message: error.message,
           stack: error.stack
         } : error,
-        params 
+        params
       });
       throw error;
     }
@@ -127,17 +127,17 @@ export class ConnectedAccountService {
       // Get additional profile data from Unipile
       let profileData = null;
       try {
-        logger.info('=== ATTEMPTING PROFILE FETCH ===', { 
+        logger.info('=== ATTEMPTING PROFILE FETCH ===', {
           unipileAccountId: params.unipileAccountId,
           attempt: 'immediate'
         });
         profileData = await this.unipileService.getOwnProfile(params.unipileAccountId);
-        logger.info('=== PROFILE FETCH SUCCESS ===', { 
+        logger.info('=== PROFILE FETCH SUCCESS ===', {
           unipileAccountId: params.unipileAccountId,
           profileData: profileData
         });
-      } catch (error) {
-        logger.error('=== PROFILE FETCH FAILED ===', { 
+      } catch (error: any) {
+        logger.error('=== PROFILE FETCH FAILED ===', {
           unipileAccountId: params.unipileAccountId,
           error: error,
           errorBody: error?.body,
@@ -146,11 +146,11 @@ export class ConnectedAccountService {
 
         // Handle specific Unipile errors
         if (error?.body?.type === 'errors/disconnected_account') {
-          logger.warn('Account appears disconnected immediately after connection - will retry profile fetch later', { 
+          logger.warn('Account appears disconnected immediately after connection - will retry profile fetch later', {
             unipileAccountId: params.unipileAccountId,
-            errorType: error.body.type 
+            errorType: error.body.type
           });
-          
+
           // Schedule multiple retries with increasing delays
           this.scheduleProfileRetries(params.unipileAccountId, params.pendingAccountId, params.accountData, pendingAccount);
         } else {
@@ -219,12 +219,12 @@ export class ConnectedAccountService {
   async getUserAccounts(userId: string, organizationId?: string, provider?: string): Promise<ConnectedAccount[]> {
     try {
       const accounts = await this.connectedAccountRepository.getUserAccounts(userId, organizationId);
-      
+
       // Filter by provider if specified
       if (provider) {
         return accounts.filter(account => account.provider === provider);
       }
-      
+
       return accounts;
     } catch (error) {
       logger.error('Error getting user accounts', { error, userId, organizationId, provider });
@@ -238,12 +238,12 @@ export class ConnectedAccountService {
   async getPendingAccounts(userId: string, organizationId?: string, provider?: string): Promise<ConnectedAccount[]> {
     try {
       const accounts = await this.connectedAccountRepository.getPendingAccounts(userId, organizationId);
-      
+
       // Filter by provider if specified
       if (provider) {
         return accounts.filter(account => account.provider === provider);
       }
-      
+
       return accounts;
     } catch (error) {
       logger.error('Error getting pending accounts', { error, userId, organizationId, provider });
@@ -354,7 +354,7 @@ export class ConnectedAccountService {
 
       // Get latest data from Unipile
       const unipileAccount = await this.unipileService.getAccount(account.provider_account_id);
-      
+
       // Get profile data
       let profileData = null;
       try {
@@ -388,16 +388,16 @@ export class ConnectedAccountService {
       logger.info('Account synced', { accountId: id, userId, provider: account.provider });
 
       return updatedAccount;
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Error syncing account', { error, id, userId });
-      
+
       // Update account with error status
       try {
         await this.connectedAccountRepository.updateSyncStatus(id, 'error', error.message);
       } catch (updateError) {
         logger.error('Error updating sync status', { updateError, id });
       }
-      
+
       throw error;
     }
   }
@@ -418,7 +418,7 @@ export class ConnectedAccountService {
       const usage = {
         daily_usage: account.daily_usage,
         daily_limit: account.daily_limit,
-        usage_percentage: (account.daily_usage / account.daily_limit) * 100,
+        usage_percentage: ((account.daily_usage || 0) / (account.daily_limit || 1)) * 100,
         reset_time: account.usage_reset_at,
         last_activity: account.last_synced_at,
       };
@@ -458,7 +458,7 @@ export class ConnectedAccountService {
       profileData?.display_name,
       profileData?.name,
       // Construct from first/last name if available
-      profileData?.first_name && profileData?.last_name ? 
+      profileData?.first_name && profileData?.last_name ?
         `${profileData.first_name} ${profileData.last_name}` : null,
       profileData?.first_name,
       profileData?.last_name,
@@ -495,31 +495,31 @@ export class ConnectedAccountService {
    * Schedule multiple profile fetch retries with increasing delays
    */
   private scheduleProfileRetries(
-    unipileAccountId: string, 
-    pendingAccountId: string, 
-    accountData: any, 
+    unipileAccountId: string,
+    pendingAccountId: string,
+    accountData: any,
     pendingAccount: any
   ): void {
     const retryDelays = [10000, 30000, 60000]; // 10s, 30s, 60s
-    
+
     retryDelays.forEach((delay, index) => {
       setTimeout(async () => {
         try {
-          logger.info('=== PROFILE RETRY ATTEMPT ===', { 
+          logger.info('=== PROFILE RETRY ATTEMPT ===', {
             unipileAccountId,
             attempt: index + 1,
             delay: delay / 1000 + 's'
           });
-          
+
           const retryProfileData = await this.unipileService.getOwnProfile(unipileAccountId);
-          
+
           if (retryProfileData) {
-            logger.info('=== PROFILE RETRY SUCCESS ===', { 
+            logger.info('=== PROFILE RETRY SUCCESS ===', {
               unipileAccountId,
               attempt: index + 1,
               profileData: retryProfileData
             });
-            
+
             // Update account with profile data
             await this.connectedAccountRepository.update(pendingAccountId, {
               display_name: this.extractDisplayName(accountData, retryProfileData),
@@ -532,23 +532,23 @@ export class ConnectedAccountService {
                 profile_retry_attempt: index + 1,
               },
             });
-            
-            logger.info('=== ACCOUNT UPDATED WITH PROFILE DATA ===', { 
+
+            logger.info('=== ACCOUNT UPDATED WITH PROFILE DATA ===', {
               unipileAccountId,
               pendingAccountId,
               attempt: index + 1
             });
           }
-        } catch (retryError) {
-          logger.warn('=== PROFILE RETRY FAILED ===', { 
+        } catch (retryError: any) {
+          logger.warn('=== PROFILE RETRY FAILED ===', {
             unipileAccountId,
             attempt: index + 1,
             retryError: retryError?.body || retryError?.message || retryError
           });
-          
+
           // If this is the last retry, log final failure
           if (index === retryDelays.length - 1) {
-            logger.warn('=== ALL PROFILE RETRIES EXHAUSTED ===', { 
+            logger.warn('=== ALL PROFILE RETRIES EXHAUSTED ===', {
               unipileAccountId,
               totalAttempts: retryDelays.length + 1,
               message: 'Account will work without profile data'
@@ -571,7 +571,7 @@ export class ConnectedAccountService {
         throw new ForbiddenError('Access denied to this account');
       }
 
-      logger.info('=== MANUAL PROFILE SYNC START ===', { 
+      logger.info('=== MANUAL PROFILE SYNC START ===', {
         accountId,
         userId,
         unipileAccountId: account.provider_account_id
@@ -581,16 +581,16 @@ export class ConnectedAccountService {
       let profileData = null;
       try {
         profileData = await this.unipileService.getOwnProfile(account.provider_account_id);
-        logger.info('=== MANUAL PROFILE SYNC SUCCESS ===', { 
+        logger.info('=== MANUAL PROFILE SYNC SUCCESS ===', {
           accountId,
           profileData
         });
-      } catch (error) {
-        logger.error('=== MANUAL PROFILE SYNC FAILED ===', { 
+      } catch (error: any){
+        logger.error('=== MANUAL PROFILE SYNC FAILED ===', {
           accountId,
           error: error?.body || error?.message || error
         });
-        throw new ExternalAPIError('Failed to fetch profile data from Unipile');
+        throw new BadRequestError('Failed to fetch profile data from Unipile');
       }
 
       // Update account with fresh profile data
@@ -606,7 +606,7 @@ export class ConnectedAccountService {
         },
       });
 
-      logger.info('=== MANUAL PROFILE SYNC COMPLETE ===', { 
+      logger.info('=== MANUAL PROFILE SYNC COMPLETE ===', {
         accountId,
         newDisplayName: updatedAccount.display_name,
         newEmail: updatedAccount.email
@@ -664,4 +664,3 @@ export class ConnectedAccountService {
   }
 
 }
-

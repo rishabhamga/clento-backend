@@ -112,7 +112,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
       const limit = options?.limit || 20;
       const offset = (page - 1) * limit;
 
-      let query = this.supabase
+      let query = this.client
         .from(this.tableName)
         .select('*', { count: 'exact' })
         .eq('lead_list_id', leadListId)
@@ -180,7 +180,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
       const limit = options?.limit || 20;
       const offset = (page - 1) * limit;
 
-      let query = this.supabase
+      let query = this.client
         .from(this.tableName)
         .select('*', { count: 'exact' })
         .eq('organization_id', organizationId)
@@ -270,7 +270,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
    */
   async findByLinkedInUrl(linkedinUrl: string): Promise<Lead | null> {
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await this.client
         .from(this.tableName)
         .select('*')
         .eq('linkedin_url', linkedinUrl)
@@ -288,7 +288,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
       if (error instanceof Error && error.message.includes('PGRST116')) {
         return null;
       }
-      
+
       logger.error('Error in findByLinkedInUrl', { error, linkedinUrl });
       throw error instanceof DatabaseError ? error : new DatabaseError('Failed to find lead');
     }
@@ -299,7 +299,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
    */
   async findByEmail(email: string): Promise<Lead | null> {
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await this.client
         .from(this.tableName)
         .select('*')
         .eq('email', email)
@@ -317,7 +317,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
       if (error instanceof Error && error.message.includes('PGRST116')) {
         return null;
       }
-      
+
       logger.error('Error in findByEmail', { error, email });
       throw error instanceof DatabaseError ? error : new DatabaseError('Failed to find lead');
     }
@@ -328,9 +328,9 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
    */
   async bulkCreate(leads: CreateLead[]): Promise<Lead[]> {
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await this.client
         .from(this.tableName)
-        .insert(leads)
+        .insert(leads as any)
         .select();
 
       if (error) {
@@ -351,20 +351,10 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
    */
   async bulkUpdate(leadIds: string[], updates: UpdateLead): Promise<void> {
     try {
-      const { error } = await this.supabase
-        .from(this.tableName)
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString(),
-        })
-        .in('id', leadIds);
-
-      if (error) {
-        logger.error('Error bulk updating leads', { error, leadIds, updates });
-        throw new DatabaseError('Failed to update leads');
-      }
-
-      logger.info('Leads bulk updated', { count: leadIds.length });
+        await this.bulkUpdate(leadIds, {
+            ...updates,
+            updated_at: new Date().toISOString(),
+        });
     } catch (error) {
       logger.error('Error in bulkUpdate', { error, leadIds, updates });
       throw error instanceof DatabaseError ? error : new DatabaseError('Failed to update leads');
@@ -376,20 +366,10 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
    */
   async updateStatus(leadId: string, status: Lead['status']): Promise<void> {
     try {
-      const { error } = await this.supabase
-        .from(this.tableName)
-        .update({
-          status,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', leadId);
-
-      if (error) {
-        logger.error('Error updating lead status', { error, leadId, status });
-        throw new DatabaseError('Failed to update lead status');
-      }
-
-      logger.info('Lead status updated', { leadId, status });
+      this.update(leadId, {
+        status: status as any,
+        updated_at: new Date().toISOString(),
+      });
     } catch (error) {
       logger.error('Error in updateStatus', { error, leadId, status });
       throw error instanceof DatabaseError ? error : new DatabaseError('Failed to update lead status');
@@ -411,18 +391,10 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
       const currentTags = lead.tags || [];
       const newTags = [...new Set([...currentTags, ...tags])];
 
-      const { error } = await this.supabase
-        .from(this.tableName)
-        .update({
-          tags: newTags,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', leadId);
-
-      if (error) {
-        logger.error('Error adding tags to lead', { error, leadId, tags });
-        throw new DatabaseError('Failed to add tags to lead');
-      }
+      await this.update(leadId, {
+        tags: newTags as any,
+        updated_at: new Date().toISOString(),
+      });
 
       logger.info('Tags added to lead', { leadId, tags });
     } catch (error) {
@@ -446,18 +418,10 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
       const currentTags = lead.tags || [];
       const newTags = currentTags.filter(tag => !tags.includes(tag));
 
-      const { error } = await this.supabase
-        .from(this.tableName)
-        .update({
-          tags: newTags,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', leadId);
-
-      if (error) {
-        logger.error('Error removing tags from lead', { error, leadId, tags });
-        throw new DatabaseError('Failed to remove tags from lead');
-      }
+      await this.update(leadId, {
+        tags: newTags as any,
+        updated_at: new Date().toISOString(),
+      });
 
       logger.info('Tags removed from lead', { leadId, tags });
     } catch (error) {
@@ -480,7 +444,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
   }> {
     try {
       // Get total leads count
-      const { count: totalLeads, error: totalError } = await this.supabase
+      const { count: totalLeads, error: totalError } = await this.client
         .from(this.tableName)
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', organizationId);
@@ -491,7 +455,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
       }
 
       // Get leads by status
-      const { data: statusCounts, error: statusError } = await this.supabase
+      const { data: statusCounts, error: statusError } = await this.client
         .from(this.tableName)
         .select('status')
         .eq('organization_id', organizationId);
@@ -502,7 +466,7 @@ export class LeadRepository extends BaseRepository<Lead, CreateLead, UpdateLead>
       }
 
       // Count leads by status
-      const statusMap = (statusCounts || []).reduce((acc, lead) => {
+      const statusMap = (statusCounts || []).reduce((acc, lead: any) => {
         acc[lead.status] = (acc[lead.status] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);

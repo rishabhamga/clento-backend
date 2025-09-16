@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ClerkExpressRequireAuth, VerifyToken } from '@clerk/clerk-sdk-node';
+import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node';
 import { UnauthorizedError, ForbiddenError } from '../errors/AppError';
 import { UserRepository } from '../repositories/UserRepository';
 import { OrganizationRepository } from '../repositories/OrganizationRepository';
@@ -10,6 +10,11 @@ import env from '../config/env';
 declare global {
   namespace Express {
     interface Request {
+      auth?: {
+        userId?: string;
+        orgId?: string;
+        getToken?: (options?: { template?: string }) => Promise<string>;
+      };
       userId?: string;
       externalId?: string; // Clerk ID
       organizationId?: string;
@@ -42,15 +47,15 @@ declare global {
  */
 export const requireAuth = env.CLERK_SECRET_KEY
   ? ClerkExpressRequireAuth({
-      onError: (err, req, res, next) => {
-        logger.error('Authentication error', { error: err });
-        next(new UnauthorizedError('Authentication required'));
+      onError: (error: any) => {
+        logger.error('Authentication error', { error });
+        throw new UnauthorizedError('Authentication required');
       },
     })
   : (req: Request, res: Response, next: NextFunction) => {
       logger.warn('Clerk authentication skipped - no secret key provided');
       // Mock auth for development
-      (req as any).auth = {
+      req.auth = {
         userId: 'dev-user-id',
         orgId: 'dev-org-id',
         getToken: () => Promise.resolve('dev-token'),
@@ -77,7 +82,6 @@ export const loadUser = async (req: Request, res: Response, next: NextFunction) 
         external_id: 'dev-user-id',
         email: 'dev@example.com',
         full_name: 'Development User',
-        timezone: 'UTC',
       };
       req.organizationId = '550e8400-e29b-41d4-a716-446655440001';
       req.organization = {
@@ -100,7 +104,7 @@ export const loadUser = async (req: Request, res: Response, next: NextFunction) 
     const userRepository = new UserRepository();
 
     // Find user in database
-    const user = await userRepository.findByExternalId(clerkUserId);
+    const user = await userRepository.findByClerkId(clerkUserId);
 
     if (!user) {
       logger.warn('User not found in database', { clerkUserId });
@@ -116,7 +120,6 @@ export const loadUser = async (req: Request, res: Response, next: NextFunction) 
       email: user.email,
       full_name: user.full_name || undefined,
       avatar_url: user.avatar_url || undefined,
-      timezone: user.timezone || 'UTC',
     };
 
     next();
@@ -137,26 +140,26 @@ export const loadOrganization = async (req: Request, res: Response, next: NextFu
 
     // Get organization ID from header or query param
     const orgId = req.headers['x-organization-id'] as string || req.query.organization_id as string;
-    
+
     if (!orgId) {
       // Try to get user's default organization
-      const userRepository = new UserRepository();
-      const userOrgs = await userRepository.getUserOrganizations(req.userId);
-      
+      const organizationRepository = new OrganizationRepository();
+      const userOrgs = await organizationRepository.getUserOrganizations(req.userId);
+
       if (userOrgs.length > 0) {
         // Use the first organization as default
         const defaultOrg = userOrgs[0];
-        req.organizationId = defaultOrg.organization_id;
+        req.organizationId = defaultOrg.id;
         req.organization = {
-          id: defaultOrg.organization_id,
-          name: defaultOrg.organization_name,
-          slug: defaultOrg.organization_slug,
-          plan: defaultOrg.organization_plan,
-          timezone: defaultOrg.organization_timezone,
+          id: defaultOrg.id,
+          name: defaultOrg.name,
+          slug: defaultOrg.slug,
+          plan: defaultOrg.plan,
+          timezone: defaultOrg.timezone,
         };
         req.organizationMember = {
           role: defaultOrg.role,
-          permissions: defaultOrg.permissions,
+          permissions: {},
           status: defaultOrg.status,
         };
       }
@@ -166,7 +169,7 @@ export const loadOrganization = async (req: Request, res: Response, next: NextFu
     // Load specific organization
     const organizationRepository = new OrganizationRepository();
     const organization = await organizationRepository.findById(orgId);
-    
+
     if (!organization) {
       return next(new UnauthorizedError('Organization not found'));
     }
@@ -286,7 +289,7 @@ export const createSupabaseAuthClient = async (req: Request, res: Response, next
 
     // Get JWT token for Supabase
     const token = await req.auth.getToken({ template: 'supabase' });
-    
+
     // Store token in request for later use
     req.headers['supabase-auth-token'] = token;
 
