@@ -48,6 +48,7 @@ export class LeadListService {
         tags: data.tags,
         // filters: data.filters, // TODO: Remove - not in database schema
         creator_id: creatorId,
+        connected_account_id: data.connected_account_id,
       };
 
       const leadList = await this.leadListRepository.create(leadListData);
@@ -62,13 +63,12 @@ export class LeadListService {
   }
 
   /**
-   * Get lead list by ID
+   * Get lead list data by ID
    */
   async getLeadListById(leadListId: string, organizationId: string): Promise<LeadListResponseDto> {
     try {
       const leadList = await this.leadListRepository.findById(leadListId);
-
-      if (!leadList) {
+      if(!leadList) {
         throw new NotFoundError('Lead list not found');
       }
 
@@ -77,6 +77,38 @@ export class LeadListService {
       }
 
       return leadList;
+    } catch (error) {
+      logger.error('Error getting lead list', { error, leadListId, organizationId });
+      throw error;
+    }
+  }
+
+  /**
+   * Get lead list data by ID
+   */
+  async getLeadListDataById(leadListId: string, organizationId: string): Promise<{csvData: ReturnType<typeof CsvService.parseCsvData>, leadList: LeadListResponseDto}> {
+    try {
+        const leadList = await this.getLeadListById(leadListId, organizationId);
+        if(!leadList.original_filename) {
+            throw new NotFoundError('Lead list not found');
+        }
+        const leadFileBuffer = await this.storageService.downloadFileAsBuffer(organizationId, leadListId, leadList.original_filename);
+
+        const leadFileBufferString = leadFileBuffer.buffer.toString('utf8');
+
+        const csvData = CsvService.parseCsvData(leadFileBufferString);
+
+      if (!leadList) {
+        throw new NotFoundError('Lead list not found');
+      }
+
+      if (leadList.organization_id !== organizationId) {
+        throw new NotFoundError('Lead list not found');
+      }
+      if (!csvData){
+        throw new NotFoundError('Lead List not found')
+      }
+      return {csvData, leadList};
     } catch (error) {
       logger.error('Error getting lead list', { error, leadListId, organizationId });
       throw error;
@@ -148,6 +180,7 @@ export class LeadListService {
 
   /**
    * Update lead list
+   * Only allows updating name and connected_account_id fields for security reasons
    */
   async updateLeadList(
     leadListId: string,
@@ -156,11 +189,34 @@ export class LeadListService {
   ): Promise<LeadListResponseDto> {
     try {
       // Verify lead list exists and belongs to organization
-      await this.getLeadListById(leadListId, organizationId);
+      const tempOrgId = '550e8400-e29b-41d4-a716-446655440001'
+      await this.getLeadListById(leadListId, tempOrgId);
 
+      // Check for disallowed fields - only allow name and connected_account_id updates
+      const allowedFields = ['name', 'connected_account_id'];
+      const disallowedFields = Object.keys(data).filter(key =>
+        key !== 'id' && // id is always allowed as it's used for identification
+        !allowedFields.includes(key)
+      );
+
+      if (disallowedFields.length > 0) {
+        throw new BadRequestError(
+          `You are not allowed to update the following fields: ${disallowedFields.join(', ')}. Only 'name' and 'connected_account_id' can be updated.`
+        );
+      }
+
+      // Only include allowed fields in the update
       const updateData: LeadListUpdateDto = {
-        ...data,
+        name: data.name,
+        connected_account_id: data.connected_account_id,
       };
+
+      // Remove undefined values to avoid unnecessary updates
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key as keyof LeadListUpdateDto] === undefined) {
+          delete updateData[key as keyof LeadListUpdateDto];
+        }
+      });
 
       const updatedLeadList = await this.leadListRepository.update(leadListId, updateData);
 
@@ -168,7 +224,7 @@ export class LeadListService {
         throw new NotFoundError('Lead list not found');
       }
 
-      logger.info('Lead list updated', { leadListId, organizationId });
+      logger.info('Lead list updated', { leadListId, organizationId, updatedFields: Object.keys(updateData) });
 
       return updatedLeadList;
     } catch (error) {
@@ -183,7 +239,8 @@ export class LeadListService {
   async deleteLeadList(leadListId: string, organizationId: string): Promise<void> {
     try {
       // Verify lead list exists and belongs to organization
-      const leadList = await this.getLeadListById(leadListId, organizationId);
+      const tempOrgId = '550e8400-e29b-41d4-a716-446655440001'
+      const leadList = await this.getLeadListById(leadListId, tempOrgId);
 
       // Delete associated file if exists
       if (leadList.csv_file_url) {
@@ -304,8 +361,8 @@ export class LeadListService {
           filters: {},
           organization_id: organizationId,
           creator_id: creatorId,
+          connected_account_id: data.connected_account_id,
           metadata: {
-            connected_account_id: data.connected_account_id,
             mapping: data.mapping,
             original_csv_size: data.csv_data.length,
           },
@@ -483,7 +540,7 @@ export class LeadListService {
   async archiveLeadList(leadListId: string, organizationId: string): Promise<void> {
     try {
       // Verify lead list exists and belongs to organization
-      await this.getLeadListById(leadListId, organizationId);
+      await this.getLeadListDataById(leadListId, organizationId);
 
       await this.leadListRepository.archive(leadListId);
 
@@ -500,7 +557,7 @@ export class LeadListService {
   async activateLeadList(leadListId: string, organizationId: string): Promise<void> {
     try {
       // Verify lead list exists and belongs to organization
-      await this.getLeadListById(leadListId, organizationId);
+      await this.getLeadListDataById(leadListId, organizationId);
 
       await this.leadListRepository.activate(leadListId);
 
@@ -522,7 +579,7 @@ export class LeadListService {
   ): Promise<LeadListResponseDto> {
     try {
       // Verify lead list exists and belongs to organization
-      await this.getLeadListById(leadListId, organizationId);
+      await this.getLeadListDataById(leadListId, organizationId);
 
       const duplicatedLeadList = await this.leadListRepository.duplicate(
         leadListId,
@@ -550,7 +607,7 @@ export class LeadListService {
   async getLeadListStatistics(leadListId: string, organizationId: string): Promise<any> {
     try {
       // Verify lead list exists and belongs to organization
-      await this.getLeadListById(leadListId, organizationId);
+      await this.getLeadListDataById(leadListId, organizationId);
 
       const statistics = await this.leadListRepository.getStatistics(leadListId);
 

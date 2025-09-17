@@ -1,15 +1,12 @@
-import { Request, Response, NextFunction } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
-import { LeadListService } from '../services/LeadListService';
-import { CsvService } from '../services/CsvService';
 import { ApiResponse } from '../dto/common.dto';
-import { 
-  LeadListResponseDto, 
-  CsvPreviewResponseDto, 
-  PublishLeadListResponseDto 
+import {
+    CsvPreviewResponseDto
 } from '../dto/leads.dto';
-import { BadRequestError, ValidationError } from '../errors/AppError';
-import logger from '../utils/logger';
+import { BadRequestError } from '../errors/AppError';
+import { CsvService } from '../services/CsvService';
+import { LeadListService } from '../services/LeadListService';
 
 // Configure multer for file uploads
 const upload = multer({
@@ -106,7 +103,7 @@ export class LeadListController {
       // TODO: TEMPORARY - Mock values for development (authentication disabled)
       const organizationId = req.organizationId || '550e8400-e29b-41d4-a716-446655440001';
 
-      const leadList = await this.leadListService.getLeadListById(id, organizationId);
+      const leadList = await this.leadListService.getLeadListDataById(id, organizationId);
 
       const response: ApiResponse<typeof leadList> = {
         success: true,
@@ -129,6 +126,7 @@ export class LeadListController {
       const organizationId = req.organizationId!;
 
       const leadList = await this.leadListService.updateLeadList(id, req.body, organizationId);
+
 
       const response: ApiResponse<typeof leadList> = {
         success: true,
