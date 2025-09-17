@@ -1,7 +1,8 @@
-import { ConnectedAccountRepository, ConnectedAccount, CreateConnectedAccount, UpdateConnectedAccount } from '../repositories/ConnectedAccountRepository';
+import { ConnectedAccountRepository } from '../repositories/ConnectedAccountRepository';
 import { UnipileService } from './UnipileService';
 import { ConflictError, NotFoundError, ForbiddenError, BadRequestError } from '../errors/AppError';
 import logger from '../utils/logger';
+import { ConnectedAccountResponseDto, CreateConnectedAccountDto, UpdateConnectedAccountDto } from '../dto/accounts.dto';
 
 /**
  * Service for connected account business logic
@@ -42,18 +43,20 @@ export class ConnectedAccountService {
       // Create pending account record with unique pending ID
       logger.info('Creating pending account record');
       const uniquePendingId = `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const accountData = {
+      const accountData: CreateConnectedAccountDto = {
         user_id: params.userId,
         organization_id: params.organizationId,
-        provider: params.provider,
-        provider_account_id: uniquePendingId,
+        status: 'pending',
+        provider: params.provider as 'linkedin' | 'email' | 'gmail' | 'outlook',
         display_name: `${params.provider} Account (Connecting...)`,
+        provider_account_id: uniquePendingId,
         capabilities: [],
         metadata: {
+          created_at: new Date().toISOString(),
           connection_status: 'pending',
           account_type: 'personal', // Store in metadata since column doesn't exist
           daily_limit: 100,
-          created_at: new Date().toISOString(),
+          provider_account_id: uniquePendingId,
         },
       };
 
@@ -119,7 +122,7 @@ export class ConnectedAccountService {
     unipileAccountId: string;
     pendingAccountId: string;
     accountData: any;
-  }): Promise<ConnectedAccount> {
+  }): Promise<ConnectedAccountResponseDto> {
     try {
       // Get pending account
       const pendingAccount = await this.connectedAccountRepository.findById(params.pendingAccountId);
@@ -183,15 +186,15 @@ export class ConnectedAccountService {
 
       // Update account with connection data
       const connectedAccount = await this.connectedAccountRepository.update(params.pendingAccountId, {
-        provider_account_id: params.unipileAccountId,
         display_name: displayName,
         email: email,
         profile_picture_url: profilePictureUrl,
         status: 'connected',
         capabilities: capabilities,
-        last_synced_at: new Date().toISOString(),
         metadata: {
-          ...pendingAccount.metadata,
+            ...pendingAccount.metadata,
+          provider_account_id: params.unipileAccountId,
+          last_synced_at: new Date().toISOString(),
           connection_status: 'connected',
           connection_quality: 'good',
           unipile_account_data: params.accountData,
@@ -216,7 +219,7 @@ export class ConnectedAccountService {
   /**
    * Get user's connected accounts
    */
-  async getUserAccounts(userId: string, organizationId?: string, provider?: string): Promise<ConnectedAccount[]> {
+  async getUserAccounts(userId: string, organizationId?: string, provider?: string): Promise<ConnectedAccountResponseDto[]> {
     try {
       const accounts = await this.connectedAccountRepository.getUserAccounts(userId, organizationId);
 
@@ -235,7 +238,7 @@ export class ConnectedAccountService {
   /**
    * Get user's pending accounts (for debugging or status tracking)
    */
-  async getPendingAccounts(userId: string, organizationId?: string, provider?: string): Promise<ConnectedAccount[]> {
+  async getPendingAccounts(userId: string, organizationId?: string, provider?: string): Promise<ConnectedAccountResponseDto[]> {
     try {
       const accounts = await this.connectedAccountRepository.getPendingAccounts(userId, organizationId);
 
@@ -266,7 +269,7 @@ export class ConnectedAccountService {
   /**
    * Get connected account by ID
    */
-  async getAccount(id: string, userId: string): Promise<ConnectedAccount> {
+  async getAccount(id: string, userId: string): Promise<ConnectedAccountResponseDto> {
     try {
       const account = await this.connectedAccountRepository.findById(id);
 
@@ -285,7 +288,7 @@ export class ConnectedAccountService {
   /**
    * Update connected account
    */
-  async updateAccount(id: string, data: UpdateConnectedAccount, userId: string): Promise<ConnectedAccount> {
+  async updateAccount(id: string, data: UpdateConnectedAccountDto, userId: string): Promise<ConnectedAccountResponseDto> {
     try {
       const account = await this.connectedAccountRepository.findById(id);
 
@@ -339,7 +342,7 @@ export class ConnectedAccountService {
   /**
    * Sync account with Unipile
    */
-  async syncAccount(id: string, userId: string): Promise<ConnectedAccount> {
+  async syncAccount(id: string, userId: string): Promise<ConnectedAccountResponseDto> {
     try {
       const account = await this.connectedAccountRepository.findById(id);
 
@@ -375,10 +378,10 @@ export class ConnectedAccountService {
         profile_picture_url: profilePictureUrl,
         capabilities: capabilities,
         status: unipileAccount.status === 'active' ? 'connected' : 'error',
-        connection_quality: unipileAccount.status === 'active' ? 'good' : 'error',
-        last_synced_at: new Date().toISOString(),
         metadata: {
-          ...account.metadata,
+            ...account.metadata,
+          connection_quality: unipileAccount.status === 'active' ? 'good' : 'error',
+          last_synced_at: new Date().toISOString(),
           unipile_account_data: unipileAccount,
           profile_data: profileData,
           last_sync: new Date().toISOString(),
@@ -416,10 +419,10 @@ export class ConnectedAccountService {
 
       // TODO: Implement actual usage tracking from activities table
       const usage = {
-        daily_usage: account.daily_usage,
-        daily_limit: account.daily_limit,
-        usage_percentage: ((account.daily_usage || 0) / (account.daily_limit || 1)) * 100,
-        reset_time: account.usage_reset_at,
+        daily_usage: account.metadata.daily_usage,
+        daily_limit: account.metadata.daily_limit,
+        usage_percentage: ((account.metadata.daily_usage || 0) / (account.metadata.daily_limit || 1)) * 100,
+        reset_time: account.metadata.usage_reset_at,
         last_activity: account.last_synced_at,
       };
 
@@ -562,7 +565,7 @@ export class ConnectedAccountService {
   /**
    * Manually sync profile data for an account
    */
-  async syncAccountProfile(accountId: string, userId: string): Promise<ConnectedAccount> {
+  async syncAccountProfile(accountId: string, userId: string): Promise<ConnectedAccountResponseDto> {
     try {
       const account = await this.connectedAccountRepository.findById(accountId);
 

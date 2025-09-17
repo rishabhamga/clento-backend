@@ -55,7 +55,7 @@ const userController = new UserController();
  *       404:
  *         description: User not found
  */
-router.get('/me', requireAuth, loadUser, userController.getMe);
+router.get('/me', loadUser, userController.getMe);
 
 /**
  * @swagger

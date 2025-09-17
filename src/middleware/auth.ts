@@ -189,9 +189,9 @@ export const loadOrganization = async (req: Request, res: Response, next: NextFu
       timezone: organization.timezone,
     };
     req.organizationMember = {
-      role: membership.role,
-      permissions: membership.permissions,
-      status: membership.status,
+      role: membership.role || 'member',
+      permissions: membership.permissions || {},
+      status: membership.status || 'active',
     };
 
     next();

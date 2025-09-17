@@ -2,10 +2,10 @@ import { Router } from 'express';
 import { LeadListController } from '../controllers/LeadListController';
 import { requireAuth, loadUser, loadOrganization, requireOrganization } from '../middleware/auth';
 import { validateBody, validateQuery, validateParams } from '../middleware/validation';
-import { 
-  CreateLeadListDto,
-  UpdateLeadListDto,
+import {
+    LeadListInsertDto,
   LeadListQueryDto,
+  LeadListUpdateDto,
   PreviewCsvDto,
   PublishLeadListDto
 } from '../dto/leads.dto';
@@ -114,8 +114,8 @@ const leadListController = new LeadListController();
  *       401:
  *         description: Unauthorized
  */
-router.get('/', 
-  validateQuery(LeadListQueryDto), 
+router.get('/',
+  validateQuery(LeadListQueryDto),
   leadListController.getLeadLists
 );
 
@@ -141,8 +141,8 @@ router.get('/',
  *       401:
  *         description: Unauthorized
  */
-router.post('/', 
-  validateBody(CreateLeadListDto), 
+router.post('/',
+  validateBody(LeadListInsertDto),
   leadListController.createLeadList
 );
 
@@ -172,7 +172,7 @@ router.post('/',
  *       401:
  *         description: Unauthorized
  */
-router.post('/upload-csv', 
+router.post('/upload-csv',
   leadListController.getUploadMiddleware(),
   leadListController.uploadCsv
 );
@@ -199,8 +199,8 @@ router.post('/upload-csv',
  *       401:
  *         description: Unauthorized
  */
-router.post('/preview-csv', 
-  validateBody(PreviewCsvDto), 
+router.post('/preview-csv',
+  validateBody(PreviewCsvDto),
   leadListController.previewCsv
 );
 
@@ -226,8 +226,8 @@ router.post('/preview-csv',
  *       401:
  *         description: Unauthorized
  */
-router.post('/publish', 
-  validateBody(PublishLeadListDto), 
+router.post('/publish',
+  validateBody(PublishLeadListDto),
   leadListController.publishLeadList
 );
 
@@ -254,8 +254,8 @@ router.post('/publish',
  *       401:
  *         description: Unauthorized
  */
-router.get('/:id', 
-  validateParams(z.object({ id: z.string().uuid() })), 
+router.get('/:id',
+  validateParams(z.object({ id: z.string().uuid() })),
   leadListController.getLeadListById
 );
 
@@ -288,9 +288,9 @@ router.get('/:id',
  *       401:
  *         description: Unauthorized
  */
-router.put('/:id', 
+router.put('/:id',
   validateParams(z.object({ id: z.string().uuid() })),
-  validateBody(UpdateLeadListDto), 
+  validateBody(LeadListUpdateDto),
   leadListController.updateLeadList
 );
 
@@ -317,8 +317,8 @@ router.put('/:id',
  *       401:
  *         description: Unauthorized
  */
-router.delete('/:id', 
-  validateParams(z.object({ id: z.string().uuid() })), 
+router.delete('/:id',
+  validateParams(z.object({ id: z.string().uuid() })),
   leadListController.deleteLeadList
 );
 
@@ -345,8 +345,8 @@ router.delete('/:id',
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/archive', 
-  validateParams(z.object({ id: z.string().uuid() })), 
+router.post('/:id/archive',
+  validateParams(z.object({ id: z.string().uuid() })),
   leadListController.archiveLeadList
 );
 
@@ -373,8 +373,8 @@ router.post('/:id/archive',
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/activate', 
-  validateParams(z.object({ id: z.string().uuid() })), 
+router.post('/:id/activate',
+  validateParams(z.object({ id: z.string().uuid() })),
   leadListController.activateLeadList
 );
 
@@ -412,7 +412,7 @@ router.post('/:id/activate',
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/duplicate', 
+router.post('/:id/duplicate',
   validateParams(z.object({ id: z.string().uuid() })),
   validateBody(z.object({ name: z.string().min(1) })),
   leadListController.duplicateLeadList
@@ -441,8 +441,8 @@ router.post('/:id/duplicate',
  *       401:
  *         description: Unauthorized
  */
-router.get('/:id/statistics', 
-  validateParams(z.object({ id: z.string().uuid() })), 
+router.get('/:id/statistics',
+  validateParams(z.object({ id: z.string().uuid() })),
   leadListController.getLeadListStatistics
 );
 

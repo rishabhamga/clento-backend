@@ -13,64 +13,57 @@ const WorkflowStepSchema = z.object({
 
 // Campaign DTOs
 export const CreateCampaignDto = z.object({
-  name: z.string().min(1, 'Campaign name is required').max(255),
-  description: z.string().max(1000).optional(),
-  type: z.enum(['linkedin', 'email', 'mixed']).default('linkedin'),
-  lead_list_id: z.string().uuid(),
-  account_id: z.string().uuid(),
-  workflow_definition: z.object({
-    steps: z.array(WorkflowStepSchema).min(1, 'At least one workflow step is required'),
-    settings: z.record(z.any()).default({}),
-  }),
-  message_templates: z.array(z.string().uuid()).default([]),
-  follow_up_sequence: z.array(z.record(z.any())).default([]),
-  schedule: z.object({
-    start_date: z.string().datetime(),
-    end_date: z.string().datetime().optional(),
-    timezone: z.string().default('UTC'),
-    daily_limit: z.number().min(1).max(1000).default(50),
-    working_days: z.array(z.number().min(1).max(7)).default([1, 2, 3, 4, 5]), // 1=Monday, 7=Sunday
-    working_hours: z.object({
-      start: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format'),
-      end: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format'),
-    }).default({ start: '09:00', end: '17:00' }),
-  }),
-  tracking_enabled: z.boolean().default(true),
-  auto_stop_conditions: z.object({
-    max_leads: z.number().min(1).optional(),
-    success_rate_threshold: z.number().min(0).max(100).optional(),
-    error_rate_threshold: z.number().min(0).max(100).optional(),
-  }).default({}),
-  tags: z.array(z.string()).default([]),
+  organization_id: z.string().uuid().nullable().optional(),
+  creator_id: z.string().uuid().nullable().optional(),
+  name: z.string().min(1, 'Campaign name is required'),
+  description: z.string().nullable().optional(),
+  status: z.string().max(50).default('draft'),
+  lead_list_id: z.string().uuid().nullable().optional(),
+  account_id: z.string().uuid().nullable().optional(),
+  workflow_id: z.string().nullable().optional(),
+  workflow_definition: z.record(z.any()),
+  schedule: z.record(z.any()),
+  stats: z.record(z.any()).default({}),
+  started_at: z.string().datetime().nullable().optional(),
+  completed_at: z.string().datetime().nullable().optional(),
 });
 
 export const UpdateCampaignDto = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().max(1000).optional(),
-  workflow_definition: z.object({
-    steps: z.array(WorkflowStepSchema).min(1),
-    settings: z.record(z.any()).default({}),
-  }).optional(),
-  message_templates: z.array(z.string().uuid()).optional(),
-  follow_up_sequence: z.array(z.record(z.any())).optional(),
-  schedule: z.object({
-    start_date: z.string().datetime().optional(),
-    end_date: z.string().datetime().optional(),
-    timezone: z.string().optional(),
-    daily_limit: z.number().min(1).max(1000).optional(),
-    working_days: z.array(z.number().min(1).max(7)).optional(),
-    working_hours: z.object({
-      start: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
-      end: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
-    }).optional(),
-  }).optional(),
-  tracking_enabled: z.boolean().optional(),
-  auto_stop_conditions: z.object({
-    max_leads: z.number().min(1).optional(),
-    success_rate_threshold: z.number().min(0).max(100).optional(),
-    error_rate_threshold: z.number().min(0).max(100).optional(),
-  }).optional(),
-  tags: z.array(z.string()).optional(),
+  organization_id: z.string().uuid().nullable().optional(),
+  creator_id: z.string().uuid().nullable().optional(),
+  name: z.string().optional(),
+  description: z.string().nullable().optional(),
+  status: z.string().max(50).optional(),
+  lead_list_id: z.string().uuid().nullable().optional(),
+  account_id: z.string().uuid().nullable().optional(),
+  workflow_id: z.string().nullable().optional(),
+  workflow_definition: z.record(z.any()).optional(),
+  schedule: z.record(z.any()).optional(),
+  stats: z.record(z.any()).optional(),
+  started_at: z.string().datetime().nullable().optional(),
+  completed_at: z.string().datetime().nullable().optional(),
+});
+
+/**
+ * DTO for campaign response (matches database Row type)
+ */
+export const CampaignResponseDto = z.object({
+  id: z.string().uuid(),
+  organization_id: z.string().uuid().nullable(),
+  creator_id: z.string().uuid().nullable(),
+  name: z.string(),
+  description: z.string().nullable(),
+  status: z.string().nullable(),
+  lead_list_id: z.string().uuid().nullable(),
+  account_id: z.string().uuid().nullable(),
+  workflow_id: z.string().nullable(),
+  workflow_definition: z.record(z.any()),
+  schedule: z.record(z.any()),
+  stats: z.record(z.any()),
+  created_at: z.string().datetime().nullable(),
+  updated_at: z.string().datetime().nullable(),
+  started_at: z.string().datetime().nullable(),
+  completed_at: z.string().datetime().nullable(),
 });
 
 export const CampaignQueryDto = z.object({
@@ -189,6 +182,7 @@ export const WorkflowTemplateQueryDto = z.object({
 // Type exports
 export type CreateCampaignDto = z.infer<typeof CreateCampaignDto>;
 export type UpdateCampaignDto = z.infer<typeof UpdateCampaignDto>;
+export type CampaignResponseDto = z.infer<typeof CampaignResponseDto>;
 export type CampaignQueryDto = z.infer<typeof CampaignQueryDto>;
 export type StartCampaignDto = z.infer<typeof StartCampaignDto>;
 export type PauseCampaignDto = z.infer<typeof PauseCampaignDto>;

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ConnectedAccountController } from '../controllers/ConnectedAccountController';
 import { requireAuth, loadUser, loadOrganization, requireOrganization } from '../middleware/auth';
 import { validateBody, validateQuery, validateParams, commonParams } from '../middleware/validation';
-import { 
+import {
   CreateConnectedAccountDto,
   UpdateConnectedAccountDto,
   ConnectedAccountQueryDto,
@@ -112,7 +112,7 @@ const accountController = new ConnectedAccountController();
  *                   items:
  *                     $ref: '#/components/schemas/ConnectedAccount'
  */
-router.get('/', 
+router.get('/',
   validateQuery(ConnectedAccountQueryDto),
   accountController.getUserAccounts
 );
@@ -146,7 +146,7 @@ router.get('/',
  *                   items:
  *                     $ref: '#/components/schemas/ConnectedAccount'
  */
-router.get('/pending', 
+router.get('/pending',
   validateQuery(ConnectedAccountQueryDto),
   accountController.getPendingAccounts
 );
@@ -269,8 +269,8 @@ router.post('/webhook', accountController.handleWebhook);
  *                 data:
  *                   $ref: '#/components/schemas/ConnectedAccount'
  */
-router.post('/:id/sync-profile', 
-  validateParams(commonParams.id), 
+router.post('/:id/sync-profile',
+  validateParams(commonParams.id),
   accountController.syncAccountProfile
 );
 

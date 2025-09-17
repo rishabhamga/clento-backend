@@ -24,9 +24,9 @@ const envSchema = z.object({
   UNIPILE_API_KEY: z.string().optional(),
 
   // Google Cloud Storage (optional for development)
-  GCS_PROJECT_ID: z.string().optional(),
-  GCS_KEY_FILE: z.string().optional(),
-  GCS_BUCKET_NAME: z.string().default('clento-lead-lists'),
+  GOOGLE_CLOUD_PROJECT_ID: z.string().optional(),
+  GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY: z.string().optional(),
+  GOOGLE_CLOUD_STORAGE_BUCKET: z.string().default('clento-lead-lists'),
 
   // CORS
   CORS_ORIGIN: z.string().default('*'),

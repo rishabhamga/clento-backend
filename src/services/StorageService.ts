@@ -18,7 +18,7 @@ export class StorageService {
   private bucketName: string;
 
   constructor() {
-    this.bucketName = env.GCS_BUCKET_NAME;
+    this.bucketName = env.GOOGLE_CLOUD_STORAGE_BUCKET;
     this.initializeStorage();
   }
 
@@ -27,15 +27,15 @@ export class StorageService {
    */
   private initializeStorage(): void {
     try {
-      if (!env.GCS_PROJECT_ID || !env.GCS_KEY_FILE) {
+      if (!env.GOOGLE_CLOUD_PROJECT_ID || !env.GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY) {
         logger.warn('Google Cloud Storage credentials not configured, using mock for development');
         return;
       }
 
       // Initialize GCS client
       this.storage = new Storage({
-        projectId: env.GCS_PROJECT_ID,
-        keyFilename: env.GCS_KEY_FILE,
+        projectId: env.GOOGLE_CLOUD_PROJECT_ID,
+        credentials: JSON.parse(env.GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY),
       });
 
       logger.info('Google Cloud Storage initialized successfully');
@@ -48,7 +48,7 @@ export class StorageService {
    * Check if storage is configured
    */
   isConfigured(): boolean {
-    return this.storage !== null || (!env.GCS_PROJECT_ID || !env.GCS_KEY_FILE);
+    return this.storage !== null && !!env.GOOGLE_CLOUD_PROJECT_ID && !!env.GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY;
   }
 
   /**
@@ -61,25 +61,6 @@ export class StorageService {
     leadListId: string
   ): Promise<UploadResult> {
     try {
-      // For development, return mock data
-      if (env.NODE_ENV === 'development') {
-        const mockUrl = `https://storage.googleapis.com/${this.bucketName}/lead-lists/${organizationId}/${leadListId}/${filename}`;
-
-        logger.info('Mock CSV file upload', {
-          filename,
-          organizationId,
-          leadListId,
-          size: fileBuffer.length,
-        });
-
-        return {
-          url: mockUrl,
-          filename,
-          size: fileBuffer.length,
-          contentType: 'text/csv',
-        };
-      }
-
       if (!this.storage) {
         throw new ServiceUnavailableError('Storage service not configured');
       }
@@ -198,18 +179,6 @@ export class StorageService {
     expirationMinutes: number = 60
   ): Promise<string> {
     try {
-      // For development, return mock URL
-      if (env.NODE_ENV === 'development') {
-        const mockUrl = `https://storage.googleapis.com/${this.bucketName}/lead-lists/${organizationId}/${leadListId}/${filename}`;
-
-        logger.info('Mock signed URL generated', {
-          filename,
-          organizationId,
-          leadListId,
-        });
-
-        return mockUrl;
-      }
 
       if (!this.storage) {
         throw new ServiceUnavailableError('Storage service not configured');
@@ -258,10 +227,6 @@ export class StorageService {
     filename: string
   ): Promise<boolean> {
     try {
-      // For development, always return true
-      if (env.NODE_ENV === 'development') {
-        return true;
-      }
 
       if (!this.storage) {
         return false;
@@ -343,6 +308,148 @@ export class StorageService {
       });
 
       return null;
+    }
+  }
+
+  /**
+   * Download file from Google Cloud Storage and return as stream
+   */
+  async downloadFile(
+    organizationId: string,
+    leadListId: string,
+    filename: string
+  ): Promise<{
+    stream: NodeJS.ReadableStream;
+    metadata: {
+      size: number;
+      contentType: string;
+      filename: string;
+    };
+  }> {
+    try {
+      if (!this.storage) {
+        throw new ServiceUnavailableError('Storage service not configured');
+      }
+
+      // Generate file path
+      const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
+
+      // Get bucket and file
+      const bucket = this.storage.bucket(this.bucketName);
+      const file = bucket.file(filePath);
+
+      // Check if file exists
+      const [exists] = await file.exists();
+      if (!exists) {
+        throw new ExternalAPIError('File not found');
+      }
+
+      // Get file metadata
+      const [metadata] = await file.getMetadata();
+
+      // Create download stream
+      const stream = file.createReadStream();
+
+      logger.info('File download initiated', {
+        filename,
+        organizationId,
+        leadListId,
+        filePath,
+        size: parseInt(metadata.size as string || '0'),
+      });
+
+      return {
+        stream,
+        metadata: {
+          size: parseInt(metadata.size as string || '0'),
+          contentType: metadata.contentType || 'text/csv',
+          filename,
+        },
+      };
+    } catch (error) {
+      logger.error('Error downloading file', {
+        error,
+        filename,
+        organizationId,
+        leadListId,
+      });
+
+      if (error instanceof ExternalAPIError || error instanceof ServiceUnavailableError) {
+        throw error;
+      }
+
+      throw new ExternalAPIError('Failed to download file');
+    }
+  }
+
+  /**
+   * Download file as buffer from Google Cloud Storage
+   */
+  async downloadFileAsBuffer(
+    organizationId: string,
+    leadListId: string,
+    filename: string
+  ): Promise<{
+    buffer: Buffer;
+    metadata: {
+      size: number;
+      contentType: string;
+      filename: string;
+    };
+  }> {
+    try {
+      if (!this.storage) {
+        throw new ServiceUnavailableError('Storage service not configured');
+      }
+
+      // Generate file path
+      const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
+
+      // Get bucket and file
+      const bucket = this.storage.bucket(this.bucketName);
+      const file = bucket.file(filePath);
+
+      // Check if file exists
+      const [exists] = await file.exists();
+      if (!exists) {
+        throw new ExternalAPIError('File not found');
+      }
+
+      // Get file metadata
+      const [metadata] = await file.getMetadata();
+
+      // Download file as buffer
+      const [buffer] = await file.download();
+
+      logger.info('File downloaded as buffer', {
+        filename,
+        organizationId,
+        leadListId,
+        filePath,
+        size: buffer.length,
+      });
+
+      return {
+        buffer,
+        metadata: {
+          size: buffer.length,
+          contentType: metadata.contentType || 'text/csv',
+          filename,
+        },
+      };
+    } catch (error) {
+      logger.error('Error downloading file as buffer', {
+        error,
+        filename,
+        organizationId,
+        leadListId,
+      });
+
+      if (error instanceof ExternalAPIError || error instanceof ServiceUnavailableError) {
+        throw error;
+      }
+
+      throw new ExternalAPIError('Failed to download file');
     }
   }
 }
