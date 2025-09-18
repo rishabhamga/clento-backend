@@ -43,4 +43,25 @@ export class UserService {
   async updateUser(id: string, userData: UpdateUserDtoType) {
     return this.userRepository.update(id, userData as unknown as UserUpdateDto);
   }
+
+  /**
+   * Sync user from Clerk by Clerk user ID
+   */
+  async syncFromClerk(clerkUserId: string) {
+    // This would typically fetch user data from Clerk API
+    // For now, we'll just return the existing user or create a placeholder
+    const existingUser = await this.userRepository.findByClerkId(clerkUserId);
+
+    if (existingUser) {
+      return existingUser;
+    }
+
+    // If user doesn't exist, create a placeholder
+    // In a real implementation, you'd fetch from Clerk API
+    return this.userRepository.createFromClerk(
+      clerkUserId,
+      `user-${clerkUserId}@example.com`,
+      'Synced User'
+    );
+  }
 }

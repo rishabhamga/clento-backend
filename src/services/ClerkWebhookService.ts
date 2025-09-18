@@ -260,33 +260,160 @@ export class ClerkWebhookService {
   }
 
   /**
+   * Handle organizationMembership.updated webhook event
+   */
+  async handleOrganizationMembershipUpdated(data: any): Promise<void> {
+    try {
+      const { organization, public_user_data, role } = data;
+
+      if (!organization || !public_user_data) {
+        logger.warn('Missing organization or user data', { data });
+        return;
+      }
+
+      // Find organization
+      const org = await this.organizationRepository.findByClerkOrgId(organization.id);
+      if (!org) {
+        logger.warn('Organization not found', { clerkOrgId: organization.id });
+        return;
+      }
+
+      // Find user
+      const user = await this.userRepository.findByClerkId(public_user_data.user_id);
+      if (!user) {
+        logger.warn('User not found', { clerkUserId: public_user_data.user_id });
+        return;
+      }
+
+      // Update member role
+      await this.organizationRepository.updateMember(org.id, user.id, {
+        role: role.toLowerCase()
+      });
+
+      logger.info('Organization member role updated from webhook', {
+        clerkOrgId: organization.id,
+        clerkUserId: public_user_data.user_id,
+        role,
+      });
+    } catch (error) {
+      logger.error('Error handling organizationMembership.updated webhook', { error, data });
+      throw error;
+    }
+  }
+
+  /**
+   * Handle organizationMembership.deleted webhook event
+   */
+  async handleOrganizationMembershipDeleted(data: any): Promise<void> {
+    try {
+      const { organization, public_user_data } = data;
+
+      if (!organization || !public_user_data) {
+        logger.warn('Missing organization or user data', { data });
+        return;
+      }
+
+      // Find organization
+      const org = await this.organizationRepository.findByClerkOrgId(organization.id);
+      if (!org) {
+        logger.warn('Organization not found', { clerkOrgId: organization.id });
+        return;
+      }
+
+      // Find user
+      const user = await this.userRepository.findByClerkId(public_user_data.user_id);
+      if (!user) {
+        logger.warn('User not found', { clerkUserId: public_user_data.user_id });
+        return;
+      }
+
+      // Remove member from organization
+      await this.organizationRepository.removeMember(org.id, user.id);
+
+      logger.info('Organization member removed from webhook', {
+        clerkOrgId: organization.id,
+        clerkUserId: public_user_data.user_id,
+      });
+    } catch (error) {
+      logger.error('Error handling organizationMembership.deleted webhook', { error, data });
+      throw error;
+    }
+  }
+
+  /**
+   * Handle session.created webhook event
+   */
+  async handleSessionCreated(data: any): Promise<void> {
+    try {
+      const { user_id } = data;
+
+      // Find user and ensure they exist in our database
+      const user = await this.userRepository.findByClerkId(user_id);
+
+      if (!user) {
+        logger.warn('User not found for session creation', { clerkUserId: user_id });
+        // Optionally create user if they don't exist
+        // This can happen if webhook order is different than expected
+        return;
+      }
+
+      logger.info('Session created for user', { clerkUserId: user_id, userId: user.id });
+    } catch (error) {
+      logger.error('Error handling session.created webhook', { error, data });
+      throw error;
+    }
+  }
+
+  /**
    * Process webhook event
    */
   async processWebhook(type: string, data: any): Promise<void> {
-    switch (type) {
-      case 'user.created':
-        await this.handleUserCreated(data);
-        break;
-      case 'user.updated':
-        await this.handleUserUpdated(data);
-        break;
-      case 'user.deleted':
-        await this.handleUserDeleted(data);
-        break;
-      case 'organization.created':
-        await this.handleOrganizationCreated(data);
-        break;
-      case 'organization.updated':
-        await this.handleOrganizationUpdated(data);
-        break;
-      case 'organization.deleted':
-        await this.handleOrganizationDeleted(data);
-        break;
-      case 'organizationMembership.created':
-        await this.handleOrganizationMembershipCreated(data);
-        break;
-      default:
-        logger.info('Unhandled webhook event type', { type });
+    try {
+      logger.info(`Processing webhook event: ${type}`, {
+        type,
+        userId: data.user_id || data.public_user_data?.user_id,
+        orgId: data.organization?.id
+      });
+
+      switch (type) {
+        case 'user.created':
+          await this.handleUserCreated(data);
+          break;
+        case 'user.updated':
+          await this.handleUserUpdated(data);
+          break;
+        case 'user.deleted':
+          await this.handleUserDeleted(data);
+          break;
+        case 'organization.created':
+          await this.handleOrganizationCreated(data);
+          break;
+        case 'organization.updated':
+          await this.handleOrganizationUpdated(data);
+          break;
+        case 'organization.deleted':
+          await this.handleOrganizationDeleted(data);
+          break;
+        case 'organizationMembership.created':
+          await this.handleOrganizationMembershipCreated(data);
+          break;
+        case 'organizationMembership.updated':
+          await this.handleOrganizationMembershipUpdated(data);
+          break;
+        case 'organizationMembership.deleted':
+          await this.handleOrganizationMembershipDeleted(data);
+          break;
+        case 'session.created':
+          await this.handleSessionCreated(data);
+          break;
+        default:
+          logger.info('Unhandled webhook event type', { type, data });
+      }
+
+      logger.info(`Successfully processed webhook event: ${type}`);
+    } catch (error) {
+      logger.error(`Error processing webhook event: ${type}`, { error, data });
+      throw error;
     }
   }
 }

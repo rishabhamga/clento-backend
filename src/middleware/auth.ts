@@ -48,11 +48,13 @@ declare global {
 export const requireAuth = env.CLERK_SECRET_KEY
   ? ClerkExpressRequireAuth({
       onError: (error: any) => {
+        console.log("Clerk authentication error:", error);
         logger.error('Authentication error', { error });
         throw new UnauthorizedError('Authentication required');
       },
     })
   : (req: Request, res: Response, next: NextFunction) => {
+      console.log("=== requireAuth middleware (development mode) ===");
       logger.warn('Clerk authentication skipped - no secret key provided');
       // Mock auth for development
       req.auth = {
@@ -60,6 +62,7 @@ export const requireAuth = env.CLERK_SECRET_KEY
         orgId: 'dev-org-id',
         getToken: () => Promise.resolve('dev-token'),
       };
+      console.log("Mock auth set:", req.auth);
       next();
     };
 
@@ -68,12 +71,18 @@ export const requireAuth = env.CLERK_SECRET_KEY
  */
 export const loadUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    console.log("=== loadUser middleware called ===");
+    console.log("req.auth:", req.auth);
+    console.log("env.CLERK_SECRET_KEY exists:", !!env.CLERK_SECRET_KEY);
+
     if (!req.auth || !req.auth.userId) {
+      console.log("No auth or userId found, returning UnauthorizedError");
       return next(new UnauthorizedError('Authentication required'));
     }
 
     // Skip database lookup in development mode
     if (!env.CLERK_SECRET_KEY) {
+      console.log("Using development mode - setting mock user data");
       // Use valid UUIDs for development
       req.userId = '550e8400-e29b-41d4-a716-446655440000';
       req.externalId = 'dev-user-id';
@@ -96,6 +105,7 @@ export const loadUser = async (req: Request, res: Response, next: NextFunction) 
         permissions: {},
         status: 'active',
       };
+      console.log("Development mode user set:", req.userId);
       return next();
     }
 
