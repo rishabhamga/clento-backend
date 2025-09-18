@@ -284,7 +284,7 @@ export class LeadListService {
       const mapping = data.mapping || CsvService.generateMapping(parseResult.headers);
 
       // Get preview data
-      const preview = CsvService.getPreview(parseResult, 5);
+      const preview = CsvService.getPreviewFromUnipile(parseResult, 5);
 
       logger.info('CSV preview generated', {
         totalRows: parseResult.totalRows,
@@ -387,28 +387,18 @@ export class LeadListService {
         logger.warn('Error uploading CSV file', { error, leadListId: leadList.id });
       }
 
-      // Apply mapping and import leads
-      const mapping = data.mapping || CsvService.generateMapping(parseResult.headers);
-      const mappedData = CsvService.applyMapping(parseResult.data, mapping);
-
-      const importResult = await this.importLeads(
-        leadList.id,
-        mappedData,
-        organizationId
-      );
-
       // Update lead list with processing results
       const updateData: LeadListUpdateDto = {
         status: 'completed',
-        total_leads: importResult.totalRows,
-        processed_leads: importResult.importedLeads,
-        failed_leads: importResult.totalRows - importResult.importedLeads - importResult.skippedRows,
+        total_leads: parseResult.totalRows,
+        processed_leads: parseResult.validRows,
+        failed_leads: parseResult.totalRows - parseResult.validRows,
         processing_completed_at: new Date().toISOString(),
         stats: {
           import_duration_ms: Date.now() - new Date(leadList.created_at || new Date()).getTime(),
-          success_rate: importResult.totalRows > 0 ? (importResult.importedLeads / importResult.totalRows) * 100 : 0,
-          skipped_count: importResult.skippedRows,
-          error_count: importResult.totalRows - importResult.importedLeads - importResult.skippedRows,
+          success_rate: parseResult.totalRows > 0 ? (parseResult.validRows / parseResult.totalRows) * 100 : 0,
+          skipped_count: parseResult.totalRows - parseResult.validRows,
+          error_count: parseResult.totalRows - parseResult.validRows,
         },
       };
 
@@ -423,17 +413,17 @@ export class LeadListService {
       logger.info('Lead list published successfully', {
         leadListId: leadList.id,
         organizationId,
-        totalLeads: importResult.importedLeads,
+        totalLeads: parseResult.validRows,
       });
 
       return {
         leadList: updatedLeadList || leadList,
         importResult: {
-          totalRows: importResult.totalRows,
-          importedLeads: importResult.importedLeads,
-          skippedLeads: importResult.skippedRows,
-          failedLeads: importResult.totalRows - importResult.importedLeads - importResult.skippedRows,
-          errors: importResult.errors,
+          totalRows: parseResult.totalRows,
+          importedLeads: parseResult.validRows,
+          skippedLeads: parseResult.totalRows - parseResult.validRows,
+          failedLeads: parseResult.totalRows - parseResult.validRows,
+          errors: parseResult.errors,
         },
         fileUrl: uploadResult?.url || '',
       };
@@ -441,97 +431,6 @@ export class LeadListService {
       logger.error('Error publishing lead list', { error, data, organizationId });
       throw error;
     }
-  }
-
-  /**
-   * Import leads from mapped CSV data
-   */
-  private async importLeads(
-    leadListId: string,
-    mappedData: Record<string, any>[],
-    organizationId: string
-  ): Promise<{
-    totalRows: number;
-    importedLeads: number;
-    skippedRows: number;
-    errors: string[];
-  }> {
-    const errors: string[] = [];
-    const leadsToCreate: LeadInsertDto[] = [];
-    let skippedRows = 0;
-
-    // Process each row
-    for (let i = 0; i < mappedData.length; i++) {
-      const row = mappedData[i];
-
-      try {
-        // Validate required fields
-        if (!row.linkedin_url && !row.email) {
-          errors.push(`Row ${i + 1}: Missing both LinkedIn URL and email`);
-          skippedRows++;
-          continue;
-        }
-
-        // Check for duplicates by LinkedIn URL or email
-        let existingLead = null;
-        if (row.linkedin_url) {
-          existingLead = await this.leadRepository.findByLinkedInUrl(row.linkedin_url);
-        }
-        if (!existingLead && row.email) {
-          existingLead = await this.leadRepository.findByEmail(row.email);
-        }
-
-        if (existingLead) {
-          errors.push(`Row ${i + 1}: Lead already exists (${row.full_name || row.email || row.linkedin_url})`);
-          skippedRows++;
-          continue;
-        }
-
-        // Create lead data
-        const leadData: LeadInsertDto = {
-          lead_list_id: leadListId,
-          full_name: row.full_name,
-          first_name: row.first_name,
-          last_name: row.last_name,
-          email: row.email,
-          phone: row.phone,
-          title: row.title,
-          company: row.company,
-          industry: row.industry,
-          location: row.location,
-          linkedin_url: row.linkedin_url,
-          linkedin_id: row.linkedin_id,
-          source: 'csv_import',
-          enrichment_data: row.enrichment_data || {},
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        leadsToCreate.push(leadData);
-      } catch (error) {
-        errors.push(`Row ${i + 1}: ${error instanceof Error ? error.message : 'Processing error'}`);
-        skippedRows++;
-      }
-    }
-
-    // Bulk create leads
-    let importedLeads = 0;
-    if (leadsToCreate.length > 0) {
-      try {
-        const createdLeads = await this.leadRepository.bulkCreate(leadsToCreate);
-        importedLeads = createdLeads.length;
-      } catch (error) {
-        logger.error('Error bulk creating leads', { error, leadListId });
-        errors.push('Failed to import leads to database');
-      }
-    }
-
-    return {
-      totalRows: mappedData.length,
-      importedLeads,
-      skippedRows,
-      errors,
-    };
   }
 
   /**

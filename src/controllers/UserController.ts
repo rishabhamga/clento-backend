@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { UserService } from '../services/UserService';
 import { CreateUserDto, UpdateUserDto } from '../dto/users.dto';
 import { ValidationError } from '../errors/AppError';
+import { runInNewContext } from 'vm';
 
 /**
  * Controller for user-related endpoints
@@ -18,16 +19,29 @@ export class UserController {
    * @route GET /api/users/me
    */
   getMe = async (req: Request, res: Response) => {
-    if (!req.userId) {
-      throw new ValidationError('User ID not found in request');
-    }
+    try {
+      console.log("=== UserController.getMe called ===");
+      console.log("req.userId:", req.userId);
+      console.log("req.auth:", req.auth);
+      console.log("req.user:", req.user);
 
-    const user = await this.userService.getUserById(req.userId);
-    
-    res.status(200).json({
-      success: true,
-      data: user,
-    });
+      if (!req.userId) {
+        console.log('User ID not found in request - authentication failed');
+        throw new ValidationError('Authentication required');
+      }
+
+      console.log("Calling userService.getUserById with:", req.userId);
+      const user = await this.userService.getUserById(req.userId);
+      console.log("User found:", user);
+
+      res.status(200).json({
+        success: true,
+        data: user,
+      });
+    } catch (error) {
+      console.error("Error in getMe:", error);
+      throw error;
+    }
   };
 
   /**
@@ -37,13 +51,13 @@ export class UserController {
   syncUser = async (req: Request, res: Response) => {
     // Validate request body
     const result = CreateUserDto.safeParse(req.body);
-    
+
     if (!result.success) {
       throw new ValidationError(result.error.message);
     }
-    
+
     const user = await this.userService.syncUser(result.data);
-    
+
     res.status(200).json({
       success: true,
       data: user,
@@ -58,18 +72,38 @@ export class UserController {
     if (!req.userId) {
       throw new ValidationError('User ID not found in request');
     }
-    
+
     // Validate request body
     const result = UpdateUserDto.safeParse(req.body);
-    
+
     if (!result.success) {
       throw new ValidationError(result.error.message);
     }
-    
+
     const user = await this.userService.updateUser(req.userId, result.data);
-    
+
     res.status(200).json({
       success: true,
+      data: user,
+    });
+  };
+
+  /**
+   * Force sync user from Clerk (manual sync)
+   * @route POST /api/users/sync-from-clerk
+   */
+  syncFromClerk = async (req: Request, res: Response) => {
+    const { clerkUserId } = req.body;
+
+    if (!clerkUserId) {
+      throw new ValidationError('Clerk user ID is required');
+    }
+
+    const user = await this.userService.syncFromClerk(clerkUserId);
+
+    res.status(200).json({
+      success: true,
+      message: 'User synced successfully from Clerk',
       data: user,
     });
   };

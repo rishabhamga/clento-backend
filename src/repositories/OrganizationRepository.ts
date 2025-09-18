@@ -277,13 +277,23 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
         return existing;
       }
 
-      // Create new organization
-      const orgData: CreateOrganization = {
+      // Create new organization with Clerk ID
+      const orgData = {
         name,
         slug: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        external_id: clerkOrgId,
+        timezone: 'UTC',
+        plan: 'free',
+        subscription_status: 'active',
+        monthly_campaign_limit: 10,
+        monthly_lead_limit: 100,
+        user_limit: 5,
+        onboarding_completed: false,
+        settings: {},
+        usage_stats: {}
       };
 
-      const organization = await this.create(orgData);
+      const organization = await this.create(orgData as any);
 
       // Add creator as owner
       await this.addMember({
@@ -304,12 +314,10 @@ export class OrganizationRepository extends BaseRepository<Organization, CreateO
    */
   async findByClerkOrgId(clerkOrgId: string): Promise<Organization | null> {
     try {
-      // Note: You'll need to add clerk_org_id field to your schema
-      // For now, we'll search by name as a fallback
       const { data, error } = await this.client
         .from(this.tableName)
         .select('*')
-        .eq('name', clerkOrgId) // Temporary - should be clerk_org_id field
+        .eq('external_id', clerkOrgId)
         .single();
 
       if (error && error.code !== 'PGRST116') {

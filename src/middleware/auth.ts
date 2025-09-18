@@ -3,6 +3,7 @@ import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node';
 import { UnauthorizedError, ForbiddenError } from '../errors/AppError';
 import { UserRepository } from '../repositories/UserRepository';
 import { OrganizationRepository } from '../repositories/OrganizationRepository';
+import { SyncService } from '../services/SyncService';
 import logger from '../utils/logger';
 import env from '../config/env';
 
@@ -45,35 +46,58 @@ declare global {
 /**
  * Middleware to verify authentication using Clerk
  */
-export const requireAuth = env.CLERK_SECRET_KEY
-  ? ClerkExpressRequireAuth({
+export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+  console.log("=== requireAuth middleware called ===");
+  console.log("CLERK_SECRET_KEY exists:", !!env.CLERK_SECRET_KEY);
+
+  if (env.CLERK_SECRET_KEY) {
+    console.log("Using Clerk authentication");
+    // Check if Authorization header exists
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No valid Authorization header found");
+      return next(new UnauthorizedError('Authentication required'));
+    }
+
+    // Use Clerk middleware for token verification
+    return ClerkExpressRequireAuth({
       onError: (error: any) => {
+        console.log("Clerk authentication error:", error);
         logger.error('Authentication error', { error });
-        throw new UnauthorizedError('Authentication required');
+        return next(new UnauthorizedError('Authentication required'));
       },
-    })
-  : (req: Request, res: Response, next: NextFunction) => {
-      logger.warn('Clerk authentication skipped - no secret key provided');
-      // Mock auth for development
-      req.auth = {
-        userId: 'dev-user-id',
-        orgId: 'dev-org-id',
-        getToken: () => Promise.resolve('dev-token'),
-      };
-      next();
+    })(req, res, next);
+  } else {
+    console.log("=== requireAuth middleware (development mode) ===");
+    logger.warn('Clerk authentication skipped - no secret key provided');
+    // Mock auth for development
+    req.auth = {
+      userId: 'dev-user-id',
+      orgId: 'dev-org-id',
+      getToken: () => Promise.resolve('dev-token'),
     };
+    console.log("Mock auth set:", req.auth);
+    next();
+  }
+};
 
 /**
- * Middleware to load user from database
+ * Middleware to load user from database with automatic sync
  */
 export const loadUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    console.log("=== loadUser middleware called ===");
+    console.log("req.auth:", req.auth);
+    console.log("env.CLERK_SECRET_KEY exists:", !!env.CLERK_SECRET_KEY);
+
     if (!req.auth || !req.auth.userId) {
+      console.log("No auth or userId found, returning UnauthorizedError");
       return next(new UnauthorizedError('Authentication required'));
     }
 
     // Skip database lookup in development mode
     if (!env.CLERK_SECRET_KEY) {
+      console.log("Using development mode - setting mock user data");
       // Use valid UUIDs for development
       req.userId = '550e8400-e29b-41d4-a716-446655440000';
       req.externalId = 'dev-user-id';
@@ -96,19 +120,30 @@ export const loadUser = async (req: Request, res: Response, next: NextFunction) 
         permissions: {},
         status: 'active',
       };
+      console.log("Development mode user set:", req.userId);
       return next();
     }
 
     // Get clerk user ID from auth
     const clerkUserId = req.auth.userId;
-    const userRepository = new UserRepository();
+    const syncService = new SyncService();
 
-    // Find user in database
-    const user = await userRepository.findByClerkId(clerkUserId);
+    // Ensure user is synced to database
+    let user;
+    try {
+      user = await syncService.syncUserToDatabase(clerkUserId);
+      logger.info('User synced successfully', { clerkUserId, userId: user.id });
+    } catch (syncError) {
+      logger.error('Error syncing user, attempting fallback', { error: syncError, clerkUserId });
 
-    if (!user) {
-      logger.warn('User not found in database', { clerkUserId });
-      return next(new UnauthorizedError('User not found'));
+      // Fallback: try to get existing user or create temporary one
+      try {
+        user = await syncService.getOrCreateUserByClerkId(clerkUserId);
+        logger.info('User fallback sync successful', { clerkUserId, userId: user.id });
+      } catch (fallbackError) {
+        logger.error('User sync fallback failed', { error: fallbackError, clerkUserId });
+        return next(new UnauthorizedError('User synchronization failed'));
+      }
     }
 
     // Attach user to request
@@ -130,7 +165,7 @@ export const loadUser = async (req: Request, res: Response, next: NextFunction) 
 };
 
 /**
- * Middleware to load organization context from header or query param
+ * Middleware to load organization context from header or query param with sync
  */
 export const loadOrganization = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -162,6 +197,38 @@ export const loadOrganization = async (req: Request, res: Response, next: NextFu
           permissions: {},
           status: defaultOrg.status,
         };
+      } else if (env.CLERK_SECRET_KEY && req.externalId) {
+        // If no organizations found and we have Clerk access, try to sync user's organizations
+        try {
+          const syncService = new SyncService();
+          const syncedOrgs = await syncService.syncUserOrganizations(req.externalId);
+
+          if (syncedOrgs.length > 0) {
+            const defaultOrg = syncedOrgs[0];
+            req.organizationId = defaultOrg.id;
+            req.organization = {
+              id: defaultOrg.id,
+              name: defaultOrg.name,
+              slug: defaultOrg.slug,
+              plan: defaultOrg.plan,
+              timezone: defaultOrg.timezone,
+            };
+            req.organizationMember = {
+              role: 'owner', // First synced org is typically owned by user
+              permissions: {},
+              status: 'active',
+            };
+            logger.info('Synced user organizations on demand', {
+              userId: req.userId,
+              orgCount: syncedOrgs.length
+            });
+          }
+        } catch (syncError) {
+          logger.warn('Failed to sync user organizations', {
+            error: syncError,
+            userId: req.userId
+          });
+        }
       }
       return next();
     }
