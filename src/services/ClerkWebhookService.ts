@@ -1,6 +1,7 @@
 import { Webhook } from 'svix';
 import { UserRepository } from '../repositories/UserRepository';
 import { OrganizationRepository } from '../repositories/OrganizationRepository';
+import { SyncService } from './SyncService';
 import { UserUpdateDto } from '../dto/users.dto';
 import logger from '../utils/logger';
 import env from '../config/env';
@@ -11,10 +12,12 @@ import env from '../config/env';
 export class ClerkWebhookService {
   private userRepository: UserRepository;
   private organizationRepository: OrganizationRepository;
+  private syncService: SyncService;
 
   constructor() {
     this.userRepository = new UserRepository();
     this.organizationRepository = new OrganizationRepository();
+    this.syncService = new SyncService();
   }
 
   /**
@@ -38,24 +41,16 @@ export class ClerkWebhookService {
    */
   async handleUserCreated(data: any): Promise<void> {
     try {
-      const { id, email_addresses, first_name, last_name } = data;
-      const primaryEmail = email_addresses.find((email: any) => email.id === data.primary_email_address_id);
+      const { id } = data;
 
-      if (!primaryEmail) {
-        logger.warn('No primary email found for user', { clerkId: id });
-        return;
-      }
+      // Use the comprehensive sync service to sync user and their organizations
+      const result = await this.syncService.fullUserSync(id);
 
-      const fullName = [first_name, last_name].filter(Boolean).join(' ');
-
-      // Create or update user in database
-      await this.userRepository.syncFromClerk(
-        id,
-        primaryEmail.email_address,
-        fullName || undefined
-      );
-
-      logger.info('User created from webhook', { clerkId: id, email: primaryEmail.email_address });
+      logger.info('User created from webhook', {
+        clerkId: id,
+        userId: result.user.id,
+        orgCount: result.organizations.length
+      });
     } catch (error) {
       logger.error('Error handling user.created webhook', { error, data });
       throw error;
@@ -67,36 +62,16 @@ export class ClerkWebhookService {
    */
   async handleUserUpdated(data: any): Promise<void> {
     try {
-      const { id, email_addresses, first_name, last_name } = data;
-      const primaryEmail = email_addresses.find((email: any) => email.id === data.primary_email_address_id);
+      const { id } = data;
 
-      if (!primaryEmail) {
-        logger.warn('No primary email found for user', { clerkId: id });
-        return;
-      }
+      // Use the comprehensive sync service to sync user and their organizations
+      const result = await this.syncService.fullUserSync(id);
 
-      const fullName = [first_name, last_name].filter(Boolean).join(' ');
-
-      // Update user in database
-      const user = await this.userRepository.findByClerkId(id);
-
-      if (user) {
-        await this.userRepository.update(user.id, {
-          email: primaryEmail.email_address,
-          full_name: fullName || null,
-        } as UserUpdateDto);
-
-        logger.info('User updated from webhook', { clerkId: id, email: primaryEmail.email_address });
-      } else {
-        // Create user if not found
-        await this.userRepository.createFromClerk(
-          id,
-          primaryEmail.email_address,
-          fullName || undefined
-        );
-
-        logger.info('User created from update webhook', { clerkId: id, email: primaryEmail.email_address });
-      }
+      logger.info('User updated from webhook', {
+        clerkId: id,
+        userId: result.user.id,
+        orgCount: result.organizations.length
+      });
     } catch (error) {
       logger.error('Error handling user.updated webhook', { error, data });
       throw error;
@@ -129,29 +104,17 @@ export class ClerkWebhookService {
    */
   async handleOrganizationCreated(data: any): Promise<void> {
     try {
-      const { id, name, created_by } = data;
+      const { id, created_by } = data;
 
       if (!created_by) {
         logger.warn('No creator found for organization', { clerkOrgId: id });
         return;
       }
 
-      // Find creator user
-      const creator = await this.userRepository.findByClerkId(created_by);
+      // Use the comprehensive sync service
+      await this.syncService.syncOrganizationToDatabase(id);
 
-      if (!creator) {
-        logger.warn('Creator user not found', { clerkUserId: created_by, clerkOrgId: id });
-        return;
-      }
-
-      // Create organization in database
-      await this.organizationRepository.syncFromClerk(
-        id,
-        name,
-        creator.id
-      );
-
-      logger.info('Organization created from webhook', { clerkOrgId: id, name });
+      logger.info('Organization created from webhook', { clerkOrgId: id });
     } catch (error) {
       logger.error('Error handling organization.created webhook', { error, data });
       throw error;
@@ -163,21 +126,12 @@ export class ClerkWebhookService {
    */
   async handleOrganizationUpdated(data: any): Promise<void> {
     try {
-      const { id, name } = data;
+      const { id } = data;
 
-      // Find organization by Clerk ID
-      const organization = await this.organizationRepository.findByClerkOrgId(id);
+      // Use the comprehensive sync service
+      await this.syncService.syncOrganizationToDatabase(id);
 
-      if (organization) {
-        // Update organization
-        await this.organizationRepository.update(organization.id, {
-          name,
-        });
-
-        logger.info('Organization updated from webhook', { clerkOrgId: id, name });
-      } else {
-        logger.warn('Organization not found for update', { clerkOrgId: id });
-      }
+      logger.info('Organization updated from webhook', { clerkOrgId: id });
     } catch (error) {
       logger.error('Error handling organization.updated webhook', { error, data });
       throw error;
@@ -217,38 +171,14 @@ export class ClerkWebhookService {
         return;
       }
 
-      // Find organization
-      const org = await this.organizationRepository.findByClerkOrgId(organization.id);
-      if (!org) {
-        logger.warn('Organization not found', { clerkOrgId: organization.id });
-        return;
-      }
+      // Use the comprehensive sync service
+      await this.syncService.syncOrganizationMembership(
+        organization.id,
+        public_user_data.user_id,
+        role
+      );
 
-      // Find user
-      const user = await this.userRepository.findByClerkId(public_user_data.user_id);
-      if (!user) {
-        logger.warn('User not found', { clerkUserId: public_user_data.user_id });
-        return;
-      }
-
-      // Check if already a member
-      const isMember = await this.organizationRepository.isMember(org.id, user.id);
-      if (isMember) {
-        logger.info('User is already a member of organization', {
-          userId: user.id,
-          orgId: org.id,
-        });
-        return;
-      }
-
-      // Add member to organization
-      await this.organizationRepository.addMember({
-        organization_id: org.id,
-        user_id: user.id,
-        role: role.toLowerCase()
-      });
-
-      logger.info('Organization member added from webhook', {
+      logger.info('Organization membership created from webhook', {
         clerkOrgId: organization.id,
         clerkUserId: public_user_data.user_id,
         role,
@@ -271,26 +201,14 @@ export class ClerkWebhookService {
         return;
       }
 
-      // Find organization
-      const org = await this.organizationRepository.findByClerkOrgId(organization.id);
-      if (!org) {
-        logger.warn('Organization not found', { clerkOrgId: organization.id });
-        return;
-      }
+      // Use the comprehensive sync service
+      await this.syncService.syncOrganizationMembership(
+        organization.id,
+        public_user_data.user_id,
+        role
+      );
 
-      // Find user
-      const user = await this.userRepository.findByClerkId(public_user_data.user_id);
-      if (!user) {
-        logger.warn('User not found', { clerkUserId: public_user_data.user_id });
-        return;
-      }
-
-      // Update member role
-      await this.organizationRepository.updateMember(org.id, user.id, {
-        role: role.toLowerCase()
-      });
-
-      logger.info('Organization member role updated from webhook', {
+      logger.info('Organization membership updated from webhook', {
         clerkOrgId: organization.id,
         clerkUserId: public_user_data.user_id,
         role,

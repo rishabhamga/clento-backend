@@ -1,14 +1,18 @@
 import { UserRepository } from '../repositories/UserRepository';
+import { SyncService } from './SyncService';
 import { CreateUserDtoType, UpdateUserDtoType, UserInsertDto, UserUpdateDto } from '../dto/users.dto';
+import logger from '../utils/logger';
 
 /**
  * Service for user-related operations
  */
 export class UserService {
   private userRepository: UserRepository;
+  private syncService: SyncService;
 
   constructor() {
     this.userRepository = new UserRepository();
+    this.syncService = new SyncService();
   }
 
   /**
@@ -20,8 +24,11 @@ export class UserService {
 
   /**
    * Create or sync user from Clerk
+   * @deprecated Use syncService.syncUserToDatabase instead
    */
   async syncUser(userData: CreateUserDtoType) {
+    logger.warn('syncUser method is deprecated, use SyncService.syncUserToDatabase instead');
+
     // Check if user already exists
     const existingUser = await this.userRepository.findByClerkId(userData.externalId);
 
@@ -46,22 +53,40 @@ export class UserService {
 
   /**
    * Sync user from Clerk by Clerk user ID
+   * @deprecated Use syncService.syncUserToDatabase instead
    */
   async syncFromClerk(clerkUserId: string) {
-    // This would typically fetch user data from Clerk API
-    // For now, we'll just return the existing user or create a placeholder
-    const existingUser = await this.userRepository.findByClerkId(clerkUserId);
+    logger.warn('syncFromClerk method is deprecated, use SyncService.syncUserToDatabase instead');
 
-    if (existingUser) {
-      return existingUser;
-    }
+    // Use the new sync service
+    return this.syncService.syncUserToDatabase(clerkUserId);
+  }
 
-    // If user doesn't exist, create a placeholder
-    // In a real implementation, you'd fetch from Clerk API
-    return this.userRepository.createFromClerk(
-      clerkUserId,
-      `user-${clerkUserId}@example.com`,
-      'Synced User'
-    );
+  /**
+   * Get or create user by Clerk ID with comprehensive sync
+   */
+  async getOrCreateUserByClerkId(clerkUserId: string) {
+    return this.syncService.getOrCreateUserByClerkId(clerkUserId);
+  }
+
+  /**
+   * Sync user to database with full error handling
+   */
+  async syncUserToDatabase(clerkUserId: string) {
+    return this.syncService.syncUserToDatabase(clerkUserId);
+  }
+
+  /**
+   * Sync user's organizations
+   */
+  async syncUserOrganizations(clerkUserId: string) {
+    return this.syncService.syncUserOrganizations(clerkUserId);
+  }
+
+  /**
+   * Perform full user sync (user + organizations + memberships)
+   */
+  async fullUserSync(clerkUserId: string) {
+    return this.syncService.fullUserSync(clerkUserId);
   }
 }

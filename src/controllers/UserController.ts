@@ -26,8 +26,8 @@ export class UserController {
       console.log("req.user:", req.user);
 
       if (!req.userId) {
-        console.log('User ID not found in request');
-        throw new ValidationError('User ID not found in request');
+        console.log('User ID not found in request - authentication failed');
+        throw new ValidationError('Authentication required');
       }
 
       console.log("Calling userService.getUserById with:", req.userId);
