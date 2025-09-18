@@ -13,11 +13,11 @@ CREATE TABLE public.activities (
   metadata jsonb DEFAULT '{}'::jsonb,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT activities_pkey PRIMARY KEY (id),
-  CONSTRAINT activities_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.campaigns(id),
-  CONSTRAINT activities_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.connected_accounts(id),
-  CONSTRAINT activities_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
+  CONSTRAINT activities_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT activities_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
-  CONSTRAINT activities_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
+  CONSTRAINT activities_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.campaigns(id),
+  CONSTRAINT activities_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
+  CONSTRAINT activities_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.connected_accounts(id)
 );
 CREATE TABLE public.audit_logs (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -70,10 +70,10 @@ CREATE TABLE public.campaigns (
   started_at timestamp with time zone,
   completed_at timestamp with time zone,
   CONSTRAINT campaigns_pkey PRIMARY KEY (id),
+  CONSTRAINT campaigns_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT campaigns_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES public.users(id),
-  CONSTRAINT campaigns_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.connected_accounts(id),
   CONSTRAINT campaigns_lead_list_id_fkey FOREIGN KEY (lead_list_id) REFERENCES public.lead_lists(id),
-  CONSTRAINT campaigns_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
+  CONSTRAINT campaigns_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.connected_accounts(id)
 );
 CREATE TABLE public.connected_accounts (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -91,8 +91,8 @@ CREATE TABLE public.connected_accounts (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT connected_accounts_pkey PRIMARY KEY (id),
-  CONSTRAINT connected_accounts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-  CONSTRAINT connected_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+  CONSTRAINT connected_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT connected_accounts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
 );
 CREATE TABLE public.lead_lists (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -118,9 +118,10 @@ CREATE TABLE public.lead_lists (
   filters jsonb DEFAULT '{}'::jsonb,
   metadata jsonb DEFAULT '{}'::jsonb,
   stats jsonb DEFAULT '{}'::jsonb,
+  connected_account_id uuid NOT NULL,
   CONSTRAINT lead_lists_pkey PRIMARY KEY (id),
-  CONSTRAINT lead_lists_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES public.users(id),
-  CONSTRAINT lead_lists_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
+  CONSTRAINT lead_lists_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
+  CONSTRAINT lead_lists_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES public.users(id)
 );
 CREATE TABLE public.leads (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -172,7 +173,10 @@ CREATE TABLE public.organizations (
   settings jsonb DEFAULT '{}'::jsonb,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT organizations_pkey PRIMARY KEY (id)
+  created_by_auth_id uuid,
+  external_id text UNIQUE,
+  CONSTRAINT organizations_pkey PRIMARY KEY (id),
+  CONSTRAINT organizations_created_by_auth_id_fkey FOREIGN KEY (created_by_auth_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.users (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -182,5 +186,7 @@ CREATE TABLE public.users (
   avatar_url text,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT users_pkey PRIMARY KEY (id)
+  auth_user_id uuid,
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
 );

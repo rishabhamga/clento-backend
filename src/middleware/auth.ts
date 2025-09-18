@@ -50,35 +50,21 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
   console.log("=== requireAuth middleware called ===");
   console.log("CLERK_SECRET_KEY exists:", !!env.CLERK_SECRET_KEY);
 
-  if (env.CLERK_SECRET_KEY) {
-    console.log("Using Clerk authentication");
-    // Check if Authorization header exists
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log("No valid Authorization header found");
-      return next(new UnauthorizedError('Authentication required'));
-    }
-
-    // Use Clerk middleware for token verification
-    return ClerkExpressRequireAuth({
-      onError: (error: any) => {
-        console.log("Clerk authentication error:", error);
-        logger.error('Authentication error', { error });
-        return next(new UnauthorizedError('Authentication required'));
-      },
-    })(req, res, next);
-  } else {
-    console.log("=== requireAuth middleware (development mode) ===");
-    logger.warn('Clerk authentication skipped - no secret key provided');
-    // Mock auth for development
-    req.auth = {
-      userId: 'dev-user-id',
-      orgId: 'dev-org-id',
-      getToken: () => Promise.resolve('dev-token'),
-    };
-    console.log("Mock auth set:", req.auth);
-    next();
+  // Check if Authorization header exists
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log("No valid Authorization header found");
+    return next(new UnauthorizedError('Authentication required'));
   }
+
+  // Use Clerk middleware for token verification
+  return ClerkExpressRequireAuth({
+    onError: (error: any) => {
+      console.log("Clerk authentication error:", error);
+      logger.error('Authentication error', { error });
+      return next(new UnauthorizedError('Authentication required'));
+    },
+  })(req, res, next);
 };
 
 /**
@@ -95,34 +81,6 @@ export const loadUser = async (req: Request, res: Response, next: NextFunction) 
       return next(new UnauthorizedError('Authentication required'));
     }
 
-    // Skip database lookup in development mode
-    if (!env.CLERK_SECRET_KEY) {
-      console.log("Using development mode - setting mock user data");
-      // Use valid UUIDs for development
-      req.userId = '550e8400-e29b-41d4-a716-446655440000';
-      req.externalId = 'dev-user-id';
-      req.user = {
-        id: '550e8400-e29b-41d4-a716-446655440000',
-        external_id: 'dev-user-id',
-        email: 'dev@example.com',
-        full_name: 'Development User',
-      };
-      req.organizationId = '550e8400-e29b-41d4-a716-446655440001';
-      req.organization = {
-        id: '550e8400-e29b-41d4-a716-446655440001',
-        name: 'Development Organization',
-        slug: 'dev-org',
-        plan: 'free',
-        timezone: 'UTC',
-      };
-      req.organizationMember = {
-        role: 'owner',
-        permissions: {},
-        status: 'active',
-      };
-      console.log("Development mode user set:", req.userId);
-      return next();
-    }
 
     // Get clerk user ID from auth
     const clerkUserId = req.auth.userId;

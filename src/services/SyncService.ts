@@ -2,6 +2,7 @@ import { UserRepository } from '../repositories/UserRepository';
 import { OrganizationRepository } from '../repositories/OrganizationRepository';
 import { OrganizationMemberRepository } from '../repositories/OrganizationMemberRepository';
 import { ClerkApiService } from './ClerkApiService';
+import { SupabaseAuthService } from './SupabaseAuthService';
 import { DatabaseError, NotFoundError } from '../errors/AppError';
 import logger from '../utils/logger';
 
@@ -13,12 +14,14 @@ export class SyncService {
   private organizationRepository: OrganizationRepository;
   private memberRepository: OrganizationMemberRepository;
   private clerkApiService: ClerkApiService;
+  private supabaseAuthService: SupabaseAuthService;
 
   constructor() {
     this.userRepository = new UserRepository();
     this.organizationRepository = new OrganizationRepository();
     this.memberRepository = new OrganizationMemberRepository();
     this.clerkApiService = new ClerkApiService();
+    this.supabaseAuthService = new SupabaseAuthService();
   }
 
   /**
@@ -194,6 +197,9 @@ export class SyncService {
 
       const user = await this.userRepository.create(userData as any);
 
+      // Also sync to Supabase auth schema for RLS integration
+      await this.supabaseAuthService.syncUserToAuth(clerkUserId, userData);
+
       logger.info('Created user from Clerk', {
         clerkUserId,
         userId: user.id,
@@ -244,11 +250,16 @@ export class SyncService {
       }
 
       // Update user
-      const updatedUser = await this.userRepository.update(existingUser.id, {
+      const updateData = {
         email: primaryEmail.emailAddress,
         full_name: fullName,
         avatar_url: clerkUser.imageUrl || null,
-      });
+      };
+
+      const updatedUser = await this.userRepository.update(existingUser.id, updateData);
+
+      // Also update in Supabase auth schema
+      await this.supabaseAuthService.updateUserAuth(clerkUserId, updateData);
 
       logger.info('Updated user from Clerk', {
         clerkUserId,

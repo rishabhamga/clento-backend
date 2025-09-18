@@ -11,6 +11,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@clerk/backend": "^2.14.0",
     "@clerk/clerk-sdk-node": "^4.13.4",
     "@google-cloud/storage": "^7.17.1",
     "@supabase/supabase-js": "^2.39.3",
