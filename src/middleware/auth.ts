@@ -3,7 +3,6 @@ import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node';
 import { UnauthorizedError, ForbiddenError } from '../errors/AppError';
 import { UserRepository } from '../repositories/UserRepository';
 import { OrganizationRepository } from '../repositories/OrganizationRepository';
-import { SyncService } from '../services/SyncService';
 import logger from '../utils/logger';
 import env from '../config/env';
 
@@ -84,24 +83,12 @@ export const loadUser = async (req: Request, res: Response, next: NextFunction) 
 
     // Get clerk user ID from auth
     const clerkUserId = req.auth.userId;
-    const syncService = new SyncService();
+    const userRepository = new UserRepository();
 
-    // Ensure user is synced to database
-    let user;
-    try {
-      user = await syncService.syncUserToDatabase(clerkUserId);
-      logger.info('User synced successfully', { clerkUserId, userId: user.id });
-    } catch (syncError) {
-      logger.error('Error syncing user, attempting fallback', { error: syncError, clerkUserId });
+    const user = await userRepository.findByClerkId(clerkUserId);
 
-      // Fallback: try to get existing user or create temporary one
-      try {
-        user = await syncService.getOrCreateUserByClerkId(clerkUserId);
-        logger.info('User fallback sync successful', { clerkUserId, userId: user.id });
-      } catch (fallbackError) {
-        logger.error('User sync fallback failed', { error: fallbackError, clerkUserId });
-        return next(new UnauthorizedError('User synchronization failed'));
-      }
+    if(!user){
+        throw new UnauthorizedError('User not found');
     }
 
     // Attach user to request
@@ -155,38 +142,6 @@ export const loadOrganization = async (req: Request, res: Response, next: NextFu
           permissions: {},
           status: defaultOrg.status,
         };
-      } else if (env.CLERK_SECRET_KEY && req.externalId) {
-        // If no organizations found and we have Clerk access, try to sync user's organizations
-        try {
-          const syncService = new SyncService();
-          const syncedOrgs = await syncService.syncUserOrganizations(req.externalId);
-
-          if (syncedOrgs.length > 0) {
-            const defaultOrg = syncedOrgs[0];
-            req.organizationId = defaultOrg.id;
-            req.organization = {
-              id: defaultOrg.id,
-              name: defaultOrg.name,
-              slug: defaultOrg.slug,
-              plan: defaultOrg.plan,
-              timezone: defaultOrg.timezone,
-            };
-            req.organizationMember = {
-              role: 'owner', // First synced org is typically owned by user
-              permissions: {},
-              status: 'active',
-            };
-            logger.info('Synced user organizations on demand', {
-              userId: req.userId,
-              orgCount: syncedOrgs.length
-            });
-          }
-        } catch (syncError) {
-          logger.warn('Failed to sync user organizations', {
-            error: syncError,
-            userId: req.userId
-          });
-        }
       }
       return next();
     }

@@ -87,24 +87,4 @@ export class UserController {
       data: user,
     });
   };
-
-  /**
-   * Force sync user from Clerk (manual sync)
-   * @route POST /api/users/sync-from-clerk
-   */
-  syncFromClerk = async (req: Request, res: Response) => {
-    const { clerkUserId } = req.body;
-
-    if (!clerkUserId) {
-      throw new ValidationError('Clerk user ID is required');
-    }
-
-    const user = await this.userService.syncFromClerk(clerkUserId);
-
-    res.status(200).json({
-      success: true,
-      message: 'User synced successfully from Clerk',
-      data: user,
-    });
-  };
 }

@@ -120,34 +120,4 @@ router.post('/sync', userController.syncUser);
  */
 router.patch('/me', requireAuth, loadUser, userController.updateProfile);
 
-/**
- * @swagger
- * /api/users/sync-from-clerk:
- *   post:
- *     summary: Force sync user from Clerk
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - clerkUserId
- *             properties:
- *               clerkUserId:
- *                 type: string
- *                 description: Clerk user ID to sync
- *     responses:
- *       200:
- *         description: User synced successfully
- *       400:
- *         description: Validation error
- *       401:
- *         description: Unauthorized
- */
-router.post('/sync-from-clerk', requireAuth, loadUser, userController.syncFromClerk);
-
 export default router;
