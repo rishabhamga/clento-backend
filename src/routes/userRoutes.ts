@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/UserController';
-import { requireAuth, loadUser } from '../middleware/auth';
+import { loadUser, requireAuth, skipAuth } from '../middleware/auth';
 
 const router = Router();
 const userController = new UserController();
@@ -55,7 +55,7 @@ const userController = new UserController();
  *       404:
  *         description: User not found
  */
-router.get('/me', requireAuth, loadUser, userController.getMe);
+router.get('/me', userController.getMe);
 
 /**
  * @swagger
@@ -88,7 +88,7 @@ router.get('/me', requireAuth, loadUser, userController.getMe);
  *       400:
  *         description: Validation error
  */
-router.post('/sync', userController.syncUser);
+router.post('/sync', skipAuth, userController.syncUser);
 
 /**
  * @swagger
@@ -118,36 +118,6 @@ router.post('/sync', userController.syncUser);
  *       404:
  *         description: User not found
  */
-router.patch('/me', requireAuth, loadUser, userController.updateProfile);
-
-/**
- * @swagger
- * /api/users/sync-from-clerk:
- *   post:
- *     summary: Force sync user from Clerk
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - clerkUserId
- *             properties:
- *               clerkUserId:
- *                 type: string
- *                 description: Clerk user ID to sync
- *     responses:
- *       200:
- *         description: User synced successfully
- *       400:
- *         description: Validation error
- *       401:
- *         description: Unauthorized
- */
-router.post('/sync-from-clerk', requireAuth, loadUser, userController.syncFromClerk);
+router.patch('/me', userController.updateProfile);
 
 export default router;

@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { OrganizationController } from '../controllers/OrganizationController';
-import { requireAuth, loadUser, loadOrganization, requireOrganization, requireOrganizationAdmin } from '../middleware/auth';
+import { requireOrganization, requireOrganizationAdmin } from '../middleware/auth';
 import { validateBody, validateQuery, validateParams, commonParams } from '../middleware/validation';
-import { 
-  CreateOrganizationDto, 
-  UpdateOrganizationDto, 
+import {
+  CreateOrganizationDto,
+  UpdateOrganizationDto,
   OrganizationQueryDto,
   AddOrganizationMemberDto,
   UpdateOrganizationMemberDto,
@@ -15,9 +15,7 @@ import {
 const router = Router();
 const organizationController = new OrganizationController();
 
-// Apply authentication middleware to all routes
-router.use(requireAuth);
-router.use(loadUser);
+// Authentication middleware is applied globally in routes/index.ts
 
 /**
  * @swagger
@@ -76,7 +74,7 @@ router.use(loadUser);
  *     summary: Get user's organizations
  *     tags: [Organizations]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: List of user's organizations
@@ -108,7 +106,7 @@ router.get('/', organizationController.getUserOrganizations);
  *     summary: Create a new organization
  *     tags: [Organizations]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -153,7 +151,7 @@ router.get('/', organizationController.getUserOrganizations);
  *                 data:
  *                   $ref: '#/components/schemas/Organization'
  */
-router.post('/', 
+router.post('/',
   validateBody(CreateOrganizationDto),
   organizationController.createOrganization
 );
@@ -165,7 +163,7 @@ router.post('/',
  *     summary: Get organization by ID
  *     tags: [Organizations]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -198,7 +196,7 @@ router.get('/:id',
  *     summary: Update organization
  *     tags: [Organizations]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -252,7 +250,7 @@ router.put('/:id',
  *     summary: Delete organization
  *     tags: [Organizations]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -276,7 +274,7 @@ router.delete('/:id',
  *     summary: Get organization members
  *     tags: [Organizations]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -324,7 +322,7 @@ router.get('/:id/members',
  *     summary: Add member to organization
  *     tags: [Organizations]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -365,7 +363,7 @@ router.post('/:id/members',
  *     summary: Update organization member
  *     tags: [Organizations]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -409,7 +407,7 @@ router.put('/:id/members/:userId',
  *     summary: Remove organization member
  *     tags: [Organizations]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -439,7 +437,7 @@ router.delete('/:id/members/:userId',
  *     summary: Get organization usage statistics
  *     tags: [Organizations]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

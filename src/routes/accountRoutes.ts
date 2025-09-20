@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { ConnectedAccountController } from '../controllers/ConnectedAccountController';
-import { requireAuth, loadUser, loadOrganization, requireOrganization } from '../middleware/auth';
+import { skipAuth, requireOrganization, defaultAuth } from '../middleware/auth';
 import { validateBody, validateQuery, validateParams, commonParams } from '../middleware/validation';
 import {
   CreateConnectedAccountDto,
@@ -16,10 +16,11 @@ import {
 const router = Router();
 const accountController = new ConnectedAccountController();
 
-// Apply authentication middleware to all routes
-// TODO: Re-enable authentication when ready
-// router.use(requireAuth);
-// router.use(loadUser);
+// Webhook route that skips authentication
+router.post('/webhook', skipAuth, accountController.handleWebhook);
+
+// Apply authentication middleware to all other account routes
+router.use(defaultAuth);
 
 /**
  * @swagger
@@ -85,7 +86,7 @@ const accountController = new ConnectedAccountController();
  *     summary: Get user's connected accounts
  *     tags: [Connected Accounts]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: provider
@@ -124,7 +125,7 @@ router.get('/',
  *     summary: Get user's pending accounts (for debugging)
  *     tags: [Connected Accounts]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: provider
@@ -158,7 +159,7 @@ router.get('/pending',
  *     summary: Create hosted authentication link for connecting accounts
  *     tags: [Connected Accounts]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -239,7 +240,6 @@ router.post('/connect',
  *       200:
  *         description: Webhook processed successfully
  */
-router.post('/webhook', accountController.handleWebhook);
 
 /**
  * @swagger
@@ -247,6 +247,8 @@ router.post('/webhook', accountController.handleWebhook);
  *   post:
  *     summary: Manually sync profile data for an account
  *     tags: [Connected Accounts]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -281,7 +283,7 @@ router.post('/:id/sync-profile',
  *     summary: Get connected account by ID
  *     tags: [Connected Accounts]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -314,7 +316,7 @@ router.get('/:id',
  *     summary: Update connected account
  *     tags: [Connected Accounts]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -352,7 +354,7 @@ router.put('/:id',
  *     summary: Disconnect account
  *     tags: [Connected Accounts]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -376,7 +378,7 @@ router.delete('/:id',
  *     summary: Sync account with Unipile
  *     tags: [Connected Accounts]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -410,7 +412,7 @@ router.post('/:id/sync',
  *     summary: Get account usage statistics
  *     tags: [Connected Accounts]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

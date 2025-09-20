@@ -77,10 +77,10 @@ export class OrganizationController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in updateOrganization controller', { 
-        error, 
-        organizationId: req.params.id, 
-        userId: req.userId 
+      logger.error('Error in updateOrganization controller', {
+        error,
+        organizationId: req.params.id,
+        userId: req.userId
       });
       next(error);
     }
@@ -103,10 +103,10 @@ export class OrganizationController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in deleteOrganization controller', { 
-        error, 
-        organizationId: req.params.id, 
-        userId: req.userId 
+      logger.error('Error in deleteOrganization controller', {
+        error,
+        organizationId: req.params.id,
+        userId: req.userId
       });
       next(error);
     }
@@ -146,9 +146,9 @@ export class OrganizationController {
       const { page = 1, limit = 20 } = req.query as any;
 
       const result = await this.organizationService.getOrganizationMembers(
-        id, 
-        userId, 
-        parseInt(page), 
+        id,
+        userId,
+        parseInt(page),
         parseInt(limit)
       );
 
@@ -165,10 +165,10 @@ export class OrganizationController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in getOrganizationMembers controller', { 
-        error, 
-        organizationId: req.params.id, 
-        userId: req.userId 
+      logger.error('Error in getOrganizationMembers controller', {
+        error,
+        organizationId: req.params.id,
+        userId: req.userId
       });
       next(error);
     }
@@ -193,11 +193,11 @@ export class OrganizationController {
 
       res.status(201).json(response);
     } catch (error) {
-      logger.error('Error in addOrganizationMember controller', { 
-        error, 
-        organizationId: req.params.id, 
+      logger.error('Error in addOrganizationMember controller', {
+        error,
+        organizationId: req.params.id,
         userId: req.userId,
-        memberToAdd: req.body.user_id 
+        memberToAdd: req.body.user_id
       });
       next(error);
     }
@@ -222,11 +222,11 @@ export class OrganizationController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in updateOrganizationMember controller', { 
-        error, 
-        organizationId: req.params.id, 
+      logger.error('Error in updateOrganizationMember controller', {
+        error,
+        organizationId: req.params.id,
         userId: req.userId,
-        memberToUpdate: req.params.userId 
+        memberToUpdate: req.params.userId
       });
       next(error);
     }
@@ -249,11 +249,11 @@ export class OrganizationController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in removeOrganizationMember controller', { 
-        error, 
-        organizationId: req.params.id, 
+      logger.error('Error in removeOrganizationMember controller', {
+        error,
+        organizationId: req.params.id,
         userId: req.userId,
-        memberToRemove: req.params.userId 
+        memberToRemove: req.params.userId
       });
       next(error);
     }
@@ -277,10 +277,10 @@ export class OrganizationController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in getOrganizationUsage controller', { 
-        error, 
-        organizationId: req.params.id, 
-        userId: req.userId 
+      logger.error('Error in getOrganizationUsage controller', {
+        error,
+        organizationId: req.params.id,
+        userId: req.userId
       });
       next(error);
     }

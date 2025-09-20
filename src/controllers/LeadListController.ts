@@ -72,7 +72,7 @@ export class LeadListController {
   getLeadLists = async (req: Request, res: Response, next: NextFunction) => {
     try {
       // TODO: TEMPORARY - Mock values for development (authentication disabled)
-      const organizationId = req.organizationId || '550e8400-e29b-41d4-a716-446655440001';
+      const organizationId = req.organizationId!;
       const withStats = req.query.with_stats === 'true';
 
       let result;
@@ -101,7 +101,7 @@ export class LeadListController {
     try {
       const { id } = req.params;
       // TODO: TEMPORARY - Mock values for development (authentication disabled)
-      const organizationId = req.organizationId || '550e8400-e29b-41d4-a716-446655440001';
+      const organizationId = req.organizationId;
 
       const leadList = await this.leadListService.getLeadListDataById(id, organizationId);
 
@@ -172,10 +172,6 @@ export class LeadListController {
         throw new BadRequestError('CSV file is required');
       }
 
-      // TODO: TEMPORARY - Mock values for development (authentication disabled)
-      req.organizationId = '550e8400-e29b-41d4-a716-446655440001';
-      req.userId = '550e8400-e29b-41d4-a716-446655440000';
-
       // Validate file size
       CsvService.validateFileSize(req.file.size);
 
@@ -226,8 +222,9 @@ export class LeadListController {
   publishLeadList = async (req: Request, res: Response, next: NextFunction) => {
     try {
       // TODO: TEMPORARY - Mock values for development (authentication disabled)
-      const organizationId = req.organizationId || '550e8400-e29b-41d4-a716-446655440001';
-      const userId = req.userId || '550e8400-e29b-41d4-a716-446655440000';
+      const organizationId = req.organizationId;
+      const userId = req.userId;
+      
 
       const result = await this.leadListService.publishLeadList(
         req.body,

@@ -19,15 +19,15 @@ export class ConnectedAccountController {
   createHostedAuthLink = async (req: Request, res: Response, next: NextFunction) => {
     try {
       logger.info('=== Backend Controller: createHostedAuthLink START ===');
-      
+
       // Mock user and organization for development
-      const userId = req.userId || '550e8400-e29b-41d4-a716-446655440000';
-      const organizationId = req.organizationId || '550e8400-e29b-41d4-a716-446655440001';
+      const userId = req.userId!;
+      const organizationId = req.organizationId!;
       const { provider, success_redirect_url, failure_redirect_url, notify_url } = req.body;
 
-      logger.info('Request details', { 
-        provider, 
-        userId, 
+      logger.info('Request details', {
+        provider,
+        userId,
         organizationId,
         success_redirect_url,
         failure_redirect_url,
@@ -39,7 +39,7 @@ export class ConnectedAccountController {
       });
 
       logger.info('Calling ConnectedAccountService.createHostedAuthLink');
-      
+
       // Use the actual Unipile service
       const result = await this.connectedAccountService.createHostedAuthLink({
         userId,
@@ -50,9 +50,9 @@ export class ConnectedAccountController {
         notifyUrl: notify_url,
       });
 
-      logger.info('Service call successful', { 
+      logger.info('Service call successful', {
         resultUrl: result.url,
-        pendingAccountId: result.pendingAccountId 
+        pendingAccountId: result.pendingAccountId
       });
 
       const response: ApiResponse = {
@@ -68,7 +68,7 @@ export class ConnectedAccountController {
       logger.info('=== Backend Controller: createHostedAuthLink SUCCESS ===', { response });
       res.status(201).json(response);
     } catch (error) {
-      logger.error('=== Backend Controller: createHostedAuthLink ERROR ===', { 
+      logger.error('=== Backend Controller: createHostedAuthLink ERROR ===', {
         error: error instanceof Error ? {
           name: error.name,
           message: error.message,
@@ -86,16 +86,15 @@ export class ConnectedAccountController {
    */
   getUserAccounts = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // Mock user and organization for development
-      const userId = req.userId || '550e8400-e29b-41d4-a716-446655440000';
-      const organizationId = req.organizationId || '550e8400-e29b-41d4-a716-446655440001';
+      const userId = req.userId;
+      const organizationId = req.organizationId;
       const { provider } = req.query;
 
       logger.info('Getting user accounts', { userId, organizationId, provider });
 
       // Get actual accounts from the service
       const accounts = await this.connectedAccountService.getUserAccounts(
-        userId,
+        userId!,
         organizationId,
         provider as string
       );
@@ -121,8 +120,8 @@ export class ConnectedAccountController {
   getPendingAccounts = async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Mock user and organization for development
-      const userId = req.userId || '550e8400-e29b-41d4-a716-446655440000';
-      const organizationId = req.organizationId || '550e8400-e29b-41d4-a716-446655440001';
+      const userId = req.userId!;
+      const organizationId = req.organizationId!;
       const { provider } = req.query;
 
       logger.info('Getting pending accounts', { userId, organizationId, provider });
@@ -178,10 +177,10 @@ export class ConnectedAccountController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in getOrganizationAccounts controller', { 
-        error, 
-        organizationId: req.organizationId, 
-        userId: req.userId 
+      logger.error('Error in getOrganizationAccounts controller', {
+        error,
+        organizationId: req.organizationId,
+        userId: req.userId
       });
       next(error);
     }
@@ -204,10 +203,10 @@ export class ConnectedAccountController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in getAccount controller', { 
-        error, 
-        accountId: req.params.id, 
-        userId: req.userId 
+      logger.error('Error in getAccount controller', {
+        error,
+        accountId: req.params.id,
+        userId: req.userId
       });
       next(error);
     }
@@ -232,10 +231,10 @@ export class ConnectedAccountController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in updateAccount controller', { 
-        error, 
-        accountId: req.params.id, 
-        userId: req.userId 
+      logger.error('Error in updateAccount controller', {
+        error,
+        accountId: req.params.id,
+        userId: req.userId
       });
       next(error);
     }
@@ -247,7 +246,7 @@ export class ConnectedAccountController {
   disconnectAccount = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const userId = req.userId || 'mock-user-id';
+      const userId = req.userId;
 
       // Mock disconnect for development - just return success
       logger.info('Mock disconnect account', { accountId: id, userId });
@@ -259,10 +258,10 @@ export class ConnectedAccountController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in disconnectAccount controller', { 
-        error, 
-        accountId: req.params.id, 
-        userId: req.userId 
+      logger.error('Error in disconnectAccount controller', {
+        error,
+        accountId: req.params.id,
+        userId: req.userId
       });
       next(error);
     }
@@ -286,10 +285,10 @@ export class ConnectedAccountController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in syncAccount controller', { 
-        error, 
-        accountId: req.params.id, 
-        userId: req.userId 
+      logger.error('Error in syncAccount controller', {
+        error,
+        accountId: req.params.id,
+        userId: req.userId
       });
       next(error);
     }
@@ -313,10 +312,10 @@ export class ConnectedAccountController {
 
       res.json(response);
     } catch (error) {
-      logger.error('Error in getAccountUsage controller', { 
-        error, 
-        accountId: req.params.id, 
-        userId: req.userId 
+      logger.error('Error in getAccountUsage controller', {
+        error,
+        accountId: req.params.id,
+        userId: req.userId
       });
       next(error);
     }
@@ -331,8 +330,8 @@ export class ConnectedAccountController {
   syncAccountProfile = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const userId = req.user?.id || '550e8400-e29b-41d4-a716-446655440000'; // Mock user ID for development
-      
+      const userId = req.user?.id!; // Mock user ID for development
+
       logger.info('=== Manual profile sync requested ===', { accountId: id, userId });
 
       const updatedAccount = await this.connectedAccountService.syncAccountProfile(id, userId);
@@ -353,8 +352,8 @@ export class ConnectedAccountController {
   handleWebhook = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const webhookData = req.body;
-      
-      logger.info('=== Received Unipile webhook ===', { 
+
+      logger.info('=== Received Unipile webhook ===', {
         fullPayload: webhookData,
         status: webhookData.status,
         accountId: webhookData.account_id || webhookData.accountId,
@@ -377,9 +376,9 @@ export class ConnectedAccountController {
           await this.handleAccountError(webhookData);
           break;
         default:
-          logger.warn('Unknown webhook status', { 
+          logger.warn('Unknown webhook status', {
             status: webhookData.status,
-            fullPayload: webhookData 
+            fullPayload: webhookData
           });
       }
 
@@ -402,7 +401,7 @@ export class ConnectedAccountController {
     try {
       // Extract pending account ID from webhook data (should be in the 'name' field)
       const pendingAccountId = webhookData.name;
-      
+
       if (!pendingAccountId) {
         logger.error('No pending account ID in webhook data', { webhookData });
         return;
@@ -414,9 +413,9 @@ export class ConnectedAccountController {
         accountData: webhookData,
       });
 
-      logger.info('Account connection handled successfully', { 
+      logger.info('Account connection handled successfully', {
         pendingAccountId,
-        unipileAccountId: webhookData.account_id 
+        unipileAccountId: webhookData.account_id
       });
     } catch (error) {
       logger.error('Error handling account connected webhook', { error, webhookData });

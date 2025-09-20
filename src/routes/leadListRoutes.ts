@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { LeadListController } from '../controllers/LeadListController';
-import { requireAuth, loadUser, loadOrganization, requireOrganization } from '../middleware/auth';
+import { requireOrganization } from '../middleware/auth';
 import { validateBody, validateQuery, validateParams } from '../middleware/validation';
 import {
     LeadListInsertDto,
@@ -14,12 +14,7 @@ import { z } from 'zod';
 const router = Router();
 const leadListController = new LeadListController();
 
-// Apply authentication middleware to all routes
-// TODO: TEMPORARILY DISABLED FOR DEVELOPMENT - DO NOT REVERT UNTIL DEVELOPMENT IS COMPLETED
-// router.use(requireAuth);
-// router.use(loadUser);
-// router.use(loadOrganization);
-// router.use(requireOrganization);
+// Authentication middleware is applied globally in routes/index.ts
 
 /**
  * @swagger
