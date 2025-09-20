@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/UserController';
-import { requireAuth, loadUser } from '../middleware/auth';
+import { loadUser, requireAuth, skipAuth } from '../middleware/auth';
 
 const router = Router();
 const userController = new UserController();
@@ -55,7 +55,7 @@ const userController = new UserController();
  *       404:
  *         description: User not found
  */
-router.get('/me', requireAuth, loadUser, userController.getMe);
+router.get('/me', userController.getMe);
 
 /**
  * @swagger
@@ -88,7 +88,7 @@ router.get('/me', requireAuth, loadUser, userController.getMe);
  *       400:
  *         description: Validation error
  */
-router.post('/sync', userController.syncUser);
+router.post('/sync', skipAuth, userController.syncUser);
 
 /**
  * @swagger
@@ -118,6 +118,6 @@ router.post('/sync', userController.syncUser);
  *       404:
  *         description: User not found
  */
-router.patch('/me', requireAuth, loadUser, userController.updateProfile);
+router.patch('/me', userController.updateProfile);
 
 export default router;
