@@ -47,8 +47,6 @@ declare global {
  */
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
     const headers = req.headers.authorization;
-    console.log("checking header")
-    console.log(!!headers);
     return ClerkExpressWithAuth({
         onError: (error) => {
           console.error("❌ Clerk auth error:", error);
@@ -63,12 +61,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
  */
 export const loadUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    console.log("=== loadUser middleware called ===");
-    console.log("req.auth:", req.auth);
-    console.log("env.CLERK_SECRET_KEY exists:", !!env.CLERK_SECRET_KEY);
-
     if (!req.auth || !req.auth.userId) {
-      console.log("No auth or userId found, returning UnauthorizedError");
       return next(new UnauthorizedError('Authentication required'));
     }
 
