@@ -1,9 +1,90 @@
-import { Router } from 'express';
-import { UserController } from '../controllers/UserController';
-import { requireAuth, loadUser } from '../middleware/auth';
+import ClentoAPI from '../utils/apiUtil';
+import { UserService } from '../services/UserService';
+import { Request, Response } from 'express';
+import { NotFoundError } from '../errors/AppError';
 
-const router = Router();
-const userController = new UserController();
+/**
+ * User API - Authenticated user endpoints
+ */
+export class UserAPI extends ClentoAPI {
+  public path = '/api/users';
+  public authType:'DASHBOARD' = 'DASHBOARD';
+
+  private userService: UserService;
+
+  constructor() {
+    super();
+    this.userService = new UserService();
+
+    this.requestParams = {
+      GET: {
+        bodyParams: {},
+        queryParams: {},
+        pathParams: {},
+      },
+      PATCH: {
+        bodyParams: {
+          fullName: 'optional',
+          avatarUrl: 'optional',
+        },
+        queryParams: {},
+        pathParams: {},
+      },
+      POST: this.getDefaultExpressRequestParams(),
+      PUT: this.getDefaultExpressRequestParams(),
+      DELETE: this.getDefaultExpressRequestParams(),
+    };
+  }
+
+  public GET = async (req: Request, res: Response): Promise<void> => {
+    try {
+      // Get user from request (set by loadUser middleware)
+      const user = req.user;
+
+      if (!user) {
+        throw new NotFoundError('User not found');
+      }
+
+      res.status(200).json({
+        success: true,
+        data: user,
+        message: 'User profile retrieved successfully'
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  public PATCH = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.userId;
+      const { fullName, avatarUrl } = req.body;
+
+      if (!userId) {
+        throw new NotFoundError('User not found');
+      }
+
+      // Update user profile
+      const updatedUser = await this.userService.updateUser(userId, {
+        fullName,
+        avatarUrl
+      });
+
+      res.status(200).json({
+        success: true,
+        data: updatedUser,
+        message: 'User profile updated successfully'
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+}
+
+export default ClentoAPI.createRouter(UserAPI, {
+  GET: '/me',
+  PATCH: '/me'
+});
 
 /**
  * @swagger
@@ -11,6 +92,7 @@ const userController = new UserController();
  *   name: Users
  *   description: User management endpoints
  */
+
 /**
  * @swagger
  * /api/users/me:
@@ -55,40 +137,6 @@ const userController = new UserController();
  *       404:
  *         description: User not found
  */
-router.get('/me', requireAuth, loadUser, userController.getMe);
-
-/**
- * @swagger
- * /api/users/sync:
- *   post:
- *     summary: Sync user from Clerk
- *     tags: [Users]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - externalId
- *               - email
- *             properties:
- *               externalId:
- *                 type: string
- *               email:
- *                 type: string
- *                 format: email
- *               fullName:
- *                 type: string
- *               avatarUrl:
- *                 type: string
- *     responses:
- *       200:
- *         description: User synced successfully
- *       400:
- *         description: Validation error
- */
-router.post('/sync', userController.syncUser);
 
 /**
  * @swagger
@@ -118,36 +166,3 @@ router.post('/sync', userController.syncUser);
  *       404:
  *         description: User not found
  */
-router.patch('/me', requireAuth, loadUser, userController.updateProfile);
-
-/**
- * @swagger
- * /api/users/sync-from-clerk:
- *   post:
- *     summary: Force sync user from Clerk
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - clerkUserId
- *             properties:
- *               clerkUserId:
- *                 type: string
- *                 description: Clerk user ID to sync
- *     responses:
- *       200:
- *         description: User synced successfully
- *       400:
- *         description: Validation error
- *       401:
- *         description: Unauthorized
- */
-router.post('/sync-from-clerk', requireAuth, loadUser, userController.syncFromClerk);
-
-export default router;

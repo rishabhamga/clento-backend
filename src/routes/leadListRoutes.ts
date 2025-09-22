@@ -1,25 +1,690 @@
-import { Router } from 'express';
-import { LeadListController } from '../controllers/LeadListController';
-import { requireAuth, loadUser, loadOrganization, requireOrganization } from '../middleware/auth';
-import { validateBody, validateQuery, validateParams } from '../middleware/validation';
-import {
-    LeadListInsertDto,
-  LeadListQueryDto,
-  LeadListUpdateDto,
-  PreviewCsvDto,
-  PublishLeadListDto
-} from '../dto/leads.dto';
-import { z } from 'zod';
+import ClentoAPI from '../utils/apiUtil';
+import { LeadListService } from '../services/LeadListService';
+import { CsvService } from '../services/CsvService';
+import { Request, Response } from 'express';
+import { NotFoundError, BadRequestError } from '../errors/AppError';
+import multer from 'multer';
+import { CsvPreviewResponseDto } from '../dto/leads.dto';
 
-const router = Router();
-const leadListController = new LeadListController();
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new BadRequestError('Only CSV files are allowed'));
+    }
+  },
+});
 
-// Apply authentication middleware to all routes
-// TODO: TEMPORARILY DISABLED FOR DEVELOPMENT - DO NOT REVERT UNTIL DEVELOPMENT IS COMPLETED
-// router.use(requireAuth);
-// router.use(loadUser);
-// router.use(loadOrganization);
-// router.use(requireOrganization);
+/**
+ * Lead List API - Main lead list management endpoints
+ */
+export class LeadListAPI extends ClentoAPI {
+  public path = '/api/lead-lists';
+  public authType:'DASHBOARD' = 'DASHBOARD';
+
+  private leadListService: LeadListService;
+
+  constructor() {
+    super();
+    this.leadListService = new LeadListService();
+
+    this.requestParams = {
+      GET: {
+        bodyParams: {},
+        queryParams: {
+          page: 'optional',
+          limit: 'optional',
+          search: 'optional',
+          source: 'optional',
+          tags: 'optional',
+          with_stats: 'optional'
+        },
+        pathParams: {},
+      },
+      POST: {
+        bodyParams: {
+          name: 'required',
+          description: 'optional',
+          source: 'optional',
+          tags: 'optional',
+          filters: 'optional'
+        },
+        queryParams: {},
+        pathParams: {},
+      },
+      PUT: this.getDefaultExpressRequestParams(),
+      DELETE: this.getDefaultExpressRequestParams(),
+      PATCH: this.getDefaultExpressRequestParams(),
+    };
+  }
+
+  /**
+   * Get lead lists
+   */
+  public GET = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const organizationId = req.organizationId;
+      const withStats = req.query.with_stats === 'true';
+
+      if (!organizationId) {
+        throw new NotFoundError('Organization not found');
+      }
+
+      let result;
+      if (withStats) {
+        result = await this.leadListService.getLeadListsWithStats(organizationId, req.query as any);
+      } else {
+        result = await this.leadListService.getLeadLists(organizationId, req.query as any);
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result,
+        message: 'Lead lists retrieved successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  /**
+   * Create lead list
+   */
+  public POST = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const organizationId = req.organizationId;
+      const userId = req.userId;
+
+      if (!organizationId || !userId) {
+        throw new NotFoundError('Organization or user not found');
+      }
+
+      const leadList = await this.leadListService.createLeadList(
+        req.body,
+        organizationId,
+        userId
+      );
+
+      res.status(201).json({
+        success: true,
+        data: leadList,
+        message: 'Lead list created successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+}
+
+/**
+ * Lead List Detail API - Individual lead list management endpoints
+ */
+export class LeadListDetailAPI extends ClentoAPI {
+  public path = '/api/lead-lists/:id';
+  public authType:'DASHBOARD' = 'DASHBOARD';
+
+  private leadListService: LeadListService;
+
+  constructor() {
+    super();
+    this.leadListService = new LeadListService();
+
+    this.requestParams = {
+      GET: {
+        bodyParams: {},
+        queryParams: {},
+        pathParams: { id: 'required' },
+      },
+      PUT: {
+        bodyParams: {
+          name: 'optional',
+          description: 'optional',
+          source: 'optional',
+          tags: 'optional',
+          filters: 'optional',
+          status: 'optional'
+        },
+        queryParams: {},
+        pathParams: { id: 'required' },
+      },
+      DELETE: {
+        bodyParams: {},
+        queryParams: {},
+        pathParams: { id: 'required' },
+      },
+      POST: this.getDefaultExpressRequestParams(),
+      PATCH: this.getDefaultExpressRequestParams(),
+    };
+  }
+
+  /**
+   * Get lead list by ID
+   */
+  public GET = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const organizationId = req.organizationId;
+
+      if (!organizationId) {
+        throw new NotFoundError('Organization not found');
+      }
+
+      const leadList = await this.leadListService.getLeadListDataById(id, organizationId);
+
+      res.status(200).json({
+        success: true,
+        data: leadList,
+        message: 'Lead list retrieved successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  /**
+   * Update lead list
+   */
+  public PUT = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const organizationId = req.organizationId;
+
+      if (!organizationId) {
+        throw new NotFoundError('Organization not found');
+      }
+
+      const leadList = await this.leadListService.updateLeadList(id, req.body, organizationId);
+
+      res.status(200).json({
+        success: true,
+        data: leadList,
+        message: 'Lead list updated successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  /**
+   * Delete lead list
+   */
+  public DELETE = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const organizationId = req.organizationId;
+
+      if (!organizationId) {
+        throw new NotFoundError('Organization not found');
+      }
+
+      await this.leadListService.deleteLeadList(id, organizationId);
+
+      res.status(200).json({
+        success: true,
+        data: null,
+        message: 'Lead list deleted successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+}
+
+/**
+ * Lead List CSV Upload API - CSV upload endpoint with file handling
+ */
+export class LeadListCsvUploadAPI extends ClentoAPI {
+  public path = '/api/lead-lists/upload-csv';
+  public authType:'DASHBOARD' = 'DASHBOARD';
+
+  private leadListService: LeadListService;
+
+  constructor() {
+    super();
+    this.leadListService = new LeadListService();
+
+    this.requestParams = {
+      POST: {
+        bodyParams: {}, // File upload handled by multer
+        queryParams: {},
+        pathParams: {},
+      },
+      GET: this.getDefaultExpressRequestParams(),
+      PUT: this.getDefaultExpressRequestParams(),
+      DELETE: this.getDefaultExpressRequestParams(),
+      PATCH: this.getDefaultExpressRequestParams(),
+    };
+  }
+
+  /**
+   * Upload and preview CSV
+   */
+  public POST = async (req: Request, res: Response): Promise<void> => {
+    try {
+      if (!req.file) {
+        throw new BadRequestError('CSV file is required');
+      }
+
+      // Validate file size
+      CsvService.validateFileSize(req.file.size);
+
+      // Convert buffer to string
+      const csvData = req.file.buffer.toString('utf8');
+
+      // Preview CSV
+      const result = await this.leadListService.previewCsv({ csv_data: csvData });
+
+      // Validate response structure
+      const validatedResult = CsvPreviewResponseDto.parse(result);
+
+      res.status(200).json({
+        success: true,
+        data: validatedResult,
+        message: 'CSV uploaded and previewed successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  /**
+   * Override the wrapper to include multer middleware
+   */
+  public wrapper = async (req: Request, res: Response, next: any) => {
+    const uploadMiddleware = upload.single('csv_file');
+    uploadMiddleware(req, res, (err) => {
+      if (err) {
+        return next(err);
+      }
+      // Call the parent wrapper method
+      (this as any).__proto__.__proto__.wrapper.call(this, req, res, next);
+    });
+  };
+}
+
+/**
+ * Lead List CSV Preview API - CSV preview from data
+ */
+export class LeadListCsvPreviewAPI extends ClentoAPI {
+  public path = '/api/lead-lists/preview-csv';
+  public authType:'DASHBOARD' = 'DASHBOARD';
+
+  private leadListService: LeadListService;
+
+  constructor() {
+    super();
+    this.leadListService = new LeadListService();
+
+    this.requestParams = {
+      POST: {
+        bodyParams: {
+          csv_data: 'required'
+        },
+        queryParams: {},
+        pathParams: {},
+      },
+      GET: this.getDefaultExpressRequestParams(),
+      PUT: this.getDefaultExpressRequestParams(),
+      DELETE: this.getDefaultExpressRequestParams(),
+      PATCH: this.getDefaultExpressRequestParams(),
+    };
+  }
+
+  /**
+   * Preview CSV from data
+   */
+  public POST = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const result = await this.leadListService.previewCsv(req.body);
+
+      res.status(200).json({
+        success: true,
+        data: result,
+        message: 'CSV previewed successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+}
+
+/**
+ * Lead List Publish API - Publish lead list from CSV
+ */
+export class LeadListPublishAPI extends ClentoAPI {
+  public path = '/api/lead-lists/publish';
+  public authType:'DASHBOARD' = 'DASHBOARD';
+
+  private leadListService: LeadListService;
+
+  constructor() {
+    super();
+    this.leadListService = new LeadListService();
+
+    this.requestParams = {
+      POST: {
+        bodyParams: {
+          name: 'required',
+          csv_data: 'required',
+          mapping: 'required'
+        },
+        queryParams: {},
+        pathParams: {},
+      },
+      GET: this.getDefaultExpressRequestParams(),
+      PUT: this.getDefaultExpressRequestParams(),
+      DELETE: this.getDefaultExpressRequestParams(),
+      PATCH: this.getDefaultExpressRequestParams(),
+    };
+  }
+
+  /**
+   * Publish lead list from CSV
+   */
+  public POST = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const organizationId = req.organizationId;
+      const userId = req.userId;
+
+      if (!organizationId || !userId) {
+        throw new NotFoundError('Organization or user not found');
+      }
+
+      const result = await this.leadListService.publishLeadList(
+        req.body,
+        organizationId,
+        userId
+      );
+
+      res.status(201).json({
+        success: true,
+        data: result,
+        message: 'Lead list published successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+}
+
+/**
+ * Lead List Archive API - Archive lead list endpoint
+ */
+export class LeadListArchiveAPI extends ClentoAPI {
+  public path = '/api/lead-lists/:id/archive';
+  public authType:'DASHBOARD' = 'DASHBOARD';
+
+  private leadListService: LeadListService;
+
+  constructor() {
+    super();
+    this.leadListService = new LeadListService();
+
+    this.requestParams = {
+      POST: {
+        bodyParams: {},
+        queryParams: {},
+        pathParams: { id: 'required' },
+      },
+      GET: this.getDefaultExpressRequestParams(),
+      PUT: this.getDefaultExpressRequestParams(),
+      DELETE: this.getDefaultExpressRequestParams(),
+      PATCH: this.getDefaultExpressRequestParams(),
+    };
+  }
+
+  /**
+   * Archive lead list
+   */
+  public POST = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const organizationId = req.organizationId;
+
+      if (!organizationId) {
+        throw new NotFoundError('Organization not found');
+      }
+
+      await this.leadListService.archiveLeadList(id, organizationId);
+
+      res.status(200).json({
+        success: true,
+        data: null,
+        message: 'Lead list archived successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+}
+
+/**
+ * Lead List Activate API - Activate lead list endpoint
+ */
+export class LeadListActivateAPI extends ClentoAPI {
+  public path = '/api/lead-lists/:id/activate';
+  public authType:'DASHBOARD' = 'DASHBOARD';
+
+  private leadListService: LeadListService;
+
+  constructor() {
+    super();
+    this.leadListService = new LeadListService();
+
+    this.requestParams = {
+      POST: {
+        bodyParams: {},
+        queryParams: {},
+        pathParams: { id: 'required' },
+      },
+      GET: this.getDefaultExpressRequestParams(),
+      PUT: this.getDefaultExpressRequestParams(),
+      DELETE: this.getDefaultExpressRequestParams(),
+      PATCH: this.getDefaultExpressRequestParams(),
+    };
+  }
+
+  /**
+   * Activate lead list
+   */
+  public POST = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const organizationId = req.organizationId;
+
+      if (!organizationId) {
+        throw new NotFoundError('Organization not found');
+      }
+
+      await this.leadListService.activateLeadList(id, organizationId);
+
+      res.status(200).json({
+        success: true,
+        data: null,
+        message: 'Lead list activated successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+}
+
+/**
+ * Lead List Duplicate API - Duplicate lead list endpoint
+ */
+export class LeadListDuplicateAPI extends ClentoAPI {
+  public path = '/api/lead-lists/:id/duplicate';
+  public authType:'DASHBOARD' = 'DASHBOARD';
+
+  private leadListService: LeadListService;
+
+  constructor() {
+    super();
+    this.leadListService = new LeadListService();
+
+    this.requestParams = {
+      POST: {
+        bodyParams: {
+          name: 'required'
+        },
+        queryParams: {},
+        pathParams: { id: 'required' },
+      },
+      GET: this.getDefaultExpressRequestParams(),
+      PUT: this.getDefaultExpressRequestParams(),
+      DELETE: this.getDefaultExpressRequestParams(),
+      PATCH: this.getDefaultExpressRequestParams(),
+    };
+  }
+
+  /**
+   * Duplicate lead list
+   */
+  public POST = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { name } = req.body;
+      const organizationId = req.organizationId;
+      const userId = req.userId;
+
+      if (!organizationId || !userId) {
+        throw new NotFoundError('Organization or user not found');
+      }
+
+      if (!name) {
+        throw new BadRequestError('New lead list name is required');
+      }
+
+      const leadList = await this.leadListService.duplicateLeadList(
+        id,
+        name,
+        organizationId,
+        userId
+      );
+
+      res.status(201).json({
+        success: true,
+        data: leadList,
+        message: 'Lead list duplicated successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+}
+
+/**
+ * Lead List Statistics API - Lead list statistics endpoint
+ */
+export class LeadListStatisticsAPI extends ClentoAPI {
+  public path = '/api/lead-lists/:id/statistics';
+  public authType:'DASHBOARD' = 'DASHBOARD';
+
+  private leadListService: LeadListService;
+
+  constructor() {
+    super();
+    this.leadListService = new LeadListService();
+
+    this.requestParams = {
+      GET: {
+        bodyParams: {},
+        queryParams: {},
+        pathParams: { id: 'required' },
+      },
+      POST: this.getDefaultExpressRequestParams(),
+      PUT: this.getDefaultExpressRequestParams(),
+      DELETE: this.getDefaultExpressRequestParams(),
+      PATCH: this.getDefaultExpressRequestParams(),
+    };
+  }
+
+  /**
+   * Get lead list statistics
+   */
+  public GET = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const organizationId = req.organizationId;
+
+      if (!organizationId) {
+        throw new NotFoundError('Organization not found');
+      }
+
+      const statistics = await this.leadListService.getLeadListStatistics(id, organizationId);
+
+      res.status(200).json({
+        success: true,
+        data: statistics,
+        message: 'Lead list statistics retrieved successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+}
+
+// Create routers for each API class
+const leadListRouter = ClentoAPI.createRouter(LeadListAPI, {
+  GET: '/',
+  POST: '/'
+});
+
+const leadListDetailRouter = ClentoAPI.createRouter(LeadListDetailAPI, {
+  GET: '/:id',
+  PUT: '/:id',
+  DELETE: '/:id'
+});
+
+const leadListCsvUploadRouter = ClentoAPI.createRouter(LeadListCsvUploadAPI, {
+  POST: '/upload-csv'
+});
+
+const leadListCsvPreviewRouter = ClentoAPI.createRouter(LeadListCsvPreviewAPI, {
+  POST: '/preview-csv'
+});
+
+const leadListPublishRouter = ClentoAPI.createRouter(LeadListPublishAPI, {
+  POST: '/publish'
+});
+
+const leadListArchiveRouter = ClentoAPI.createRouter(LeadListArchiveAPI, {
+  POST: '/:id/archive'
+});
+
+const leadListActivateRouter = ClentoAPI.createRouter(LeadListActivateAPI, {
+  POST: '/:id/activate'
+});
+
+const leadListDuplicateRouter = ClentoAPI.createRouter(LeadListDuplicateAPI, {
+  POST: '/:id/duplicate'
+});
+
+const leadListStatisticsRouter = ClentoAPI.createRouter(LeadListStatisticsAPI, {
+  GET: '/:id/statistics'
+});
+
+// Combine all routers
+const { Router } = require('express');
+const combinedRouter = Router();
+
+combinedRouter.use('/', leadListRouter);
+combinedRouter.use('/', leadListDetailRouter);
+combinedRouter.use('/', leadListCsvUploadRouter);
+combinedRouter.use('/', leadListCsvPreviewRouter);
+combinedRouter.use('/', leadListPublishRouter);
+combinedRouter.use('/', leadListArchiveRouter);
+combinedRouter.use('/', leadListActivateRouter);
+combinedRouter.use('/', leadListDuplicateRouter);
+combinedRouter.use('/', leadListStatisticsRouter);
+
+export default combinedRouter;
 
 /**
  * @swagger
@@ -114,10 +779,6 @@ const leadListController = new LeadListController();
  *       401:
  *         description: Unauthorized
  */
-router.get('/',
-  validateQuery(LeadListQueryDto),
-  leadListController.getLeadLists
-);
 
 /**
  * @swagger
@@ -141,10 +802,6 @@ router.get('/',
  *       401:
  *         description: Unauthorized
  */
-router.post('/',
-  validateBody(LeadListInsertDto),
-  leadListController.createLeadList
-);
 
 /**
  * @swagger
@@ -172,10 +829,6 @@ router.post('/',
  *       401:
  *         description: Unauthorized
  */
-router.post('/upload-csv',
-  leadListController.getUploadMiddleware(),
-  leadListController.uploadCsv
-);
 
 /**
  * @swagger
@@ -199,10 +852,6 @@ router.post('/upload-csv',
  *       401:
  *         description: Unauthorized
  */
-router.post('/preview-csv',
-  validateBody(PreviewCsvDto),
-  leadListController.previewCsv
-);
 
 /**
  * @swagger
@@ -226,10 +875,6 @@ router.post('/preview-csv',
  *       401:
  *         description: Unauthorized
  */
-router.post('/publish',
-  validateBody(PublishLeadListDto),
-  leadListController.publishLeadList
-);
 
 /**
  * @swagger
@@ -254,10 +899,6 @@ router.post('/publish',
  *       401:
  *         description: Unauthorized
  */
-router.get('/:id',
-  validateParams(z.object({ id: z.string().uuid() })),
-  leadListController.getLeadListById
-);
 
 /**
  * @swagger
@@ -288,11 +929,6 @@ router.get('/:id',
  *       401:
  *         description: Unauthorized
  */
-router.put('/:id',
-  validateParams(z.object({ id: z.string().uuid() })),
-  validateBody(LeadListUpdateDto),
-  leadListController.updateLeadList
-);
 
 /**
  * @swagger
@@ -317,10 +953,6 @@ router.put('/:id',
  *       401:
  *         description: Unauthorized
  */
-router.delete('/:id',
-  validateParams(z.object({ id: z.string().uuid() })),
-  leadListController.deleteLeadList
-);
 
 /**
  * @swagger
@@ -345,10 +977,6 @@ router.delete('/:id',
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/archive',
-  validateParams(z.object({ id: z.string().uuid() })),
-  leadListController.archiveLeadList
-);
 
 /**
  * @swagger
@@ -373,10 +1001,6 @@ router.post('/:id/archive',
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/activate',
-  validateParams(z.object({ id: z.string().uuid() })),
-  leadListController.activateLeadList
-);
 
 /**
  * @swagger
@@ -412,11 +1036,6 @@ router.post('/:id/activate',
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/duplicate',
-  validateParams(z.object({ id: z.string().uuid() })),
-  validateBody(z.object({ name: z.string().min(1) })),
-  leadListController.duplicateLeadList
-);
 
 /**
  * @swagger
@@ -441,9 +1060,3 @@ router.post('/:id/duplicate',
  *       401:
  *         description: Unauthorized
  */
-router.get('/:id/statistics',
-  validateParams(z.object({ id: z.string().uuid() })),
-  leadListController.getLeadListStatistics
-);
-
-export default router;

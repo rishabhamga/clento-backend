@@ -8,9 +8,12 @@ import { errorHandler } from './middleware/errorHandler';
 import { setupSwagger } from './config/swagger';
 import supabase from './config/supabase';
 import routes from './routes';
+import morgan from 'morgan';
 
 // Create Express application
 const app = express();
+
+app.use(morgan("dev"));
 
 // Apply middleware
 app.use(helmet());

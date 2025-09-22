@@ -284,7 +284,8 @@ export class LeadListService {
       const mapping = data.mapping || CsvService.generateMapping(parseResult.headers);
 
       // Get preview data
-      const preview = CsvService.getPreviewFromUnipile(parseResult, 5);
+      //   const preview = CsvService.getPreviewFromUnipile(parseResult, 5);
+      const preview = CsvService.getPreview(parseResult, 5);
 
       logger.info('CSV preview generated', {
         totalRows: parseResult.totalRows,

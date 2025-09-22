@@ -49,7 +49,7 @@ alwaysApply: true
       throw new AppError('Failed to fetch data', 500);
     }
   }
-  
+
   // ❌ DON'T: Use unhandled promises or complex chains
   function getData() {
     return fetchData()
@@ -132,6 +132,126 @@ alwaysApply: true
   - Use environment variables for configuration
   - Provide sensible defaults
   - Validate required environment variables on startup
+
+## **API Development - MANDATORY ClentoAPI Usage**
+
+### **🚨 CRITICAL: Always Use ClentoAPI Class**
+- **NEVER create manual Express routes** - Always use ClentoAPI base class
+- **NEVER use traditional controller pattern** - Use ClentoAPI for all API endpoints
+- **NEVER manually bind middleware** - Use ClentoAPI.createRouter() for automatic setup
+- **ALL API endpoints MUST extend ClentoAPI** - No exceptions
+
+### **Required API Structure**
+```typescript
+// ✅ CORRECT: Always use this pattern
+export class YourAPI extends ClentoAPI {
+  public path = '/api/your-endpoint';
+  public authType:'DASHBOARD' = 'DASHBOARD'; // or 'NONE', 'API'
+
+  constructor() {
+    super();
+    // Configure request parameters
+    this.requestParams = {
+      GET: { bodyParams: {}, queryParams: {}, pathParams: {} },
+      POST: { bodyParams: { name: 'required' }, queryParams: {}, pathParams: {} },
+      // ... other methods
+    };
+  }
+
+  public GET = async (req: Request, res: Response): Promise<void> => {
+    // Your business logic here
+    res.status(200).json({ success: true, data: result });
+  };
+}
+
+// ✅ CORRECT: Always use createRouter for automatic setup
+export default ClentoAPI.createRouter(YourAPI, {
+  GET: '/endpoint',
+  POST: '/endpoint',
+  PUT: '/endpoint/:id'
+});
+```
+
+### **❌ FORBIDDEN Patterns**
+```typescript
+// ❌ NEVER: Manual Express routes
+const router = Router();
+router.get('/endpoint', (req, res) => { ... });
+
+// ❌ NEVER: Traditional controllers
+export class YourController {
+  getEndpoint = async (req, res) => { ... }
+}
+
+// ❌ NEVER: Manual middleware binding
+router.get('/endpoint', authMiddleware, yourController.getEndpoint);
+```
+
+### **File Organization Rules**
+- **API classes go in `/src/routes/`** - Not in `/src/controllers/`
+- **One file per API feature** - `[featureName]Routes.ts`
+- **Each file contains**: API class + automatic router export
+- **File naming**: `userRoutes.ts`, `leadListRoutes.ts`, etc.
+
+### **Authentication Types**
+- **`NONE`**: Public endpoints (no auth required)
+- **`API`**: API key authentication
+- **`DASHBOARD`**: Full dashboard authentication (most common)
+
+### **Request Parameter Validation**
+```typescript
+this.requestParams = {
+  GET: {
+    bodyParams: {},
+    queryParams: { page: 'optional', limit: 'optional' },
+    pathParams: {},
+  },
+  POST: {
+    bodyParams: { name: 'required', email: 'required' },
+    queryParams: {},
+    pathParams: {},
+  },
+  PUT: {
+    bodyParams: { name: 'optional' },
+    queryParams: {},
+    pathParams: { id: 'required' },
+  },
+};
+```
+
+### **Response Format Standards**
+```typescript
+// ✅ Success responses
+res.status(200).json({
+  success: true,
+  data: result,
+  message: 'Operation completed successfully'
+});
+
+// ✅ Error responses (handled automatically by ClentoAPI)
+throw new ValidationError('Invalid input');
+throw new AppError('Something went wrong', 500);
+```
+
+### **Swagger Documentation Requirements**
+- **Every API method MUST have Swagger documentation**
+- **Include summary, tags, security, requestBody, responses**
+- **Document all possible status codes**
+- **Place documentation directly above each method**
+- **When creating new Swagger documentation files, always place the documentation at the bottom of the file**
+
+### **Integration with Main App**
+```typescript
+// In /src/routes/index.ts
+import yourFeatureRoutes from './yourFeatureRoutes';
+
+router.use('/your-feature', yourFeatureRoutes);
+```
+
+### **Migration Rules**
+- **When updating existing APIs**: Convert to ClentoAPI pattern
+- **When creating new APIs**: Always use ClentoAPI from the start
+- **When refactoring**: Replace manual routes with ClentoAPI.createRouter()
 
 ## **Coding**
 - **writing new code**

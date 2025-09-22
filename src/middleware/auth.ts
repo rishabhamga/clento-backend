@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node';
+import { ClerkExpressRequireAuth, ClerkExpressWithAuth } from '@clerk/clerk-sdk-node';
 import { UnauthorizedError, ForbiddenError } from '../errors/AppError';
 import { UserRepository } from '../repositories/UserRepository';
 import { OrganizationRepository } from '../repositories/OrganizationRepository';
-import { SyncService } from '../services/SyncService';
 import logger from '../utils/logger';
 import env from '../config/env';
 
@@ -16,10 +15,10 @@ declare global {
         orgId?: string;
         getToken?: (options?: { template?: string }) => Promise<string>;
       };
-      userId?: string;
-      externalId?: string; // Clerk ID
-      organizationId?: string;
-      user?: {
+      userId: string;
+      externalId: string; // Clerk ID
+      organizationId: string;
+      user: {
         id: string;
         external_id: string;
         email: string;
@@ -47,61 +46,34 @@ declare global {
  * Middleware to verify authentication using Clerk
  */
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
-  console.log("=== requireAuth middleware called ===");
-  console.log("CLERK_SECRET_KEY exists:", !!env.CLERK_SECRET_KEY);
-
-  // Check if Authorization header exists
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.log("No valid Authorization header found");
-    return next(new UnauthorizedError('Authentication required'));
-  }
-
-  // Use Clerk middleware for token verification
-  return ClerkExpressRequireAuth({
-    onError: (error: any) => {
-      console.log("Clerk authentication error:", error);
-      logger.error('Authentication error', { error });
-      return next(new UnauthorizedError('Authentication required'));
-    },
-  })(req, res, next);
-};
+    const headers = req.headers.authorization;
+    return ClerkExpressWithAuth({
+        onError: (error) => {
+          console.error("❌ Clerk auth error:", error);
+          next(new UnauthorizedError("Authentication required"));
+        },
+        signInUrl: "/sign-in",
+    })(req, res, next);
+}
 
 /**
  * Middleware to load user from database with automatic sync
  */
 export const loadUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    console.log("=== loadUser middleware called ===");
-    console.log("req.auth:", req.auth);
-    console.log("env.CLERK_SECRET_KEY exists:", !!env.CLERK_SECRET_KEY);
-
     if (!req.auth || !req.auth.userId) {
-      console.log("No auth or userId found, returning UnauthorizedError");
       return next(new UnauthorizedError('Authentication required'));
     }
 
 
     // Get clerk user ID from auth
     const clerkUserId = req.auth.userId;
-    const syncService = new SyncService();
+    const userRepository = new UserRepository();
 
-    // Ensure user is synced to database
-    let user;
-    try {
-      user = await syncService.syncUserToDatabase(clerkUserId);
-      logger.info('User synced successfully', { clerkUserId, userId: user.id });
-    } catch (syncError) {
-      logger.error('Error syncing user, attempting fallback', { error: syncError, clerkUserId });
+    const user = await userRepository.findByClerkId(clerkUserId);
 
-      // Fallback: try to get existing user or create temporary one
-      try {
-        user = await syncService.getOrCreateUserByClerkId(clerkUserId);
-        logger.info('User fallback sync successful', { clerkUserId, userId: user.id });
-      } catch (fallbackError) {
-        logger.error('User sync fallback failed', { error: fallbackError, clerkUserId });
-        return next(new UnauthorizedError('User synchronization failed'));
-      }
+    if(!user){
+        throw new UnauthorizedError('User not found');
     }
 
     // Attach user to request
@@ -117,7 +89,10 @@ export const loadUser = async (req: Request, res: Response, next: NextFunction) 
 
     next();
   } catch (error) {
-    logger.error('Error loading user', { error });
+    logger.error('Error loading user', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     next(error);
   }
 };
@@ -155,38 +130,6 @@ export const loadOrganization = async (req: Request, res: Response, next: NextFu
           permissions: {},
           status: defaultOrg.status,
         };
-      } else if (env.CLERK_SECRET_KEY && req.externalId) {
-        // If no organizations found and we have Clerk access, try to sync user's organizations
-        try {
-          const syncService = new SyncService();
-          const syncedOrgs = await syncService.syncUserOrganizations(req.externalId);
-
-          if (syncedOrgs.length > 0) {
-            const defaultOrg = syncedOrgs[0];
-            req.organizationId = defaultOrg.id;
-            req.organization = {
-              id: defaultOrg.id,
-              name: defaultOrg.name,
-              slug: defaultOrg.slug,
-              plan: defaultOrg.plan,
-              timezone: defaultOrg.timezone,
-            };
-            req.organizationMember = {
-              role: 'owner', // First synced org is typically owned by user
-              permissions: {},
-              status: 'active',
-            };
-            logger.info('Synced user organizations on demand', {
-              userId: req.userId,
-              orgCount: syncedOrgs.length
-            });
-          }
-        } catch (syncError) {
-          logger.warn('Failed to sync user organizations', {
-            error: syncError,
-            userId: req.userId
-          });
-        }
       }
       return next();
     }
@@ -323,4 +266,23 @@ export const createSupabaseAuthClient = async (req: Request, res: Response, next
     logger.error('Error creating Supabase auth client', { error });
     next(error);
   }
+};
+
+/**
+ * Default authentication middleware that applies auth, user loading, and organization loading
+ * This should be applied to all routes by default
+ */
+export const defaultAuth = [
+  requireAuth,
+  loadUser,
+  loadOrganization
+];
+
+/**
+ * Skip authentication middleware - use this to opt out of default auth
+ */
+export const skipAuth = (req: Request, res: Response, next: NextFunction) => {
+  // This is a no-op middleware that just passes through
+  // Routes can use this to explicitly skip authentication
+  next();
 };
