@@ -166,19 +166,13 @@ export class AccountAPI extends ClentoAPI {
    */
   public GET = async (req: Request, res: Response): Promise<void> => {
     try {
-      const userId = req.userId;
       const organizationId = req.organizationId;
       const { provider } = req.query;
 
-      if (!userId) {
-        throw new NotFoundError('User not found');
-      }
-
-      logger.info('Getting user accounts', { userId, organizationId, provider });
+      logger.info('Getting user accounts', { organizationId, provider });
 
       // Get actual accounts from the service
       const accounts = await this.connectedAccountService.getUserAccounts(
-        userId,
         organizationId,
         provider as string
       );
