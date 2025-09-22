@@ -1,8 +1,8 @@
 import ClentoAPI from '../utils/apiUtil';
 import { LeadListService } from '../services/LeadListService';
 import { CsvService } from '../services/CsvService';
-import { Request, Response } from 'express';
-import { NotFoundError, BadRequestError } from '../errors/AppError';
+import { Request, Response, NextFunction } from 'express';
+import { NotFoundError, BadRequestError, AppError } from '../errors/AppError';
 import multer from 'multer';
 import { CsvPreviewResponseDto } from '../dto/leads.dto';
 
@@ -296,14 +296,66 @@ export class LeadListCsvUploadAPI extends ClentoAPI {
   /**
    * Override the wrapper to include multer middleware
    */
-  public wrapper = async (req: Request, res: Response, next: any) => {
+  public wrapper = async (req: Request, res: Response, next: NextFunction) => {
     const uploadMiddleware = upload.single('csv_file');
-    uploadMiddleware(req, res, (err) => {
+    uploadMiddleware(req, res, async (err) => {
       if (err) {
         return next(err);
       }
-      // Call the parent wrapper method
-      (this as any).__proto__.__proto__.wrapper.call(this, req, res, next);
+
+      try {
+        // Attach API class to request
+        req.clentoAPIClass = this;
+
+        // Set up request parameters
+        req.requestParams = {
+          bodyParams: req.body || {},
+          queryParams: req.query || {},
+          pathParams: req.params || {},
+        };
+
+        // Apply authentication based on authType
+        if (this.authType === 'DASHBOARD') {
+          // Authentication logic would be implemented here
+          // This would integrate with your existing auth middleware
+        }
+
+        // Set common headers
+        res.setHeader('Content-Security-Policy', 'frame-ancestors \'self\'');
+
+        // Validate JSON content type if required
+        if (this.forceJSON && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+          if (!req.is('application/json')) {
+            throw new BadRequestError('Only JSON requests are allowed. Please set the header Content-Type: application/json');
+          }
+        }
+
+        // Route to appropriate HTTP method handler
+        switch (req.method) {
+          case 'GET':
+            await this.GET(req, res);
+            break;
+          case 'POST':
+            await this.POST(req, res);
+            break;
+          case 'PUT':
+            await this.PUT(req, res);
+            break;
+          case 'DELETE':
+            await this.DELETE(req, res);
+            break;
+          case 'HEAD':
+            await this.HEAD(req, res);
+            break;
+          case 'OPTIONS':
+            await this.OPTIONS(req, res);
+            break;
+          default:
+            throw new AppError(`Unsupported HTTP method: ${req.method}`, 405);
+        }
+      } catch (error) {
+        next(error);
+      }
     });
   };
 }

@@ -66,11 +66,11 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccountR
   /**
    * Get user's connected accounts
    */
-  public async getUserAccounts(userId: string, organizationId?: string): Promise<ConnectedAccountResponseDto[]> {
+  public async getUserAccounts(organizationId: string): Promise<ConnectedAccountResponseDto[]> {
     try {
-      logger.info('Getting user connected accounts', { userId, organizationId });
+      logger.info('Getting user connected accounts', { organizationId });
 
-      const data = !organizationId ? await this.findByField('user_id', userId) : await this.findByField('organization_id', organizationId);
+      const data = await this.findByField('organization_id', organizationId);
 
       // Filter out pending/incomplete accounts
       const connectedAccounts = (data || []).filter((account: ConnectedAccountResponseDto) => {
@@ -103,7 +103,6 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccountR
       });
 
       logger.info('Successfully retrieved user accounts', {
-        userId,
         organizationId,
         totalAccounts: data?.length || 0,
         connectedAccounts: connectedAccounts.length,
@@ -112,13 +111,7 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccountR
 
       return connectedAccounts as ConnectedAccountResponseDto[];
     } catch (error) {
-      logger.error('Error getting user connected accounts', { error, userId, organizationId });
-
-      // For development, return empty array instead of throwing
-      if (process.env.NODE_ENV === 'development') {
-        logger.warn('Returning empty accounts array for development');
-        return [];
-      }
+      logger.error('Error getting user connected accounts', { error, organizationId });
 
       throw new DatabaseError('Failed to get user connected accounts');
     }

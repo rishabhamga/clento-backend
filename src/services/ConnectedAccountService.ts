@@ -219,9 +219,9 @@ export class ConnectedAccountService {
   /**
    * Get user's connected accounts
    */
-  async getUserAccounts(userId: string, organizationId?: string, provider?: string): Promise<ConnectedAccountResponseDto[]> {
+  async getUserAccounts(organizationId: string, provider?: string): Promise<ConnectedAccountResponseDto[]> {
     try {
-      const accounts = await this.connectedAccountRepository.getUserAccounts(userId, organizationId);
+      const accounts = await this.connectedAccountRepository.getUserAccounts(organizationId);
 
       // Filter by provider if specified
       if (provider) {
@@ -230,7 +230,7 @@ export class ConnectedAccountService {
 
       return accounts;
     } catch (error) {
-      logger.error('Error getting user accounts', { error, userId, organizationId, provider });
+      logger.error('Error getting user accounts', { error, organizationId, provider });
       throw error;
     }
   }
