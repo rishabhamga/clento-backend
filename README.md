@@ -48,6 +48,7 @@ npm run migrate
 5. Start the development server:
 
 ```bash
+nvm use
 npm run dev
 ```
 
