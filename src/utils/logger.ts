@@ -9,8 +9,8 @@ const logFormat = winston.format.combine(
     ? winston.format.colorize()
     : winston.format.uncolorize(),
   winston.format.printf(({ timestamp, level, message, ...meta }) => {
-    const metaString = Object.keys(meta).length 
-      ? `\n${JSON.stringify(meta, null, 2)}` 
+    const metaString = Object.keys(meta).length
+      ? `\n${JSON.stringify(meta, null, 2)}`
       : '';
     return `${timestamp} [${level}]: ${message}${metaString}`;
   })

@@ -7,8 +7,10 @@ import logger from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { setupSwagger } from './config/swagger';
 import supabase from './config/supabase';
-import routes from './routes';
+import registerAllRoutes from './utils/registerRoutes';
 import morgan from 'morgan';
+import './utils/expressExtensions'; // Import express extensions
+import path from 'path';
 
 // Create Express application
 const app = express();
@@ -49,8 +51,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API routes
-app.use('/api', routes);
+// Auto-register all API routes
+const routesPath = path.join(__dirname, 'routes');
+registerAllRoutes(app, routesPath);
 
 // Error handling middleware
 app.use(errorHandler);

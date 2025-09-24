@@ -65,7 +65,6 @@ export const loadUser = async (req: Request, res: Response, next: NextFunction) 
       return next(new UnauthorizedError('Authentication required'));
     }
 
-
     // Get clerk user ID from auth
     const clerkUserId = req.auth.userId;
     const userRepository = new UserRepository();
@@ -85,6 +84,8 @@ export const loadUser = async (req: Request, res: Response, next: NextFunction) 
       email: user.email,
       full_name: user.full_name || undefined,
       avatar_url: user.avatar_url || undefined,
+      created_at: user.created_at ? new Date(user.created_at) : new Date(),
+      updated_at: user.updated_at ? new Date(user.updated_at) : new Date(),
     };
 
     next();
@@ -130,6 +131,10 @@ export const loadOrganization = async (req: Request, res: Response, next: NextFu
           permissions: {},
           status: defaultOrg.status,
         };
+      } else {
+        // User has no organizations - this might be an error case
+        logger.warn('User has no organizations', { userId: req.userId });
+        // Don't set organizationId - let the route handle this case
       }
       return next();
     }
