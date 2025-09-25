@@ -79,6 +79,7 @@ export class ClentoRequestBody {
         return this.rawBody;
     }
 
+    public getParamAsNestedBody(parameterName: string): ClentoRequestBody;
     public getParamAsNestedBody(parameterName: string, required: true): ClentoRequestBody;
     public getParamAsNestedBody(parameterName: string, required: false): ClentoRequestBody | null;
     public getParamAsNestedBody(parameterName: string, required = true): ClentoRequestBody | null {
@@ -89,6 +90,7 @@ export class ClentoRequestBody {
         return new ClentoRequestBody(this.expressRequest, result, parameterName);
     }
 
+    public getParamAsArrayOfNestedBodies(parameterName: string): ClentoRequestBody[];
     public getParamAsArrayOfNestedBodies(parameterName: string, required: true): ClentoRequestBody[];
     public getParamAsArrayOfNestedBodies(parameterName: string, required: false): ClentoRequestBody[] | null;
     public getParamAsArrayOfNestedBodies(parameterName: string, required = true): ClentoRequestBody[] | null {
@@ -110,6 +112,7 @@ export class ClentoRequestBody {
         return result.trim();
     }
 
+    public getParamAsStringArray(parameterName: string): string[];
     public getParamAsStringArray(parameterName: string, required: true): string[];
     public getParamAsStringArray(parameterName: string, required: false): string[] | null;
     public getParamAsStringArray(parameterName: string, required = true): string[] | null {
@@ -132,18 +135,20 @@ export class ClentoRequestBody {
         }
     };
 
+    public getParamAsNumber(parameterName: string): number;
     public getParamAsNumber(parameterName: string, required: true): number;
     public getParamAsNumber(parameterName: string, required: false): number | null;
     public getParamAsNumber(parameterName: string, required = true): number | null {
         return this.getParamOfType(parameterName, 'number', required);
     }
 
+    public getParamAsBoolean(parameterName: string): boolean;
     public getParamAsBoolean(parameterName: string, required: true): boolean;
     public getParamAsBoolean(parameterName: string, required: false): boolean | null;
     public getParamAsBoolean(parameterName: string, required = true): boolean | null {
         return this.getParamOfType(parameterName, 'boolean', required);
     }
-    public getParamAsDate(parameterName: string, required: true): Date;
+    public getParamAsDate(parameterName: string): Date;
     public getParamAsDate(parameterName: string, required: false): Date | null;
     public getParamAsDate(parameterName: string, required = true): Date | null {
         const dateString = this.getParamOfType(parameterName, 'string', required);
@@ -157,6 +162,7 @@ export class ClentoRequestBody {
         return date;
     }
 
+    public getParamAsUUID(parameterName: string): string;
     public getParamAsUUID(parameterName: string, required: true): string;
     public getParamAsUUID(parameterName: string, required: false): string | null;
     public getParamAsUUID(parameterName: string, required = true): string | null {
@@ -173,6 +179,7 @@ export class ClentoRequestBody {
         return uuid;
     }
 
+    public getParamAsEmail(parameterName: string): string;
     public getParamAsEmail(parameterName: string, required: true): string;
     public getParamAsEmail(parameterName: string, required: false): string | null;
     public getParamAsEmail(parameterName: string, required = true): string | null {
