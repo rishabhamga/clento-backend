@@ -5,6 +5,13 @@ import env from '../config/env';
 const logFormat = winston.format.combine(
   winston.format.timestamp(),
   winston.format.errors({ stack: true }),
+  // Filter out ALL logs when DEBUG_LOGS is false
+  winston.format((info) => {
+    if (!env.DEBUG_LOGS) {
+      return false; // Don't log ANY messages when DEBUG_LOGS is false
+    }
+    return info;
+  })(),
   env.NODE_ENV === 'development'
     ? winston.format.colorize()
     : winston.format.uncolorize(),

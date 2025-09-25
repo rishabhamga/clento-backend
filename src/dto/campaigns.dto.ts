@@ -14,34 +14,32 @@ const WorkflowStepSchema = z.object({
 // Campaign DTOs
 export const CreateCampaignDto = z.object({
   organization_id: z.string().uuid().nullable().optional(),
-  creator_id: z.string().uuid().nullable().optional(),
   name: z.string().min(1, 'Campaign name is required'),
   description: z.string().nullable().optional(),
-  status: z.string().max(50).default('draft'),
-  lead_list_id: z.string().uuid().nullable().optional(),
-  account_id: z.string().uuid().nullable().optional(),
-  workflow_id: z.string().nullable().optional(),
-  workflow_definition: z.record(z.any()),
-  schedule: z.record(z.any()),
-  stats: z.record(z.any()).default({}),
-  started_at: z.string().datetime().nullable().optional(),
-  completed_at: z.string().datetime().nullable().optional(),
+  sender_account: z.string().nullable().optional(),
+  prospect_list: z.string().nullable().optional(),
+  start_date: z.string().date().nullable().optional(),
+  end_date: z.string().date().nullable().optional(),
+  start_time: z.string().nullable().optional(), // time without time zone
+  end_time: z.string().nullable().optional(), // time without time zone
+  timezone: z.string().nullable().optional(),
+  file_name: z.string().nullable().optional(),
+  bucket: z.string().nullable().optional(),
 });
 
 export const UpdateCampaignDto = z.object({
   organization_id: z.string().uuid().nullable().optional(),
-  creator_id: z.string().uuid().nullable().optional(),
   name: z.string().optional(),
   description: z.string().nullable().optional(),
-  status: z.string().max(50).optional(),
-  lead_list_id: z.string().uuid().nullable().optional(),
-  account_id: z.string().uuid().nullable().optional(),
-  workflow_id: z.string().nullable().optional(),
-  workflow_definition: z.record(z.any()).optional(),
-  schedule: z.record(z.any()).optional(),
-  stats: z.record(z.any()).optional(),
-  started_at: z.string().datetime().nullable().optional(),
-  completed_at: z.string().datetime().nullable().optional(),
+  sender_account: z.string().nullable().optional(),
+  prospect_list: z.string().nullable().optional(),
+  start_date: z.string().date().nullable().optional(),
+  end_date: z.string().date().nullable().optional(),
+  start_time: z.string().nullable().optional(), // time without time zone
+  end_time: z.string().nullable().optional(), // time without time zone
+  timezone: z.string().nullable().optional(),
+  file_name: z.string().nullable().optional(),
+  bucket: z.string().nullable().optional(),
 });
 
 /**
@@ -50,32 +48,30 @@ export const UpdateCampaignDto = z.object({
 export const CampaignResponseDto = z.object({
   id: z.string().uuid(),
   organization_id: z.string().uuid().nullable(),
-  creator_id: z.string().uuid().nullable(),
   name: z.string(),
   description: z.string().nullable(),
-  status: z.string().nullable(),
-  lead_list_id: z.string().uuid().nullable(),
-  account_id: z.string().uuid().nullable(),
-  workflow_id: z.string().nullable(),
-  workflow_definition: z.record(z.any()),
-  schedule: z.record(z.any()),
-  stats: z.record(z.any()),
+  sender_account: z.string().nullable(),
+  prospect_list: z.string().nullable(),
+  start_date: z.string().date().nullable(),
+  end_date: z.string().date().nullable(),
+  start_time: z.string().nullable(), // time without time zone
+  end_time: z.string().nullable(), // time without time zone
+  timezone: z.string().nullable(),
+  file_name: z.string().nullable(),
+  bucket: z.string().nullable(),
   created_at: z.string().datetime().nullable(),
   updated_at: z.string().datetime().nullable(),
-  started_at: z.string().datetime().nullable(),
-  completed_at: z.string().datetime().nullable(),
 });
 
 export const CampaignQueryDto = z.object({
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(100).default(20),
   search: z.string().optional(),
-  status: z.enum(['draft', 'active', 'paused', 'completed', 'stopped']).optional(),
-  type: z.enum(['linkedin', 'email', 'mixed']).optional(),
-  account_id: z.string().uuid().optional(),
-  lead_list_id: z.string().uuid().optional(),
-  creator_id: z.string().uuid().optional(),
-  tags: z.string().optional(), // Comma-separated tags
+  organization_id: z.string().uuid().optional(),
+  sender_account: z.string().optional(),
+  prospect_list: z.string().optional(),
+  start_date_from: z.string().date().optional(),
+  start_date_to: z.string().date().optional(),
   created_from: z.string().date().optional(),
   created_to: z.string().date().optional(),
 });

@@ -89,7 +89,9 @@ export class ClentoRequestBody {
         return new ClentoRequestBody(this.expressRequest, result, parameterName);
     }
 
-    public getParamAsArrayOfNestedBodies = (parameterName: string, required = true): ClentoRequestBody[] | null => {
+    public getParamAsArrayOfNestedBodies(parameterName: string, required: true): ClentoRequestBody[];
+    public getParamAsArrayOfNestedBodies(parameterName: string, required: false): ClentoRequestBody[] | null;
+    public getParamAsArrayOfNestedBodies(parameterName: string, required = true): ClentoRequestBody[] | null {
         const result: object[] = this.getParamOfType(parameterName, 'object[]', required);
         if (result === null) {
             return null;
@@ -97,7 +99,7 @@ export class ClentoRequestBody {
         return result.map((it, idx) => new ClentoRequestBody(this.expressRequest, it, `${parameterName}[${idx}]`));
     }
 
-
+    public getParamAsString(parameterName: string): string;
     public getParamAsString(parameterName: string, required: true): string;
     public getParamAsString(parameterName: string, required: false): string | null;
     public getParamAsString(parameterName: string, required = true): string | null {

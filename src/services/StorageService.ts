@@ -15,10 +15,8 @@ export interface UploadResult {
  */
 export class StorageService {
     private static storage: Storage | null = null;
-    private bucketName: string;
 
     constructor() {
-        this.bucketName = env.GOOGLE_CLOUD_STORAGE_BUCKET;
         StorageService.initializeStorage();
     }
 
@@ -61,7 +59,8 @@ export class StorageService {
         fileBuffer: Buffer,
         filename: string,
         organizationId: string,
-        leadListId: string
+        leadListId: string,
+        bucketName: string
     ): Promise<UploadResult> {
         try {
             if (!StorageService.storage) {
@@ -72,7 +71,7 @@ export class StorageService {
             const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
 
             // Get bucket
-            const bucket = StorageService.storage.bucket(this.bucketName);
+            const bucket = StorageService.storage.bucket(bucketName);
             const file = bucket.file(filePath);
 
             // Upload file
@@ -126,7 +125,8 @@ export class StorageService {
     async deleteCsvFile(
         organizationId: string,
         leadListId: string,
-        filename: string
+        filename: string,
+        bucketName: string
     ): Promise<void> {
         try {
             // For development, just log the deletion
@@ -147,7 +147,7 @@ export class StorageService {
             const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
 
             // Get bucket and file
-            const bucket = StorageService.storage.bucket(this.bucketName);
+            const bucket = StorageService.storage.bucket(bucketName);
             const file = bucket.file(filePath);
 
             // Delete file
@@ -179,7 +179,8 @@ export class StorageService {
         organizationId: string,
         leadListId: string,
         filename: string,
-        expirationMinutes: number = 60
+        expirationMinutes: number = 60,
+        bucketName: string
     ): Promise<string> {
         try {
 
@@ -191,7 +192,7 @@ export class StorageService {
             const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
 
             // Get bucket and file
-            const bucket = StorageService.storage.bucket(this.bucketName);
+            const bucket = StorageService.storage.bucket(bucketName);
             const file = bucket.file(filePath);
 
             // Generate signed URL
@@ -227,7 +228,8 @@ export class StorageService {
     async fileExists(
         organizationId: string,
         leadListId: string,
-        filename: string
+        filename: string,
+        bucketName: string
     ): Promise<boolean> {
         try {
 
@@ -239,7 +241,7 @@ export class StorageService {
             const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
 
             // Get bucket and file
-            const bucket = StorageService.storage.bucket(this.bucketName);
+            const bucket = StorageService.storage.bucket(bucketName);
             const file = bucket.file(filePath);
 
             // Check if file exists
@@ -264,7 +266,8 @@ export class StorageService {
     async getFileMetadata(
         organizationId: string,
         leadListId: string,
-        filename: string
+        filename: string,
+        bucketName: string
     ): Promise<{
         size: number;
         contentType: string;
@@ -290,7 +293,7 @@ export class StorageService {
             const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
 
             // Get bucket and file
-            const bucket = StorageService.storage.bucket(this.bucketName);
+            const bucket = StorageService.storage.bucket(bucketName);
             const file = bucket.file(filePath);
 
             // Get metadata
@@ -320,7 +323,8 @@ export class StorageService {
     async downloadFile(
         organizationId: string,
         leadListId: string,
-        filename: string
+        filename: string,
+        bucketName: string
     ): Promise<{
         stream: NodeJS.ReadableStream;
         metadata: {
@@ -338,7 +342,7 @@ export class StorageService {
             const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
 
             // Get bucket and file
-            const bucket = StorageService.storage.bucket(this.bucketName);
+            const bucket = StorageService.storage.bucket(bucketName);
             const file = bucket.file(filePath);
 
             // Check if file exists
@@ -391,7 +395,8 @@ export class StorageService {
     async downloadFileAsBuffer(
         organizationId: string,
         leadListId: string,
-        filename: string
+        filename: string,
+        bucketName: string
     ): Promise<{
         buffer: Buffer;
         metadata: {
@@ -409,7 +414,7 @@ export class StorageService {
             const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
 
             // Get bucket and file
-            const bucket = StorageService.storage.bucket(this.bucketName);
+            const bucket = StorageService.storage.bucket(bucketName);
             const file = bucket.file(filePath);
 
             // Check if file exists
@@ -453,6 +458,34 @@ export class StorageService {
             }
 
             throw new ExternalAPIError('Failed to download file');
+        }
+    }
+    public async uploadJson(workflowJson: Record<string, any>, organizationId: string, filename: string, bucketName: string): Promise<void> {
+        try {
+            if (!StorageService.storage) {
+                throw new ServiceUnavailableError('Storage service not configured');
+            }
+            const filePath = `workflows/${organizationId}/yash's`;
+
+            const bucket = StorageService.storage.bucket(bucketName);
+            const file = bucket.file(filePath);
+
+            await file.save(JSON.stringify(workflowJson), {
+                metadata: {
+                    contentType: 'application/json',
+                },
+            });
+
+        }
+        catch (error) {
+            logger.error('Error uploading JSON file', {
+                error,
+                filename,
+                organizationId,
+                bucketName,
+            });
+
+            throw new ExternalAPIError('Failed to upload JSON file');
         }
     }
 }

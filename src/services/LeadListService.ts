@@ -14,6 +14,7 @@ import {
 } from '../dto/leads.dto';
 import { NotFoundError, ValidationError, BadRequestError } from '../errors/AppError';
 import logger from '../utils/logger';
+import env from '../config/env';
 
 /**
  * Service for lead list management
@@ -23,12 +24,14 @@ export class LeadListService {
   private leadRepository: LeadRepository;
   private connectedAccountRepository: ConnectedAccountRepository;
   private storageService: StorageService;
+  private bucketName: string;
 
   constructor() {
     this.leadListRepository = new LeadListRepository();
     this.leadRepository = new LeadRepository();
     this.connectedAccountRepository = new ConnectedAccountRepository();
     this.storageService = new StorageService();
+    this.bucketName = env.GOOGLE_CLOUD_STORAGE_BUCKET;
   }
 
   /**
@@ -92,7 +95,7 @@ export class LeadListService {
         if(!leadList.original_filename) {
             throw new NotFoundError('Lead list not found');
         }
-        const leadFileBuffer = await this.storageService.downloadFileAsBuffer(organizationId, leadListId, leadList.original_filename);
+        const leadFileBuffer = await this.storageService.downloadFileAsBuffer(organizationId, leadListId, leadList.original_filename, this.bucketName);
 
         const leadFileBufferString = leadFileBuffer.buffer.toString('utf8');
 
@@ -248,7 +251,8 @@ export class LeadListService {
           await this.storageService.deleteCsvFile(
             organizationId,
             leadListId,
-            `${leadList.name}.csv`
+            `${leadList.name}.csv`,
+            this.bucketName
           );
         } catch (error) {
           logger.warn('Error deleting CSV file', { error, leadListId });
@@ -382,7 +386,8 @@ export class LeadListService {
           csvBuffer,
           filename,
           organizationId,
-          leadList.id
+          leadList.id,
+          this.bucketName
         );
       } catch (error) {
         logger.warn('Error uploading CSV file', { error, leadListId: leadList.id });
