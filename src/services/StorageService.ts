@@ -229,16 +229,14 @@ export class StorageService {
         organizationId: string,
         leadListId: string,
         filename: string,
-        bucketName: string
+        bucketName: string,
+        filePath: string
     ): Promise<boolean> {
         try {
 
             if (!StorageService.storage) {
                 return false;
             }
-
-            // Generate file path
-            const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
 
             // Get bucket and file
             const bucket = StorageService.storage.bucket(bucketName);
@@ -396,7 +394,8 @@ export class StorageService {
         organizationId: string,
         leadListId: string,
         filename: string,
-        bucketName: string
+        bucketName: string,
+        filePath: string
     ): Promise<{
         buffer: Buffer;
         metadata: {
@@ -409,9 +408,6 @@ export class StorageService {
             if (!StorageService.storage) {
                 throw new ServiceUnavailableError('Storage service not configured');
             }
-
-            // Generate file path
-            const filePath = `lead-lists/${organizationId}/${leadListId}/${filename}`;
 
             // Get bucket and file
             const bucket = StorageService.storage.bucket(bucketName);
@@ -465,7 +461,7 @@ export class StorageService {
             if (!StorageService.storage) {
                 throw new ServiceUnavailableError('Storage service not configured');
             }
-            const filePath = `workflows/${organizationId}/yash's`;
+            const filePath = `workflows/${organizationId}/${filename}`;
 
             const bucket = StorageService.storage.bucket(bucketName);
             const file = bucket.file(filePath);

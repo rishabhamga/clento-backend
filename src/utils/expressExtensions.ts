@@ -123,7 +123,10 @@ export class ClentoRequestBody {
         return result.map(it => it.trim());
     }
 
-    public getParamAsEnumValue = <T>(enumm: GenericEnum<T>, parameterName: string, required = true): T | null => {
+    public getParamAsEnumValue <T>(enumm: GenericEnum<T>, parameterName: string): T
+    public getParamAsEnumValue <T>(enumm: GenericEnum<T>, parameterName: string, required : true): T
+    public getParamAsEnumValue <T>(enumm: GenericEnum<T>, parameterName: string, required :false): T | null
+    public getParamAsEnumValue <T>(enumm: GenericEnum<T>, parameterName: string, required = true): T | null {
         const paramAsString = this.getParamOfType(parameterName, 'string', required);
         if (!required && paramAsString === null) {
             return null;
@@ -134,6 +137,16 @@ export class ClentoRequestBody {
             throw new ValidationError(`${parameterName} is not a valid enum value in ${this.bodyName}`);
         }
     };
+
+    public getParamAsType <T>(type: string, parameterName: string, required :true): T
+    public getParamAsType <T>(type: string, parameterName: string, required: false): T | null
+    public getParamAsType <T>(type: string, parameterName: string, required = true): T | null{
+        const paramAsString =  this.getParamOfType(parameterName, type, required) as T;
+        if (!required && paramAsString === null) {
+            return null;
+        }
+        return paramAsString as T;
+    }
 
     public getParamAsNumber(parameterName: string): number;
     public getParamAsNumber(parameterName: string, required: true): number;

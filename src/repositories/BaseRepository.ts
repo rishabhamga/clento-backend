@@ -36,6 +36,21 @@ export abstract class BaseRepository<T, InsertT, UpdateT> {
     return data as T;
   }
 
+  public async findByIdIn(ids: string[]): Promise<T[]> {
+    const { data, error } = await this.client
+      .from(this.tableName)
+      .select('*')
+      .in('id', ids);
+
+      if (error) {
+        throw error;
+      }
+      if(!data){
+        return []
+      }
+      return data as T[];
+  }
+
   /**
    * Find records by a specific field value
    */

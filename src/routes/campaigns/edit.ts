@@ -1,94 +1,17 @@
 import ClentoAPI from '../../utils/apiUtil';
 import { Request, Response } from 'express';
-import { DisplayError, NotFoundError } from '../../errors/AppError';
+import { DisplayError, ForbiddenError, NotFoundError } from '../../errors/AppError';
 import { CampaignService } from '../../services/CampaignService';
 import { CreateCampaignDto, UpdateCampaignDto } from '../../dto/campaigns.dto';
 import '../../utils/expressExtensions'; // Import extensions
 import { StorageService } from '../../services/StorageService';
-
-// Enums
-export enum EAction {
-    action = "action",
-    addStep = "addStep"
-}
-
-export enum EWorkflowNodeType {
-    profile_visit = 'profile_visit',
-    like_post = 'like_post',
-    follow_profile = 'follow_profile',
-    comment_post = 'comment_post',
-    send_invite = 'send_invite',
-    send_followup = 'send_followup',
-    withdraw_request = 'withdraw_request',
-    send_inmail = 'send_inmail',
-    follow_company = 'follow_company',
-    send_connection_request = 'send_connection_request'
-}
-
-export type EPathType = 'accepted' | 'not-accepted'
-
-export enum EMessageLength {
-    short = 'short',
-    medium = 'medium',
-    long = 'long'
-}
-
-export enum ETone {
-    professional = 'professional',
-    friendly = 'friendly',
-    casual = 'casual',
-    enthusiastic = 'enthusiastic',
-    supportive = 'supportive',
-    cold = 'cold',
-    moderate = 'moderate',
-    warm = 'warm'
-}
-
-export enum ELanguage {
-    english = 'english',
-    spanish = 'spanish',
-    french = 'french',
-    german = 'german',
-    portuguese = 'portuguese'
-}
-
-export enum EFormality {
-    casual = 'casual',
-    approachable = 'approachable',
-    professional = 'professional'
-};
-export enum EApproach {
-    direct = 'direct',
-    diplomatic = 'diplomatic',
-    indirect = 'indirect'
-}
-
-export enum EFocus {
-    personal = 'personal',
-    relational = 'relational',
-    business = 'business'
-}
-export enum EIntention {
-    networking = 'networking',
-    partnership = 'partnership',
-    collaboration = 'collaboration'
-}
-export enum ECallToAction {
-    strong = 'strong',
-    confident = 'confident',
-    subtle = 'subtle'
-}
-export enum EPersonalization {
-    specific = 'specific',
-    generic = 'generic'
-}
-
+import { EAction, EApproach, ECallToAction, EFocus, EFormality, EIntention, ELanguage, EMessageLength, EPathType, EPersonalization, ETone, EWorkflowNodeType } from './create';
 
 /**
  * Create Campaign API - Create new campaign endpoint
  */
 class CreateCampaignAPI extends ClentoAPI {
-    public path = '/api/campaigns/create';
+    public path = '/api/campaigns/edit';
     public authType: 'DASHBOARD' = 'DASHBOARD';
 
     private campaignService = new CampaignService();
@@ -99,9 +22,16 @@ class CreateCampaignAPI extends ClentoAPI {
      */
     public POST = async (req: Request, res: Response): Promise<Response> => {
         try {
-            const organizationId = req.organizationId;
             const reqBody = req.getBody();
-
+            const organizationId = req.organizationId;
+            const campaignId = reqBody.getParamAsString('campaignId');
+            const campaignPrev = await this.campaignService.getCampaignById(campaignId);
+            if(!campaignPrev){
+                throw new NotFoundError('Campaign not found');
+            }
+            if(campaignPrev?.organization_id !== organizationId){
+                throw new ForbiddenError('You are not allowed to edit this campaign');
+            }
             const detail = reqBody.getParamAsNestedBody('detail');
 
             //   detail
@@ -242,8 +172,7 @@ class CreateCampaignAPI extends ClentoAPI {
                 }
             })
 
-            const campaignCreateDto: CreateCampaignDto = {
-                organization_id: organizationId,
+            const updateCampaignDto: UpdateCampaignDto = {
                 name,
                 description,
                 sender_account: senderAccount,
@@ -255,7 +184,7 @@ class CreateCampaignAPI extends ClentoAPI {
                 timezone
             }
 
-            const campaign = await this.campaignService.createCampaign(campaignCreateDto);
+            const campaign = await this.campaignService.updateCampaign(campaignId, updateCampaignDto);
             const worflowJson = {
                 nodes,
                 edges
@@ -263,7 +192,7 @@ class CreateCampaignAPI extends ClentoAPI {
             if (campaign) {
                 await this.storageService.uploadJson(worflowJson, organizationId, `${campaign.id}.json`, this.bucketName);
             }else{
-                throw new DisplayError("Error while creating the campaign")
+                throw new DisplayError("Error while updating the campaign")
             }
 
             const campaignUpdateDto: UpdateCampaignDto = {
@@ -271,10 +200,10 @@ class CreateCampaignAPI extends ClentoAPI {
                 bucket: this.bucketName
             }
 
-            await this.campaignService.updateCampaign(campaign.id, campaignUpdateDto);
+            await this.campaignService.updateCampaign(campaignId, campaignUpdateDto);
 
             return res.sendOKResponse({
-                message: 'Campaign created successfully',
+                message: 'Campaign Updated successfully',
             });
         } catch (error) {
             throw error;

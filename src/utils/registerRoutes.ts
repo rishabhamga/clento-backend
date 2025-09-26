@@ -21,7 +21,7 @@ const requireDirectory = (dirPath: string): Record<string, ClentoAPI> => {
                 readDirectory(itemPath, prefix ? `${prefix}_${item}` : item);
             } else if (item.endsWith('.ts') || item.endsWith('.js')) {
                 // Skip index files and test files
-                if (item === 'index.ts' || item === 'index.js' || item.includes('.test.') || item.includes('.spec.')) {
+                if (item === 'index.js' || item.includes('.test.') || item.includes('.spec.')) {
                     continue;
                 }
 

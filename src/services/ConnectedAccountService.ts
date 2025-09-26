@@ -1,6 +1,6 @@
 import { ConnectedAccountRepository } from '../repositories/ConnectedAccountRepository';
 import { UnipileService } from './UnipileService';
-import { ConflictError, NotFoundError, ForbiddenError, BadRequestError } from '../errors/AppError';
+import { ConflictError, NotFoundError, ForbiddenError, BadRequestError, DisplayError } from '../errors/AppError';
 import logger from '../utils/logger';
 import { ConnectedAccountResponseDto, CreateConnectedAccountDto, UpdateConnectedAccountDto } from '../dto/accounts.dto';
 
@@ -232,6 +232,19 @@ export class ConnectedAccountService {
     } catch (error) {
       logger.error('Error getting user accounts', { error, organizationId, provider });
       throw error;
+    }
+  }
+
+  async getAccountsByIdIn(ids: string[]): Promise<ConnectedAccountResponseDto[]> {
+    try {
+      const accounts = await this.connectedAccountRepository.findByIdIn(ids);
+      if(!accounts){
+        throw new NotFoundError('Accounts not found');
+      }
+      return accounts;
+    } catch (error) {
+      logger.error('Error getting accounts by ID in', { error, ids });
+      throw new DisplayError('Failed to get accounts by ID in');
     }
   }
 

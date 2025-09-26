@@ -85,6 +85,18 @@ export class LeadListService {
       throw error;
     }
   }
+  async getLeadListByIdIn(leadListIds: string[]): Promise<LeadListResponseDto[]> {
+    try {
+      const leadLists = await this.leadListRepository.findByIdIn(leadListIds);
+      if(!leadLists) {
+        throw new NotFoundError('Lead list not found');
+      }
+      return leadLists;
+    } catch (error) {
+      logger.error('Error getting lead list', { error, leadListIds });
+      throw error;
+    }
+  }
 
   /**
    * Get lead list data by ID
@@ -95,7 +107,8 @@ export class LeadListService {
         if(!leadList.original_filename) {
             throw new NotFoundError('Lead list not found');
         }
-        const leadFileBuffer = await this.storageService.downloadFileAsBuffer(organizationId, leadListId, leadList.original_filename, this.bucketName);
+        const filePath = `lead-lists/${organizationId}/${leadListId}/${leadList.original_filename}`;
+        const leadFileBuffer = await this.storageService.downloadFileAsBuffer(organizationId, leadListId, leadList.original_filename, this.bucketName, filePath);
 
         const leadFileBufferString = leadFileBuffer.buffer.toString('utf8');
 

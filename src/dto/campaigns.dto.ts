@@ -25,10 +25,10 @@ export const CreateCampaignDto = z.object({
   timezone: z.string().nullable().optional(),
   file_name: z.string().nullable().optional(),
   bucket: z.string().nullable().optional(),
+  is_deleted: z.boolean().default(false).optional()
 });
 
 export const UpdateCampaignDto = z.object({
-  organization_id: z.string().uuid().nullable().optional(),
   name: z.string().optional(),
   description: z.string().nullable().optional(),
   sender_account: z.string().nullable().optional(),
@@ -40,6 +40,7 @@ export const UpdateCampaignDto = z.object({
   timezone: z.string().nullable().optional(),
   file_name: z.string().nullable().optional(),
   bucket: z.string().nullable().optional(),
+  is_deleted: z.boolean().default(false).optional()
 });
 
 /**
@@ -61,6 +62,7 @@ export const CampaignResponseDto = z.object({
   bucket: z.string().nullable(),
   created_at: z.string().datetime().nullable(),
   updated_at: z.string().datetime().nullable(),
+  is_deleted: z.boolean().default(false).optional()
 });
 
 export const CampaignQueryDto = z.object({
