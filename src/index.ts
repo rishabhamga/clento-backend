@@ -2,13 +2,16 @@ import 'express-async-errors';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import multer from 'multer';
 import env from './config/env';
 import logger from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { setupSwagger } from './config/swagger';
 import supabase from './config/supabase';
-import routes from './routes';
+import registerAllRoutes from './utils/registerRoutes';
 import morgan from 'morgan';
+import './utils/expressExtensions'; // Import express extensions
+import path from 'path';
 
 // Create Express application
 const app = express();
@@ -37,6 +40,25 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Configure multer for file uploads
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Allow CSV files
+        if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only CSV files are allowed'));
+        }
+    }
+});
+
+// Apply multer middleware globally
+app.use(upload.any());
+
 // Setup Swagger
 setupSwagger(app);
 
@@ -49,8 +71,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API routes
-app.use('/api', routes);
+// Auto-register all API routes
+const routesPath = path.join(__dirname, 'routes');
+registerAllRoutes(app, routesPath);
 
 // Error handling middleware
 app.use(errorHandler);

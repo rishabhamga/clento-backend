@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { promisify } from 'util';
 import { BadRequestError, AppError } from '../errors/AppError';
+import { defaultAuth } from '../middleware/auth';
 
 
 export interface ExpressRequestParams {
@@ -69,22 +70,22 @@ export default abstract class ClentoAPI {
         };
     }
 
-    public GET = async (req: Request, res: Response): Promise<void> => {
+    public GET = async (req: Request, res: Response): Promise<Response> => {
         // The child class has to override this method so that we dont throw this error
         throw new AppError('Method not implemented', 405);
     };
 
-    public POST = async (req: Request, res: Response): Promise<void> => {
+    public POST = async (req: Request, res: Response): Promise<Response> => {
         // The child class has to override this method so that we dont throw this error
         throw new AppError('Method not implemented', 405);
     };
 
-    public PUT = async (req: Request, res: Response): Promise<void> => {
+    public PUT = async (req: Request, res: Response): Promise<Response> => {
         // The child class has to override this method so that we dont throw this error
         throw new AppError('Method not implemented', 405);
     };
 
-    public DELETE = async (req: Request, res: Response): Promise<void> => {
+    public DELETE = async (req: Request, res: Response): Promise<Response> => {
         // The child class has to override this method so that we dont throw this error
         throw new AppError('Method not implemented', 405);
     };
@@ -115,8 +116,28 @@ export default abstract class ClentoAPI {
 
             // Apply authentication based on authType
             if (this.authType !== 'NONE') {
-                // Authentication logic would be implemented here
-                // This would integrate with your existing auth middleware
+                // Apply authentication middleware for DASHBOARD and API auth types
+                if (this.authType === 'DASHBOARD' || this.authType === 'API') {
+                    // Create a middleware chain for authentication
+                    const authChain = [...defaultAuth];
+
+                    // Execute each middleware in sequence
+                    let currentIndex = 0;
+                    const executeNext = async () => {
+                        if (currentIndex < authChain.length) {
+                            const middleware = authChain[currentIndex++];
+                            await new Promise<void>((resolve, reject) => {
+                                middleware(req, res, (err?: any) => {
+                                    if (err) reject(err);
+                                    else resolve();
+                                });
+                            });
+                            await executeNext();
+                        }
+                    };
+
+                    await executeNext();
+                }
             }
 
             // Set common headers

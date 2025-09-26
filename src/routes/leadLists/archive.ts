@@ -1,0 +1,41 @@
+import ClentoAPI from '../../utils/apiUtil';
+import { LeadListService } from '../../services/LeadListService';
+import { Request, Response } from 'express';
+import { NotFoundError } from '../../errors/AppError';
+import '../../utils/expressExtensions';
+
+/**
+ * Lead List Archive API - Archive lead list endpoint
+ */
+class LeadListArchiveAPI extends ClentoAPI {
+  public path = '/api/lead-lists/:id/archive';
+  public authType: 'DASHBOARD' = 'DASHBOARD';
+
+  private leadListService = new LeadListService();
+
+  /**
+   * Archive lead list
+   */
+  public POST = async (req: Request, res: Response): Promise<Response> => {
+    try {
+      const pathParams = req.getPathParams();
+      const id = pathParams.getParamAsString('id', true);
+      const organizationId = req.organizationId;
+
+      if (!organizationId) {
+        throw new NotFoundError('Organization not found');
+      }
+
+      const leadList = await this.leadListService.archiveLeadList(id, organizationId);
+
+      return res.sendOKResponse({
+        data: leadList,
+        message: 'Lead list archived successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+}
+
+export default new LeadListArchiveAPI();

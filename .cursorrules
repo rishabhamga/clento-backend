@@ -7,6 +7,11 @@ alwaysApply: true
 # Clento Backend Coding Standards
 
 ## **Code Structure and Organization**
+- **Indentation**
+  - Use 4 spaces for indentation (never tabs)
+  - Maintain consistent indentation throughout the codebase
+  - Configure your editor to show whitespace characters
+
 - **Keep Functions Small and Focused**
   - Functions should do one thing and do it well
   - Aim for less than 15 lines per function
@@ -252,6 +257,223 @@ router.use('/your-feature', yourFeatureRoutes);
 - **When updating existing APIs**: Convert to ClentoAPI pattern
 - **When creating new APIs**: Always use ClentoAPI from the start
 - **When refactoring**: Replace manual routes with ClentoAPI.createRouter()
+
+## **🚀 Pocketly-Style Routing Pattern (MANDATORY)**
+
+### **CRITICAL: Always Use Pocketly-Style Routing**
+- **NEVER create manual Express routes** - Always use ClentoAPI base class
+- **NEVER use traditional controller pattern** - Use ClentoAPI for all API endpoints
+- **NEVER manually bind middleware** - Routes are automatically discovered and registered
+- **ALL API endpoints MUST extend ClentoAPI** - No exceptions
+- **NO constructor setup required** - Clean class definitions only
+
+### **Required API Structure (Pocketly Style)**
+```typescript
+// ✅ CORRECT: Always use this pattern
+import ClentoAPI from '../utils/apiUtil';
+import { Request, Response } from 'express';
+import '../utils/expressExtensions'; // Import extensions
+
+class YourAPI extends ClentoAPI {
+  public path = '/api/your-endpoint';
+  public authType: 'DASHBOARD' = 'DASHBOARD'; // or 'NONE', 'API'
+
+  private yourService = new YourService();
+
+  public GET = async (req: Request, res: Response): Promise<Response> => {
+    // Your business logic here
+    return res.sendOKResponse({ data: result });
+  };
+
+  public POST = async (req: Request, res: Response): Promise<Response> => {
+    // Your business logic here
+    return res.sendOKResponse({ data: result });
+  };
+}
+
+export default new YourAPI();
+```
+
+### **❌ FORBIDDEN Patterns**
+```typescript
+// ❌ NEVER: Manual Express routes
+const router = Router();
+router.get('/endpoint', (req, res) => { ... });
+
+// ❌ NEVER: Traditional controllers
+export class YourController {
+  getEndpoint = async (req, res) => { ... }
+}
+
+// ❌ NEVER: Manual middleware binding
+router.get('/endpoint', authMiddleware, yourController.getEndpoint);
+
+// ❌ NEVER: Constructor setup
+constructor() {
+  super();
+  this.requestParams = { ... };
+}
+```
+
+### **File Organization Rules**
+- **API classes go in `/src/routes/`** - Not in `/src/controllers/`
+- **One file per API feature** - `[featureName].ts` (flat structure)
+- **Each file contains**: API class + automatic export
+- **File naming**: `userProfile.ts`, `leadListMain.ts`, `campaignCreate.ts`, etc.
+- **NO nested directories** - Keep routes flat like Pocketly
+
+### **Authentication Types**
+- **`NONE`**: Public endpoints (no auth required)
+- **`API`**: API key authentication
+- **`DASHBOARD`**: Full dashboard authentication (most common)
+
+### **Automatic Route Registration**
+- Routes are **automatically discovered** when server starts
+- **No manual registration** required
+- Just create the file and it works immediately
+- Uses `registerAllRoutes()` in `src/index.ts`
+
+## **📝 Parameter Validation with Express Extensions**
+
+### **Request Body Access**
+```typescript
+// ✅ CORRECT: Use getBody() for request body
+const body = req.getBody();
+const name = body.getParamAsString('name', true); // required
+const email = body.getParamAsString('email', false); // optional
+```
+
+### **Query Parameters Access**
+```typescript
+// ✅ CORRECT: Use getQuery() for query parameters
+const query = req.getQuery();
+const page = query.getParamAsNumber('page', false);
+const limit = query.getParamAsNumber('limit', false);
+```
+
+### **Path Parameters Access**
+```typescript
+// ✅ CORRECT: Use getPathParams() for URL parameters
+const params = req.getPathParams();
+const userId = params.getParamAsString('userId', true);
+```
+
+### **File Upload Access**
+```typescript
+// ✅ CORRECT: Use getFiles() for file uploads
+const files = req.getFiles();
+const csvFile = files.getFileAsCSV('csvFile', true);
+const imageFile = files.getFileAsJPG('image', false);
+```
+
+### **Available Parameter Methods**
+```typescript
+// String parameters
+body.getParamAsString('name', true); // required
+body.getParamAsString('description', false); // optional
+
+// String arrays
+body.getParamAsStringArray('tags', true);
+body.getParamAsStringArray('emails', false);
+
+// Numbers
+body.getParamAsNumber('age', true);
+body.getParamAsNumber('count', false);
+
+// Booleans
+body.getParamAsBoolean('isActive', true);
+body.getParamAsBoolean('isPublic', false);
+
+// Dates
+body.getParamAsDate('startDate', true);
+body.getParamAsDate('endDate', false);
+
+// UUIDs
+body.getParamAsUUID('userId', true);
+body.getParamAsUUID('orgId', false);
+
+// Emails
+body.getParamAsEmail('email', true);
+body.getParamAsEmail('backupEmail', false);
+
+// Enums
+body.getParamAsEnumValue(MyEnum, 'status', true);
+body.getParamAsEnumValue(MyEnum, 'type', false);
+
+// Enum arrays
+body.getParamAsEnumArray(MyEnum, 'categories', true);
+
+// Nested objects
+const settings = body.getParamAsNestedBody('settings', true);
+const nestedValue = settings.getParamAsString('theme', false);
+
+// Arrays of nested objects
+const items = body.getParamAsArrayOfNestedBodies('items', true);
+items.forEach(item => {
+  const name = item.getParamAsString('name', true);
+});
+```
+
+### **File Upload Methods**
+```typescript
+// CSV files
+const csvFile = files.getFileAsCSV('csvFile', true);
+
+// Image files
+const pngFile = files.getFileAsPNG('image', true);
+const jpgFile = files.getFileAsJPG('photo', false);
+
+// Generic file
+const anyFile = files.getFile('document');
+```
+
+## **🔧 Response Methods**
+
+### **Success Responses**
+```typescript
+// ✅ Standard success response
+return res.sendOKResponse({ data: result });
+
+// ✅ Created resource response
+return res.sendCreatedResponse({ id: newId, data: result });
+
+// ✅ No content response
+return res.sendNoContentResponse();
+```
+
+### **Error Responses**
+```typescript
+// ✅ Custom error response
+return res.sendErrorResponse(400, 'Invalid input', { field: 'email' });
+
+// ✅ Validation error response
+return res.sendValidationError('Email is required');
+```
+
+## **🔄 Migration Rules**
+
+### **When Updating Existing APIs**
+- Convert to Pocketly-style ClentoAPI pattern
+- Remove manual route registration
+- Remove constructor setup
+- Use express extensions for parameter validation
+
+### **When Creating New APIs**
+- Always use ClentoAPI from the start
+- Follow flat file structure
+- Use automatic route discovery
+
+## **🎯 Pocketly Compatibility**
+
+### **Benefits Achieved**
+- **Exact same pattern** as your Pocketly system
+- **No learning curve** - works exactly as you expect
+- **Consistent codebase** across your projects
+- **Automatic route discovery** - routes appear when files are created
+- **Clean class definitions** - no constructor boilerplate
+- **Inline parameter validation** - validate as you use
+
+The Clento backend now works **exactly like your Pocketly system**! 🎯
 
 ## **Coding**
 - **writing new code**

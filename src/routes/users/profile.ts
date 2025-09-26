@@ -1,42 +1,19 @@
-import ClentoAPI from '../utils/apiUtil';
-import { UserService } from '../services/UserService';
+import ClentoAPI from '../../utils/apiUtil';
+import { UserService } from '../../services/UserService';
 import { Request, Response } from 'express';
-import { NotFoundError } from '../errors/AppError';
+import { NotFoundError } from '../../errors/AppError';
+import '../../utils/expressExtensions';
 
 /**
- * User API - Authenticated user endpoints
+ * User Profile API - Authenticated user endpoints
  */
-export class UserAPI extends ClentoAPI {
-  public path = '/api/users';
-  public authType:'DASHBOARD' = 'DASHBOARD';
+class UserProfileAPI extends ClentoAPI {
+  public path = '/api/users/me';
+  public authType: 'DASHBOARD' = 'DASHBOARD';
 
-  private userService: UserService;
+  private userService = new UserService();
 
-  constructor() {
-    super();
-    this.userService = new UserService();
-
-    this.requestParams = {
-      GET: {
-        bodyParams: {},
-        queryParams: {},
-        pathParams: {},
-      },
-      PATCH: {
-        bodyParams: {
-          fullName: 'optional',
-          avatarUrl: 'optional',
-        },
-        queryParams: {},
-        pathParams: {},
-      },
-      POST: this.getDefaultExpressRequestParams(),
-      PUT: this.getDefaultExpressRequestParams(),
-      DELETE: this.getDefaultExpressRequestParams(),
-    };
-  }
-
-  public GET = async (req: Request, res: Response): Promise<void> => {
+  public GET = async (req: Request, res: Response): Promise<Response> => {
     try {
       // Get user from request (set by loadUser middleware)
       const user = req.user;
@@ -45,7 +22,7 @@ export class UserAPI extends ClentoAPI {
         throw new NotFoundError('User not found');
       }
 
-      res.status(200).json({
+      return res.sendOKResponse({
         success: true,
         data: user,
         message: 'User profile retrieved successfully'
@@ -55,22 +32,26 @@ export class UserAPI extends ClentoAPI {
     }
   };
 
-  public PATCH = async (req: Request, res: Response): Promise<void> => {
+  public PATCH = async (req: Request, res: Response): Promise<Response> => {
     try {
       const userId = req.userId;
-      const { fullName, avatarUrl } = req.body;
 
       if (!userId) {
         throw new NotFoundError('User not found');
       }
 
+      // Using express extensions for parameter validation
+      const body = req.getBody();
+      const fullName = body.getParamAsString('fullName', false);
+      const avatarUrl = body.getParamAsString('avatarUrl', false);
+
       // Update user profile
       const updatedUser = await this.userService.updateUser(userId, {
-        fullName,
-        avatarUrl
+        fullName: fullName || undefined,
+        avatarUrl: avatarUrl || undefined
       });
 
-      res.status(200).json({
+      return res.sendOKResponse({
         success: true,
         data: updatedUser,
         message: 'User profile updated successfully'
@@ -81,10 +62,7 @@ export class UserAPI extends ClentoAPI {
   };
 }
 
-export default ClentoAPI.createRouter(UserAPI, {
-  GET: '/me',
-  PATCH: '/me'
-});
+export default new UserProfileAPI();
 
 /**
  * @swagger
@@ -136,11 +114,6 @@ export default ClentoAPI.createRouter(UserAPI, {
  *         description: Unauthorized
  *       404:
  *         description: User not found
- */
-
-/**
- * @swagger
- * /api/users/me:
  *   patch:
  *     summary: Update user profile
  *     tags: [Users]
