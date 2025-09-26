@@ -1,12 +1,14 @@
 import { Request, Response } from 'express';
 import { ValidationError } from '../errors/AppError';
 
-// Define UploadedFile interface if express-fileupload is not available
+// Define UploadedFile interface for multer
 interface UploadedFile {
-    name: string;
+    fieldname: string;
+    originalname: string;
+    encoding: string;
     mimetype: string;
     size: number;
-    data: Buffer;
+    buffer: Buffer;
 }
 
 export interface ExpressRequestParams {
@@ -229,17 +231,25 @@ export class ClentoRequestBody {
         }
     };
 
-    public getFileAsCSV = (FormFieldName: string, required = true) => {
+    public getFileAsCSV (FormFieldName: string): UploadedFile
+    public getFileAsCSV (FormFieldName: string, required: true): UploadedFile
+    public getFileAsCSV (FormFieldName: string, required: false): UploadedFile | null
+    public getFileAsCSV (FormFieldName: string, required = true): UploadedFile | null {
         return this.getFileAsMimeType(FormFieldName, 'text/csv', required);
     };
 
     public getFile(FormFieldName: string) {
-        const result = this.rawBody && this.rawBody[FormFieldName] as UploadedFile;
-        if (result) {
-            return result;
-        } else {
+        const files = this.rawBody as UploadedFile[];
+        if (!files || !Array.isArray(files)) {
             throw new ValidationError(`${FormFieldName} is not present in req.files`);
         }
+
+        const file = files.find(f => f.fieldname === FormFieldName);
+        if (!file) {
+            throw new ValidationError(`${FormFieldName} is not present in req.files`);
+        }
+
+        return file;
     }
 
     private getParamOfType = (parameterName: string, type: string, required = true) => {

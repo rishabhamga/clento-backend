@@ -328,7 +328,7 @@ export class CsvService {
   }
 
   //@TODO yash complete this after setting up authentication
-  static async getPreviewFromUnipile(parseResult: CsvParseResult, maxRows: number = 5, accountId?: string){
+  static async getPreviewFromUnipile(parseResult: CsvParseResult, maxRows: number = 5, accountId: string){
       const leads = parseResult.data.slice(0, maxRows);
       const publicIdentifiers = leads.map(it => it.linkedin_url.split("/").pop());
 
@@ -340,7 +340,9 @@ export class CsvService {
           leadsFromLinkedin = await Promise.all(
             publicIdentifiers.map(async (identifier) => {
               try {
-                return await unipileService.getUserProfile(accountId, identifier);
+                  const profile = await unipileService.getUserProfile(accountId, identifier);
+                  console.log(profile);
+                  return profile;
               } catch (error) {
                 logger.warn('Failed to get profile for identifier', { identifier, error });
                 return null;
@@ -351,13 +353,13 @@ export class CsvService {
           logger.warn('Failed to get LinkedIn profiles', { error });
         }
       }
-
+    return
     return {
       headers: parseResult.headers,
       data: parseResult.data.slice(0, maxRows),
       totalRows: parseResult.totalRows,
       showingRows: parseResult.data.length,
-      enrichedData: leadsFromLinkedin.filter(Boolean), // Remove null values
+    //   enrichedData: leadsFromLinkedin.filter(Boolean), // Remove null values
     };
   }
 

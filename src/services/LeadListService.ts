@@ -303,6 +303,7 @@ export class LeadListService {
       // Get preview data
       //   const preview = CsvService.getPreviewFromUnipile(parseResult, 5);
       const preview = CsvService.getPreview(parseResult, 5);
+    //   const previewNew = CsvService.getPreviewFromUnipile(parseResult, 5);
 
       logger.info('CSV preview generated', {
         totalRows: parseResult.totalRows,

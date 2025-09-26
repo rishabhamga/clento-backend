@@ -2,6 +2,7 @@ import 'express-async-errors';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import multer from 'multer';
 import env from './config/env';
 import logger from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
@@ -38,6 +39,25 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Configure multer for file uploads
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Allow CSV files
+        if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only CSV files are allowed'));
+        }
+    }
+});
+
+// Apply multer middleware globally
+app.use(upload.any());
 
 // Setup Swagger
 setupSwagger(app);

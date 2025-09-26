@@ -7,6 +7,11 @@ alwaysApply: true
 # Clento Backend Coding Standards
 
 ## **Code Structure and Organization**
+- **Indentation**
+  - Use 4 spaces for indentation (never tabs)
+  - Maintain consistent indentation throughout the codebase
+  - Configure your editor to show whitespace characters
+
 - **Keep Functions Small and Focused**
   - Functions should do one thing and do it well
   - Aim for less than 15 lines per function
