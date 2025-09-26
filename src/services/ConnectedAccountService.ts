@@ -36,9 +36,34 @@ export class ConnectedAccountService {
         throw new BadRequestError(`Provider ${params.provider} is not supported`);
       }
 
-      // Allow multiple accounts per provider - users can connect multiple LinkedIn accounts, etc.
-      // This follows Unipile best practices for multi-account management
-      logger.info('Allowing multiple accounts per provider as per Unipile best practices');
+      // Step 1: Check for existing connected accounts (prevent duplicates)
+      logger.info('=== STEP 1: Checking for existing accounts ===');
+      
+      // Get existing connected accounts for this organization and provider
+      const existingConnectedAccounts = await this.connectedAccountRepository.getUserAccounts(params.organizationId);
+      const connectedAccountsForProvider = existingConnectedAccounts.filter(acc => 
+        acc.provider === params.provider && 
+        acc.status === 'connected' &&
+        !acc.provider_account_id?.startsWith('pending-')
+      );
+
+      logger.info('Found existing connected accounts', {
+        organizationId: params.organizationId,
+        provider: params.provider,
+        connectedCount: connectedAccountsForProvider.length,
+        accounts: connectedAccountsForProvider.map(acc => ({
+          id: acc.id,
+          provider_account_id: acc.provider_account_id,
+          display_name: acc.display_name,
+          status: acc.status
+        }))
+      });
+
+      // Clean up old pending accounts for this user/provider (older than 1 hour)
+      await this.cleanupOldPendingAccounts(params.userId, params.organizationId, params.provider);
+
+      // Step 2: Create hosted auth link for new account connection
+      logger.info('=== STEP 2: Creating hosted auth link ===');
 
       // Create pending account record with unique pending ID
       logger.info('Creating pending account record');
@@ -190,10 +215,10 @@ export class ConnectedAccountService {
         email: email,
         profile_picture_url: profilePictureUrl,
         status: 'connected',
+        provider_account_id: params.unipileAccountId, // ✅ Update the main provider_account_id field
         capabilities: capabilities,
         metadata: {
             ...pendingAccount.metadata,
-          provider_account_id: params.unipileAccountId,
           last_synced_at: new Date().toISOString(),
           connection_status: 'connected',
           connection_quality: 'good',
@@ -677,6 +702,118 @@ export class ConnectedAccountService {
     // Default capabilities based on provider
     const providerConfig = UnipileService.getProviderConfig(accountData?.provider || '');
     return providerConfig?.capabilities || [];
+  }
+
+  /**
+   * Import an existing Unipile account into our database
+   */
+  private async importExistingUnipileAccount(params: {
+    userId: string;
+    organizationId: string;
+    unipileAccount: any;
+  }): Promise<{ url?: string; pendingAccountId: string; imported: boolean }> {
+    try {
+      logger.info('=== IMPORTING EXISTING UNIPILE ACCOUNT ===', {
+        unipileAccountId: params.unipileAccount.id,
+        accountName: params.unipileAccount.name,
+        provider: params.unipileAccount.type
+      });
+
+      // Get profile data from Unipile
+      let profileData = null;
+      try {
+        profileData = await this.unipileService.getOwnProfile(params.unipileAccount.id);
+        logger.info('Retrieved profile data for existing account', { profileData });
+      } catch (error) {
+        logger.warn('Could not fetch profile data for existing account', { error });
+      }
+
+      // Extract account information
+      const displayName = this.extractDisplayName(params.unipileAccount, profileData);
+      const email = this.extractEmail(params.unipileAccount, profileData);
+      const profilePictureUrl = this.extractProfilePicture(params.unipileAccount, profileData);
+      const capabilities = this.extractCapabilities(params.unipileAccount);
+
+      // Create connected account record directly
+      const accountData: CreateConnectedAccountDto = {
+        user_id: params.userId,
+        organization_id: params.organizationId,
+        status: 'connected', // Already connected in Unipile
+        provider: params.unipileAccount.type.toLowerCase() as 'linkedin' | 'email' | 'gmail' | 'outlook',
+        display_name: displayName,
+        email: email,
+        profile_picture_url: profilePictureUrl,
+        provider_account_id: params.unipileAccount.id, // Use actual Unipile ID
+        capabilities: capabilities,
+        metadata: {
+          created_at: new Date().toISOString(),
+          connection_status: 'connected',
+          account_type: 'personal',
+          daily_limit: 100,
+          provider_account_id: params.unipileAccount.id,
+          unipile_account_data: params.unipileAccount,
+          profile_data: profileData,
+          imported_at: new Date().toISOString(),
+          connection_quality: 'good',
+          last_synced_at: new Date().toISOString(),
+        },
+      };
+
+      logger.info('Creating connected account record from existing Unipile account', { accountData });
+
+      const connectedAccount = await this.connectedAccountRepository.create(accountData);
+
+      logger.info('=== SUCCESSFULLY IMPORTED EXISTING ACCOUNT ===', {
+        accountId: connectedAccount.id,
+        unipileAccountId: params.unipileAccount.id,
+        displayName: connectedAccount.display_name,
+        email: connectedAccount.email,
+        status: connectedAccount.status
+      });
+
+      return {
+        pendingAccountId: connectedAccount.id,
+        imported: true
+        // No URL needed since account is already connected
+      };
+    } catch (error) {
+      logger.error('Error importing existing Unipile account', { error, params });
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up old pending accounts to prevent duplicates
+   */
+  private async cleanupOldPendingAccounts(userId: string, organizationId: string, provider: string): Promise<void> {
+    try {
+      logger.info('Cleaning up old pending accounts', { userId, organizationId, provider });
+      
+      // Get all accounts for this user/org/provider
+      const allAccounts = await this.connectedAccountRepository.getUserAccounts(organizationId);
+      const pendingAccounts = allAccounts.filter(acc => 
+        acc.user_id === userId &&
+        acc.provider === provider &&
+        acc.status === 'pending' &&
+        acc.provider_account_id?.startsWith('pending-')
+      );
+
+      // Delete pending accounts older than 1 hour
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      for (const account of pendingAccounts) {
+        const createdAt = new Date(account.created_at || Date.now());
+        if (createdAt < oneHourAgo) {
+          logger.info('Deleting old pending account', {
+            accountId: account.id,
+            providerAccountId: account.provider_account_id,
+            createdAt: account.created_at
+          });
+          await this.connectedAccountRepository.delete(account.id);
+        }
+      }
+    } catch (error) {
+      logger.warn('Error cleaning up old pending accounts', { error });
+    }
   }
 
 }

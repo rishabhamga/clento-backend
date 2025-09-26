@@ -80,8 +80,11 @@ export class UnipileService {
             logger.info('Checking Unipile configuration', {
                 isConfigured: UnipileService.isConfigured(),
                 hasApiKey: !!env.UNIPILE_API_KEY,
-                apiUrl: env.UNIPILE_API_URL
+                apiUrl: env.UNIPILE_API_URL,
+                apiKeyLength: env.UNIPILE_API_KEY?.length,
+                apiKeyPrefix: env.UNIPILE_API_KEY?.substring(0, 10) + '...'
             });
+
 
             if (!UnipileService.isConfigured()) {
                 throw new ExternalAPIError('Unipile API is not configured. Please set UNIPILE_API_KEY and UNIPILE_API_URL in your environment variables.');
@@ -113,23 +116,44 @@ export class UnipileService {
             });
 
             try {
+                logger.info('=== MAKING UNIPILE SDK CALL ===', {
+                    method: 'client.account.createHostedAuthLink',
+                    requestPayload: unipileRequest,
+                    clientInfo: {
+                        hasClient: !!UnipileService.client,
+                        apiUrl: env.UNIPILE_API_URL,
+                        apiKeyPrefix: env.UNIPILE_API_KEY?.substring(0, 10) + '...',
+                    }
+                });
+
                 const response = await UnipileService.client!.account.createHostedAuthLink(unipileRequest);
-                logger.info('Unipile SDK response', { response });
+                
 
                 if (!response || !response.url) {
+                    logger.error('=== INVALID UNIPILE RESPONSE ===', {
+                        response,
+                        hasResponse: !!response,
+                        responseType: typeof response,
+                        responseKeys: response ? Object.keys(response) : null
+                    });
                     throw new ExternalAPIError('Invalid response from Unipile API - missing URL');
                 }
 
                 return { url: response.url };
             } catch (sdkError: any) {
-                logger.error('Unipile SDK Error Details', {
+                logger.error('=== UNIPILE SDK ERROR DETAILED ===', {
                     errorName: sdkError?.name,
                     errorMessage: sdkError?.message,
                     errorStack: sdkError?.stack,
                     errorStatus: sdkError?.status,
                     errorBody: sdkError?.body,
-                    errorResponse: sdkError?.response?.data,
-                    requestData: unipileRequest
+                    errorResponse: sdkError?.response,
+                    errorResponseData: sdkError?.response?.data,
+                    errorResponseStatus: sdkError?.response?.status,
+                    errorResponseHeaders: sdkError?.response?.headers,
+                    requestData: unipileRequest,
+                    sdkErrorKeys: Object.keys(sdkError || {}),
+                    fullError: sdkError
                 });
 
                 // Check for common authentication errors
@@ -141,7 +165,17 @@ export class UnipileService {
                     throw new ExternalAPIError('Unipile access forbidden. Please check your API permissions.');
                 }
 
-                throw new ExternalAPIError(`Unipile API error: ${sdkError?.message || 'Unknown error'}`);
+                if (sdkError?.status === 404) {
+                    throw new ExternalAPIError('Unipile API endpoint not found. Please check your API URL.');
+                }
+
+                if (sdkError?.status === 400) {
+                    throw new ExternalAPIError(`Unipile API bad request: ${sdkError?.body?.message || sdkError?.message || 'Invalid request parameters'}`);
+                }
+
+                // Handle empty error messages
+                const errorMessage = sdkError?.message || sdkError?.body?.message || 'Unknown error';
+                throw new ExternalAPIError(`Unipile API error: ${errorMessage}`);
             }
         } catch (error) {
             logger.error('=== UnipileService: createHostedAuthLink ERROR ===', {

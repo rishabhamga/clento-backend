@@ -52,6 +52,7 @@ class AccountConnectAPI extends ClentoAPI {
 
             logger.info('=== Backend Controller: createHostedAuthLink END ===', { result });
 
+            // Always return the hosted auth URL - no more import logic
             return res.sendCreatedResponse({
                 success: true,
                 message: 'Authentication link created successfully',
