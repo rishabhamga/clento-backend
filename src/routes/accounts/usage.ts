@@ -9,7 +9,7 @@ import '../../utils/expressExtensions';
  * Account Usage API - Account usage statistics endpoint
  */
 class AccountUsageAPI extends ClentoAPI {
-  public path = '/api/accounts/:id/usage';
+  public path = '/api/accounts/usage';
   public authType: 'DASHBOARD' = 'DASHBOARD';
 
   private connectedAccountService = new ConnectedAccountService();
@@ -18,12 +18,9 @@ class AccountUsageAPI extends ClentoAPI {
    * Get account usage statistics
    */
   public GET = async (req: Request, res: Response): Promise<Response> => {
-    try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
-      const userId = req.userId;
-
       const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
+      const userId = req.userId;
       const date_from = query.getParamAsString('date_from', true);
       const date_to = query.getParamAsString('date_to', true);
 
@@ -33,29 +30,20 @@ class AccountUsageAPI extends ClentoAPI {
         data: usage,
         message: 'Account usage retrieved successfully'
       });
-    } catch (error) {
-      logger.error('Error in getAccountUsage controller', {
-        error,
-        accountId: req.params.id,
-        userId: req.userId
-      });
-      throw error;
     }
   };
-}
-
 export default new AccountUsageAPI();
 
 /**
  * @swagger
- * /api/accounts/{id}/usage:
+ * /api/accounts/usage:
  *   get:
  *     summary: Get account usage statistics
  *     tags: [Connected Accounts]
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: path
+ *       - in: query
  *         name: id
  *         required: true
  *         schema:

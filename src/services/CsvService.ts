@@ -332,6 +332,12 @@ export class CsvService {
       const leads = parseResult.data.slice(0, maxRows);
       const publicIdentifiers = leads.map(it => it.linkedin_url.split("/").pop());
 
+      // Create a map of identifier to lead data
+      const leadMap = new Map();
+      publicIdentifiers.forEach((identifier, index) => {
+        leadMap.set(identifier, leads[index]);
+      });
+
       let leadsFromLinkedin = [];
       if (accountId) {
         try {
@@ -341,25 +347,56 @@ export class CsvService {
             publicIdentifiers.map(async (identifier) => {
               try {
                   const profile = await unipileService.getUserProfile(accountId, identifier);
-                  console.log(profile);
                   return profile;
               } catch (error) {
-                logger.warn('Failed to get profile for identifier', { identifier, error });
+                // logger.warn('Failed to get profile for identifier', { identifier, error });
                 return null;
               }
             })
           );
         } catch (error) {
-          logger.warn('Failed to get LinkedIn profiles', { error });
+        //   logger.warn('Failed to get LinkedIn profiles', { error });
         }
       }
-    return
+
+      const parsedData = publicIdentifiers.map((identifier, index) => {
+        const linkedinProfile = leadsFromLinkedin[index];
+        const csvLead = leadMap.get(identifier);
+
+        const result = {
+          identifier,
+          name: null as string | null,
+          headline: null as string | null,
+          isPremium: null as boolean | null,
+          websites: null as string[] | null,
+          followerCount: null as number | null,
+          connectionCount: null as number | null,
+          profilePictureUrl: null as string | null
+        };
+
+        if (linkedinProfile && !linkedinProfile.error) {
+          // Use LinkedIn data when available
+          result.name = linkedinProfile.first_name + ' ' + linkedinProfile.last_name;
+          result.headline = linkedinProfile.headline;
+          result.isPremium = linkedinProfile.is_premium;
+          result.websites = linkedinProfile.websites;
+          result.followerCount = linkedinProfile.follower_count;
+          result.connectionCount = linkedinProfile.connections_count;
+          result.profilePictureUrl = linkedinProfile.profile_picture_url;
+        } else {
+          // Use CSV data when LinkedIn profile not found
+          result.name = csvLead.first_name + ' ' + csvLead.last_name || null;
+          result.headline = csvLead.title || null;
+        }
+
+        return result;
+      });
+
     return {
-      headers: parseResult.headers,
-      data: parseResult.data.slice(0, maxRows),
-      totalRows: parseResult.totalRows,
-      showingRows: parseResult.data.length,
-    //   enrichedData: leadsFromLinkedin.filter(Boolean), // Remove null values
+      data: parsedData,
+      total: parsedData.length,
+      found: parsedData.filter(it => it.isPremium !== null).length,
+      notFound: parsedData.filter(it => it.isPremium === null).length
     };
   }
 

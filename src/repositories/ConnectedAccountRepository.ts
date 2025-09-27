@@ -79,27 +79,16 @@ export class ConnectedAccountRepository extends BaseRepository<ConnectedAccountR
                            account.email &&
                            account.email.trim() !== '' &&
                            account.provider_account_id &&
-                           !account.provider_account_id.startsWith('pending-');
+                           !account.provider_account_id.startsWith('pending-');;
 
-        // Also check metadata for connection_status
-        const metadata = account.metadata as any;
-        const connectionStatus = metadata?.connection_status;
-        const isNotPending = connectionStatus !== 'pending';
-
-        const shouldInclude = isConnected && isNotPending;
-
-        if (!shouldInclude) {
           logger.info('Filtering out pending/incomplete account', {
             accountId: account.id,
             displayName: account.display_name,
             status: account.status,
             email: account.email,
             providerAccountId: account.provider_account_id,
-            connectionStatus: connectionStatus
           });
-        }
-
-        return shouldInclude;
+          return isConnected
       });
 
       logger.info('Successfully retrieved user accounts', {

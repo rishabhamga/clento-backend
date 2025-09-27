@@ -8,7 +8,7 @@ import '../../utils/expressExtensions';
  * Lead List Detail API - Individual lead list management endpoints
  */
 class LeadListDetailAPI extends ClentoAPI {
-  public path = '/api/lead-lists/:id';
+  public path = '/api/lead-lists/detail';
   public authType: 'DASHBOARD' = 'DASHBOARD';
 
   private leadListService = new LeadListService();
@@ -18,8 +18,8 @@ class LeadListDetailAPI extends ClentoAPI {
    */
   public GET = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const organizationId = req.organizationId;
 
       if (!organizationId) {
@@ -43,14 +43,16 @@ class LeadListDetailAPI extends ClentoAPI {
    */
   public PUT = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const { id } = req.params;
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const organizationId = req.organizationId;
 
       if (!organizationId) {
         throw new NotFoundError('Organization not found');
       }
 
-      const leadList = await this.leadListService.updateLeadList(id, req.body, organizationId);
+      const body = req.getBody();
+      const leadList = await this.leadListService.updateLeadList(id, body.rawJSON(), organizationId);
 
       return res.sendOKResponse({
         success: true,
@@ -67,7 +69,8 @@ class LeadListDetailAPI extends ClentoAPI {
    */
   public DELETE = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const { id } = req.params;
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const organizationId = req.organizationId;
 
       if (!organizationId) {

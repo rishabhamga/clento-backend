@@ -140,6 +140,35 @@ alwaysApply: true
 
 ## **API Development - MANDATORY ClentoAPI Usage**
 
+### **🚨 CRITICAL: No Path Parameters in API Routes**
+- **NEVER use path parameters like `:id`, `:userId`, etc.** - They cause route conflicts
+- **ALWAYS use query parameters** for IDs: `?id=123` or `?userId=456`
+- **OR use POST requests** with IDs in the request body
+- **Path parameters create conflicts** when routes are registered alphabetically
+
+### **❌ FORBIDDEN Path Parameter Patterns**
+```typescript
+// ❌ NEVER: Path parameters that conflict with other routes
+public path = '/api/accounts/:id';        // Conflicts with /api/accounts/webhook
+public path = '/api/users/:userId';       // Conflicts with /api/users/profile
+public path = '/api/leads/:leadId/edit';  // Conflicts with /api/leads/edit
+```
+
+### **✅ CORRECT Patterns**
+```typescript
+// ✅ CORRECT: Use query parameters
+public path = '/api/accounts/detail';     // Use ?id=123
+public path = '/api/users/profile';       // Use ?userId=456
+public path = '/api/leads/edit';          // Use POST with ID in body
+
+// ✅ CORRECT: Access parameters in handler
+public GET = async (req: Request, res: Response): Promise<Response> => {
+    const query = req.getQuery();
+    const id = query.getParamAsString('id', true);
+    // Process with id
+};
+```
+
 ### **🚨 CRITICAL: Always Use ClentoAPI Class**
 - **NEVER create manual Express routes** - Always use ClentoAPI base class
 - **NEVER use traditional controller pattern** - Use ClentoAPI for all API endpoints

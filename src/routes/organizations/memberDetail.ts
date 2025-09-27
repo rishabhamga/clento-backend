@@ -2,47 +2,28 @@ import ClentoAPI from '../../utils/apiUtil';
 import { OrganizationService } from '../../services/OrganizationService';
 import { Request, Response } from 'express';
 import { NotFoundError } from '../../errors/AppError';
+import '../../utils/expressExtensions';
 
 /**
  * Organization Member Detail API - Individual member management endpoints
  */
 export class OrganizationMemberDetailAPI extends ClentoAPI {
-  public path = '/api/organizations/:id/members/:userId';
+  public path = '/api/organizations/member-detail';
   public authType:'DASHBOARD' = 'DASHBOARD';
 
-  private organizationService: OrganizationService;
-
-  constructor() {
-    super();
-    this.organizationService = new OrganizationService();
-
-    this.requestParams = {
-      PATCH: {
-        bodyParams: {
-          role: 'required'
-        },
-        queryParams: {},
-        pathParams: { id: 'required', userId: 'required' },
-      },
-      DELETE: {
-        bodyParams: {},
-        queryParams: {},
-        pathParams: { id: 'required', userId: 'required' },
-      },
-      GET: this.getDefaultExpressRequestParams(),
-      POST: this.getDefaultExpressRequestParams(),
-      PUT: this.getDefaultExpressRequestParams(),
-    };
-  }
+  private organizationService = new OrganizationService();
 
   /**
    * Update organization member
    */
   public PATCH = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const { id, userId: userIdToUpdate } = req.params;
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
+      const userIdToUpdate = query.getParamAsString('userId', true);
       const requesterId = req.userId;
-      const { role } = req.body;
+      const body = req.getBody();
+      const role = body.getParamAsString('role', true);
 
       if (!requesterId) {
         throw new NotFoundError('User not found');
@@ -65,7 +46,9 @@ export class OrganizationMemberDetailAPI extends ClentoAPI {
    */
   public DELETE = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const { id, userId: userIdToRemove } = req.params;
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
+      const userIdToRemove = query.getParamAsString('userId', true);
       const requesterId = req.userId;
 
       if (!requesterId) {
