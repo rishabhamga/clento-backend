@@ -8,7 +8,7 @@ import '../../utils/expressExtensions';
  * Organization Members API - Organization member management endpoints
  */
 class OrganizationMembersAPI extends ClentoAPI {
-  public path = '/api/organizations/:id/members';
+  public path = '/api/organizations/members';
   public authType: 'DASHBOARD' = 'DASHBOARD';
 
   private organizationService = new OrganizationService();
@@ -18,11 +18,9 @@ class OrganizationMembersAPI extends ClentoAPI {
    */
   public GET = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
-      const userId = req.userId;
-
       const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
+      const userId = req.userId;
       const page = query.getParamAsNumber('page', false) || 1;
       const limit = query.getParamAsNumber('limit', false) || 20;
 
@@ -58,9 +56,12 @@ class OrganizationMembersAPI extends ClentoAPI {
    */
   public POST = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const { id } = req.params;
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const userId = req.userId;
-      const { user_id, role } = req.body;
+      const body = req.getBody();
+      const user_id = body.getParamAsString('user_id', true);
+      const role = body.getParamAsString('role', true);
 
       if (!userId) {
         throw new NotFoundError('User not found');

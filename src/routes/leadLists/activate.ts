@@ -8,7 +8,7 @@ import '../../utils/expressExtensions';
  * Lead List Activate API - Activate lead list endpoint
  */
 class LeadListActivateAPI extends ClentoAPI {
-  public path = '/api/lead-lists/:id/activate';
+  public path = '/api/lead-lists/activate';
   public authType: 'DASHBOARD' = 'DASHBOARD';
 
   private leadListService = new LeadListService();
@@ -18,8 +18,8 @@ class LeadListActivateAPI extends ClentoAPI {
    */
   public POST = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const organizationId = req.organizationId;
 
       if (!organizationId) {

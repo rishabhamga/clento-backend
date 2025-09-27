@@ -9,7 +9,7 @@ import '../../utils/expressExtensions';
  * Account Sync API - Account sync endpoint
  */
 class AccountSyncAPI extends ClentoAPI {
-  public path = '/api/accounts/:id/sync';
+  public path = '/api/accounts/sync';
   public authType: 'DASHBOARD' = 'DASHBOARD';
 
   private connectedAccountService = new ConnectedAccountService();
@@ -18,9 +18,8 @@ class AccountSyncAPI extends ClentoAPI {
    * Sync account with Unipile
    */
   public POST = async (req: Request, res: Response): Promise<Response> => {
-    try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const userId = req.userId;
 
       if (!userId) {
@@ -33,29 +32,21 @@ class AccountSyncAPI extends ClentoAPI {
         message: 'Account synced successfully',
         data: account,
       });
-    } catch (error) {
-      logger.error('Error in syncAccount controller', {
-        error,
-        accountId: req.params.id,
-        userId: req.userId
-      });
-      throw error;
     }
   };
-}
 
 export default new AccountSyncAPI();
 
 /**
  * @swagger
- * /api/accounts/{id}/sync:
+ * /api/accounts/sync:
  *   post:
  *     summary: Sync account with Unipile
  *     tags: [Connected Accounts]
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: path
+ *       - in: query
  *         name: id
  *         required: true
  *         schema:

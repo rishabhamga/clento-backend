@@ -8,7 +8,7 @@ import '../../utils/expressExtensions';
  * Lead List Statistics API - Lead list statistics endpoint
  */
 class LeadListStatisticsAPI extends ClentoAPI {
-  public path = '/api/lead-lists/:id/statistics';
+  public path = '/api/lead-lists/statistics';
   public authType: 'DASHBOARD' = 'DASHBOARD';
 
   private leadListService = new LeadListService();
@@ -18,8 +18,8 @@ class LeadListStatisticsAPI extends ClentoAPI {
    */
   public GET = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const organizationId = req.organizationId;
 
       if (!organizationId) {
