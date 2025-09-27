@@ -13,6 +13,8 @@ import morgan from 'morgan';
 import './utils/expressExtensions'; // Import express extensions
 import path from 'path';
 import { ConnectedAccountService } from './services/ConnectedAccountService';
+import { TemporalService } from './services/TemporalService';
+import { initializeTemporalWorker } from './temporal/worker';
 
 // Create Express application
 const app = express();
@@ -138,6 +140,19 @@ const startServer = async () => {
   try {
     // Initialize Supabase connection
     await supabase.initSupabase();
+
+    // Initialize Temporal service
+    try {
+      const temporalService = TemporalService.getInstance();
+      await temporalService.initialize();
+      logger.info('Temporal service initialized successfully');
+
+      // Initialize Temporal worker (only if enabled)
+      await initializeTemporalWorker();
+    } catch (temporalError) {
+      logger.warn('Failed to initialize Temporal service', { error: temporalError });
+      logger.info('Server will continue without Temporal functionality');
+    }
 
     // Start server
     const server = app.listen(env.PORT, () => {
