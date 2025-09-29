@@ -8,7 +8,7 @@ import '../../utils/expressExtensions';
  * Lead List Duplicate API - Duplicate lead list endpoint
  */
 class LeadListDuplicateAPI extends ClentoAPI {
-  public path = '/api/lead-lists/:id/duplicate';
+  public path = '/api/lead-lists/duplicate';
   public authType: 'DASHBOARD' = 'DASHBOARD';
 
   private leadListService = new LeadListService();
@@ -18,8 +18,8 @@ class LeadListDuplicateAPI extends ClentoAPI {
    */
   public POST = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const organizationId = req.organizationId;
       const userId = req.userId;
 

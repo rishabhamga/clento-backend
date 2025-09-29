@@ -8,7 +8,7 @@ import '../../utils/expressExtensions';
  * Lead List Archive API - Archive lead list endpoint
  */
 class LeadListArchiveAPI extends ClentoAPI {
-  public path = '/api/lead-lists/:id/archive';
+  public path = '/api/lead-lists/archive';
   public authType: 'DASHBOARD' = 'DASHBOARD';
 
   private leadListService = new LeadListService();
@@ -18,8 +18,8 @@ class LeadListArchiveAPI extends ClentoAPI {
    */
   public POST = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const organizationId = req.organizationId;
 
       if (!organizationId) {

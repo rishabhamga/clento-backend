@@ -8,7 +8,7 @@ import '../../utils/expressExtensions';
  * Organization Detail API - Individual organization management endpoints
  */
 class OrganizationDetailAPI extends ClentoAPI {
-  public path = '/api/organizations/:id';
+  public path = '/api/organizations/detail';
   public authType: 'DASHBOARD' = 'DASHBOARD';
 
   private organizationService = new OrganizationService();
@@ -18,8 +18,8 @@ class OrganizationDetailAPI extends ClentoAPI {
    */
   public GET = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const userId = req.userId;
       if(!userId){
         throw new UnauthorizedError("User Not Found")
@@ -42,8 +42,8 @@ class OrganizationDetailAPI extends ClentoAPI {
    */
   public PUT = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const userId = req.userId;
 
       if (!userId) {
@@ -88,8 +88,8 @@ class OrganizationDetailAPI extends ClentoAPI {
    */
   public DELETE = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const userId = req.userId;
 
       if (!userId) {
