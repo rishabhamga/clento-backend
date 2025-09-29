@@ -1,12 +1,12 @@
 /**
  * Temporal Configuration
- * 
+ *
  * Configuration for connecting to Temporal Cloud and managing client settings.
  * This configuration supports both development and production environments.
  */
 
 import { ConnectionOptions, TLSConfig } from '@temporalio/client';
-import { logger } from '../../utils/logger';
+import logger from '../../src/utils/logger';
 
 export interface TemporalConfig {
     address: string;
@@ -27,7 +27,7 @@ export interface TemporalConfig {
  */
 export function getTemporalConfig(): TemporalConfig {
     const isProduction = process.env.NODE_ENV === 'production';
-    
+
     // Temporal Cloud configuration
     if (isProduction || process.env.TEMPORAL_CLOUD_ENABLED === 'true') {
         const namespace = process.env.TEMPORAL_NAMESPACE;
@@ -79,7 +79,7 @@ export function getTemporalConfig(): TemporalConfig {
  */
 export function getTemporalConnectionOptions(): ConnectionOptions {
     const config = getTemporalConfig();
-    
+
     const connectionOptions: ConnectionOptions = {
         address: config.address,
         tls: config.tls,
@@ -101,15 +101,15 @@ export function getTemporalConnectionOptions(): ConnectionOptions {
 export function validateTemporalConfig(): void {
     try {
         const config = getTemporalConfig();
-        
+
         if (!config.address) {
             throw new Error('Temporal address is required');
         }
-        
+
         if (!config.namespace) {
             throw new Error('Temporal namespace is required');
         }
-        
+
         if (!config.taskQueue) {
             throw new Error('Temporal task queue is required');
         }

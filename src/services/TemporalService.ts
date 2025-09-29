@@ -1,6 +1,7 @@
 import { TemporalClientService } from "../temporal/services/temporal-client.service";
 import { UnipileWrapperService } from "../temporal/services/unipile-wrapper.service";
 import logger from "../utils/logger";
+import { testWorkflow } from "../temporal/workflows/testWorkflow";
 
 export class TemporalService {
     private static instance: TemporalService
@@ -46,5 +47,55 @@ export class TemporalService {
 
     public async startCampaign() {
 
+    }
+
+    public async runTestWorkflow(input: { message: string; delay?: number; iterations?: number }) {
+        try {
+            logger.info('Starting test workflow', { input });
+
+            const client = this.temporalClient.getClient();
+
+            const workflowId = `test-workflow-${Date.now()}`;
+
+            const handle = await client.workflow.start(testWorkflow, {
+                args: [input],
+                taskQueue: 'clento-outreach-queue',
+                workflowId,
+            });
+
+            logger.info('Test workflow started', {
+                workflowId: handle.workflowId,
+                runId: handle.firstExecutionRunId
+            });
+
+            // Wait for the workflow to complete with timeout
+            const timeoutMs = 30000; // 30 seconds timeout
+            const result = await Promise.race([
+                handle.result(),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error(`Workflow timeout after ${timeoutMs}ms`)), timeoutMs)
+                )
+            ]);
+
+            logger.info('Test workflow completed', {
+                workflowId: handle.workflowId,
+                result
+            });
+
+            return {
+                success: true,
+                workflowId: handle.workflowId,
+                runId: handle.firstExecutionRunId,
+                result
+            };
+
+        } catch (error) {
+            logger.error('Failed to run test workflow', {
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+                input
+            });
+            throw error;
+        }
     }
 }

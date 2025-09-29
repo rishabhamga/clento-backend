@@ -23,7 +23,7 @@ export async function createTemporalWorker() {
         const worker = await Worker.create({
             connection,
             namespace: config.namespace,
-            // workflowsPath: require.resolve('./workflows'),
+            workflowsPath: require.resolve('./workflows'),
             activities,
             taskQueue: config.taskQueue,
             ...workerOptions,

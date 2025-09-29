@@ -6,7 +6,7 @@
  */
 
 import Bottleneck from 'bottleneck';
-import { logger } from '../../utils/logger';
+import logger from '../../src/utils/logger';
 
 export interface RateLimitConfig {
     profileVisits: Bottleneck.ConstructorOptions;
