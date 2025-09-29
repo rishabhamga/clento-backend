@@ -285,10 +285,11 @@ export class LeadListService {
   /**
    * Preview CSV data
    */
-  async previewCsv(data: PreviewCsvDto): Promise<{
-    preview: any;
-    validation: CsvValidationResult;
-    mapping: Record<string, string>;
+  async previewCsv(data: PreviewCsvDto, account_id: string): Promise<{
+    data: Awaited<ReturnType<typeof CsvService.getPreviewFromUnipile>>['data']
+    total: number
+    found: number
+    notFound: number
   }> {
     try {
       // Parse CSV data
@@ -297,13 +298,8 @@ export class LeadListService {
       // Validate CSV structure
       const validation = CsvService.validateCsv(parseResult);
 
-      // Generate field mapping
-      const mapping = data.mapping || CsvService.generateMapping(parseResult.headers);
-
       // Get preview data
-      //   const preview = CsvService.getPreviewFromUnipile(parseResult, 5);
-      const preview = CsvService.getPreview(parseResult, 5);
-    //   const previewNew = CsvService.getPreviewFromUnipile(parseResult, 5);
+      const preview = await CsvService.getPreviewFromUnipile(parseResult, 5, account_id);
 
       logger.info('CSV preview generated', {
         totalRows: parseResult.totalRows,
@@ -312,9 +308,10 @@ export class LeadListService {
       });
 
       return {
-        preview,
-        validation,
-        mapping,
+        data: preview.data,
+        total: preview.total,
+        found: preview.found,
+        notFound: preview.notFound
       };
     } catch (error) {
       logger.error('Error previewing CSV', { error });

@@ -5,6 +5,7 @@ import { CsvService } from '../../services/CsvService';
 import { LeadListService } from '../../services/LeadListService';
 import ClentoAPI from '../../utils/apiUtil';
 import '../../utils/expressExtensions';
+import { ConnectedAccountService } from '../../services/ConnectedAccountService';
 
 /**
  * Lead List CSV Upload API - CSV upload endpoint with file handling
@@ -14,12 +15,16 @@ class LeadListCsvUploadAPI extends ClentoAPI {
     public authType: 'DASHBOARD' = 'DASHBOARD';
 
     private leadListService = new LeadListService();
+    private connectedAccountService = new ConnectedAccountService();
 
     /**
      * Upload and preview CSV
      */
     public POST = async (req: Request, res: Response): Promise<Response> => {
-        const file = req.getFiles().getFileAsCSV('csv_file');
+        const reqBody = req.getBody();
+        const accountId = reqBody.getParamAsString('account_id');
+        const files = req.getFiles();
+        const file = files.getFileAsCSV('csv_file');
         const fileBuffer = file.buffer;
         const fileSize = file.size;
 
@@ -28,15 +33,13 @@ class LeadListCsvUploadAPI extends ClentoAPI {
 
         // Convert buffer to string
         const csvData = fileBuffer.toString('utf8');
+        const account = await this.connectedAccountService.getAccountById(accountId)
 
         // Preview CSV
-        const result = await this.leadListService.previewCsv({ csv_data: csvData });
-
-        // Validate response structure
-        const validatedResult = CsvPreviewResponseDto.parse(result);
+        const result = await this.leadListService.previewCsv({ csv_data: csvData }, account.provider_account_id);
 
         return res.sendOKResponse({
-            data: validatedResult,
+            data: result,
             message: 'CSV uploaded and previewed successfully',
         });
     };

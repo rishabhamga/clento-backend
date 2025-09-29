@@ -9,7 +9,7 @@ import '../../utils/expressExtensions';
  * Account Profile Sync API - Account profile sync endpoint
  */
 class AccountProfileSyncAPI extends ClentoAPI {
-  public path = '/api/accounts/:id/sync-profile';
+  public path = '/api/accounts/sync-profile';
   public authType: 'DASHBOARD' = 'DASHBOARD';
 
   private connectedAccountService = new ConnectedAccountService();
@@ -18,9 +18,8 @@ class AccountProfileSyncAPI extends ClentoAPI {
    * Manually sync profile data for an account
    */
   public POST = async (req: Request, res: Response): Promise<Response> => {
-    try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
+      const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
       const userId = req.userId;
 
       logger.info('=== Manual profile sync requested ===', { accountId: id, userId });
@@ -31,10 +30,6 @@ class AccountProfileSyncAPI extends ClentoAPI {
         message: 'Profile synced successfully',
         data: updatedAccount,
       });
-    } catch (error) {
-      logger.error('Error in syncAccountProfile controller', { error, accountId: req.params.id });
-      throw error;
-    }
   };
 }
 
@@ -42,14 +37,14 @@ export default new AccountProfileSyncAPI();
 
 /**
  * @swagger
- * /api/accounts/{id}/sync-profile:
+ * /api/accounts/sync-profile:
  *   post:
  *     summary: Manually sync profile data for an account
  *     tags: [Connected Accounts]
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: path
+ *       - in: query
  *         name: id
  *         required: true
  *         schema:

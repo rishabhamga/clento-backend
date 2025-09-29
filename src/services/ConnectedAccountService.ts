@@ -38,11 +38,11 @@ export class ConnectedAccountService {
 
       // Step 1: Check for existing connected accounts (prevent duplicates)
       logger.info('=== STEP 1: Checking for existing accounts ===');
-      
+
       // Get existing connected accounts for this organization and provider
       const existingConnectedAccounts = await this.connectedAccountRepository.getUserAccounts(params.organizationId);
-      const connectedAccountsForProvider = existingConnectedAccounts.filter(acc => 
-        acc.provider === params.provider && 
+      const connectedAccountsForProvider = existingConnectedAccounts.filter(acc =>
+        acc.provider === params.provider &&
         acc.status === 'connected' &&
         !acc.provider_account_id?.startsWith('pending-')
       );
@@ -257,6 +257,19 @@ export class ConnectedAccountService {
     } catch (error) {
       logger.error('Error getting user accounts', { error, organizationId, provider });
       throw error;
+    }
+  }
+
+  async getAccountById(id: string): Promise<ConnectedAccountResponseDto> {
+    try{
+        const account = await this.connectedAccountRepository.findById(id);
+        if(!account){
+            throw new DisplayError("No Account Found By the Id")
+        }
+        return account;
+    }catch(err){
+        logger.error('Error getting accounts by ID in', { err, id });
+        throw new DisplayError("No Account Found By the Id")
     }
   }
 
@@ -788,10 +801,10 @@ export class ConnectedAccountService {
   private async cleanupOldPendingAccounts(userId: string, organizationId: string, provider: string): Promise<void> {
     try {
       logger.info('Cleaning up old pending accounts', { userId, organizationId, provider });
-      
+
       // Get all accounts for this user/org/provider
       const allAccounts = await this.connectedAccountRepository.getUserAccounts(organizationId);
-      const pendingAccounts = allAccounts.filter(acc => 
+      const pendingAccounts = allAccounts.filter(acc =>
         acc.user_id === userId &&
         acc.provider === provider &&
         acc.status === 'pending' &&

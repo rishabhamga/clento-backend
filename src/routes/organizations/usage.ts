@@ -8,7 +8,7 @@ import '../../utils/expressExtensions';
  * Organization Usage API - Organization usage statistics endpoint
  */
 class OrganizationUsageAPI extends ClentoAPI {
-  public path = '/api/organizations/:id/usage';
+  public path = '/api/organizations/usage';
   public authType: 'DASHBOARD' = 'DASHBOARD';
 
   private organizationService = new OrganizationService();
@@ -18,11 +18,9 @@ class OrganizationUsageAPI extends ClentoAPI {
    */
   public GET = async (req: Request, res: Response): Promise<Response> => {
     try {
-      const pathParams = req.getPathParams();
-      const id = pathParams.getParamAsString('id', true);
-      const userId = req.userId;
-
       const query = req.getQuery();
+      const id = query.getParamAsString('id', true);
+      const userId = req.userId;
       const month = query.getParamAsString('month', false);
 
       const usage = await this.organizationService.getUsageStats(id, userId, month || undefined);
