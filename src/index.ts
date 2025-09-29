@@ -12,7 +12,6 @@ import registerAllRoutes from './utils/registerRoutes';
 import morgan from 'morgan';
 import './utils/expressExtensions'; // Import express extensions
 import path from 'path';
-import { ConnectedAccountService } from './services/ConnectedAccountService';
 import { TemporalService } from './services/TemporalService';
 import { initializeTemporalWorker } from './temporal/worker';
 
@@ -96,7 +95,13 @@ const startServer = async () => {
       // Initialize Temporal worker (only if enabled)
       await initializeTemporalWorker();
     } catch (temporalError) {
-      logger.warn('Failed to initialize Temporal service', { error: temporalError });
+      logger.error('Failed to initialize Temporal service', {
+        error: temporalError instanceof Error ? temporalError.message : String(temporalError),
+        stack: temporalError instanceof Error ? temporalError.stack : undefined,
+        name: temporalError instanceof Error ? temporalError.name : undefined,
+        cause: temporalError instanceof Error ? temporalError.cause : undefined,
+        fullError: temporalError
+      });
       logger.info('Server will continue without Temporal functionality');
     }
 

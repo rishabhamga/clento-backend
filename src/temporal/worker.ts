@@ -1,37 +1,31 @@
-/**
- * Temporal Worker
- * 
- * Creates and configures Temporal worker for processing workflows and activities.
- */
-
+import logger from "../utils/logger";
 import { Worker, NativeConnection } from '@temporalio/worker';
-import { getTemporalConnectionOptions, getTemporalConfig } from './config/temporal.config';
-import { getWorkerOptions } from './config/worker.config';
-import { logger } from '../utils/logger';
+import { getTemporalConfig } from "./config/temporal.config";
+import { getWorkerOptions } from "./config/worker.config";
 import * as activities from './activities';
-import { CampaignOrchestratorWorkflow } from './workflows/campaign-orchestrator.workflow';
-import { LeadOutreachWorkflow } from './workflows/lead-outreach.workflow';
 
-/**
- * Create and configure Temporal worker
- */
-export async function createTemporalWorker(): Promise<Worker> {
+export async function createTemporalWorker() {
     try {
         logger.info('Creating Temporal worker');
 
-        // Create native connection
-        const connection = await NativeConnection.connect(getTemporalConnectionOptions());
-        
         // Get configuration
         const config = getTemporalConfig();
         const workerOptions = getWorkerOptions();
+
+        // Create native connection with proper options
+        const connection = await NativeConnection.connect({
+            address: config.address,
+            tls: true,
+            apiKey: config.apiKey
+        });
 
         // Create worker
         const worker = await Worker.create({
             connection,
             namespace: config.namespace,
-            workflowsPath: require.resolve('./workflows'),
+            // workflowsPath: require.resolve('./workflows'),
             activities,
+            taskQueue: config.taskQueue,
             ...workerOptions,
         });
 
@@ -49,42 +43,6 @@ export async function createTemporalWorker(): Promise<Worker> {
     }
 }
 
-/**
- * Start Temporal worker
- */
-export async function startTemporalWorker(): Promise<Worker> {
-    try {
-        const worker = await createTemporalWorker();
-        
-        logger.info('Starting Temporal worker');
-        
-        // Set up graceful shutdown
-        process.on('SIGINT', async () => {
-            logger.info('Received SIGINT, shutting down Temporal worker gracefully');
-            await worker.shutdown();
-            process.exit(0);
-        });
-
-        process.on('SIGTERM', async () => {
-            logger.info('Received SIGTERM, shutting down Temporal worker gracefully');
-            await worker.shutdown();
-            process.exit(0);
-        });
-
-        // Start the worker
-        await worker.run();
-
-        return worker;
-
-    } catch (error) {
-        logger.error('Failed to start Temporal worker', { error });
-        throw error;
-    }
-}
-
-/**
- * Initialize Temporal worker in development mode
- */
 export async function initializeTemporalWorker(): Promise<Worker | null> {
     try {
         // Only start worker if explicitly enabled
@@ -94,16 +52,16 @@ export async function initializeTemporalWorker(): Promise<Worker | null> {
         }
 
         logger.info('Initializing Temporal worker for development');
-        
+
         const worker = await createTemporalWorker();
-        
+
         // Run worker in background for development
         worker.run().catch((error) => {
             logger.error('Temporal worker failed', { error });
         });
 
         logger.info('Temporal worker initialized and running in background');
-        
+
         return worker;
 
     } catch (error) {

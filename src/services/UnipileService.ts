@@ -29,23 +29,23 @@ export class UnipileService {
     private initializeClient(): void {
         if (!UnipileService.client) {
             try {
-                if (!env.UNIPILE_API_KEY) {
-                    logger.error('Unipile API key not configured. Please set UNIPILE_API_KEY in your environment variables.');
+                if (!env.UNIPILE_ACCESS_TOKEN) {
+                    logger.error('Unipile API key not configured. Please set UNIPILE_ACCESS_TOKEN in your environment variables.');
                     UnipileService.client = null;
                     return;
                 }
 
-                if (!env.UNIPILE_API_URL) {
-                    logger.error('Unipile API URL not configured. Please set UNIPILE_API_URL in your environment variables.');
+                if (!env.UNIPILE_DNS) {
+                    logger.error('Unipile API URL not configured. Please set UNIPILE_DNS in your environment variables.');
                     UnipileService.client = null;
                     return;
                 }
 
                 // Initialize UnipileClient with actual credentials
-                UnipileService.client = new UnipileClient(env.UNIPILE_API_URL, env.UNIPILE_API_KEY);
+                UnipileService.client = new UnipileClient(env.UNIPILE_DNS, env.UNIPILE_ACCESS_TOKEN);
                 logger.info('Unipile client initialized successfully', {
-                    apiUrl: env.UNIPILE_API_URL,
-                    hasApiKey: !!env.UNIPILE_API_KEY
+                    apiUrl: env.UNIPILE_DNS,
+                    hasApiKey: !!env.UNIPILE_ACCESS_TOKEN
                 });
             } catch (error) {
                 logger.error('Failed to initialize Unipile client', { error });
@@ -58,7 +58,7 @@ export class UnipileService {
      * Check if Unipile is configured
      */
     static isConfigured(): boolean {
-        return !!env.UNIPILE_API_KEY && UnipileService.client !== null;
+        return !!env.UNIPILE_ACCESS_TOKEN && UnipileService.client !== null;
     }
 
     /**
@@ -79,15 +79,15 @@ export class UnipileService {
 
             logger.info('Checking Unipile configuration', {
                 isConfigured: UnipileService.isConfigured(),
-                hasApiKey: !!env.UNIPILE_API_KEY,
-                apiUrl: env.UNIPILE_API_URL,
-                apiKeyLength: env.UNIPILE_API_KEY?.length,
-                apiKeyPrefix: env.UNIPILE_API_KEY?.substring(0, 10) + '...'
+                hasApiKey: !!env.UNIPILE_ACCESS_TOKEN,
+                apiUrl: env.UNIPILE_DNS,
+                apiKeyLength: env.UNIPILE_ACCESS_TOKEN?.length,
+                apiKeyPrefix: env.UNIPILE_ACCESS_TOKEN?.substring(0, 10) + '...'
             });
 
 
             if (!UnipileService.isConfigured()) {
-                throw new ExternalAPIError('Unipile API is not configured. Please set UNIPILE_API_KEY and UNIPILE_API_URL in your environment variables.');
+                throw new ExternalAPIError('Unipile API is not configured. Please set UNIPILE_ACCESS_TOKEN and UNIPILE_DNS in your environment variables.');
             }
 
             // Use actual Unipile SDK
@@ -101,7 +101,7 @@ export class UnipileService {
             const unipileRequest: PostHostedAuthLinkInput = {
                 type: params.type,
                 expiresOn: params.expiresOn,
-                api_url: env.UNIPILE_API_URL!,
+                api_url: env.UNIPILE_DNS!,
                 providers: params.providers as SupportedProvider[],
                 success_redirect_url: params.successRedirectUrl,
                 failure_redirect_url: params.failureRedirectUrl,
@@ -112,7 +112,7 @@ export class UnipileService {
             logger.info('Unipile SDK request', {
                 unipileRequest,
                 clientExists: !!UnipileService.client,
-                apiKeyLength: env.UNIPILE_API_KEY?.length || 0
+                apiKeyLength: env.UNIPILE_ACCESS_TOKEN?.length || 0
             });
 
             try {
@@ -121,13 +121,13 @@ export class UnipileService {
                     requestPayload: unipileRequest,
                     clientInfo: {
                         hasClient: !!UnipileService.client,
-                        apiUrl: env.UNIPILE_API_URL,
-                        apiKeyPrefix: env.UNIPILE_API_KEY?.substring(0, 10) + '...',
+                        apiUrl: env.UNIPILE_DNS,
+                        apiKeyPrefix: env.UNIPILE_ACCESS_TOKEN?.substring(0, 10) + '...',
                     }
                 });
 
                 const response = await UnipileService.client!.account.createHostedAuthLink(unipileRequest);
-                
+
 
                 if (!response || !response.url) {
                     logger.error('=== INVALID UNIPILE RESPONSE ===', {
@@ -284,7 +284,7 @@ export class UnipileService {
             logger.info('=== UNIPILE SDK: Getting own profile ===', {
                 accountId,
                 sdkMethod: 'client.users.getOwnProfile',
-                apiUrl: env.UNIPILE_API_URL
+                apiUrl: env.UNIPILE_DNS
             });
 
             const profile = await UnipileService.client.users.getOwnProfile(accountId);
