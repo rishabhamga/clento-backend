@@ -1,45 +1,29 @@
-/**
- * Temporal Activities Index
- * 
- * Exports all Temporal activities for use in workflows and workers.
- */
+import logger from "../../utils/logger";
 
-// LinkedIn Activities
-export { ProfileVisitActivity } from './linkedin/profile-visit.activity';
-export { LikePostActivity } from './linkedin/like-post.activity';
-export { SendInvitationActivity } from './linkedin/send-invitation.activity';
+export async function testActivity(input: { message: string; delay?: number }): Promise<{ success: boolean; data: any; timestamp: string }> {
+    logger.info('Test activity started', { input });
 
-// Database Activities
-export {
-    CreateExecutionActivity,
-    UpdateExecutionActivity,
-    GetExecutionActivity,
-    LoadLeadsActivity,
-    UpdateCampaignStatusActivity,
-} from './database/campaign-execution.activity';
+    // Simulate some work with optional delay
+    if (input.delay && input.delay > 0) {
+        logger.info(`Waiting for ${input.delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, input.delay));
+    }
 
-// Placeholder exports for activities not yet implemented
-export async function CommentPostActivity(input: any): Promise<any> {
-    // TODO: Implement comment post activity
-    return { success: true, data: { skipped: true, reason: 'Not implemented yet' } };
+    const result = {
+        success: true,
+        data: {
+            message: input.message,
+            processedAt: new Date().toISOString(),
+            workerId: process.env.TEMPORAL_WORKER_ID || 'unknown',
+            environment: process.env.NODE_ENV || 'development'
+        },
+        timestamp: new Date().toISOString()
+    };
+
+    logger.info('Test activity completed', { result });
+    return result;
 }
 
-export async function CheckInvitationActivity(input: any): Promise<any> {
-    // TODO: Implement check invitation activity
-    return { success: true, data: { status: 'pending', skipped: true, reason: 'Not implemented yet' } };
-}
-
-export async function SendFollowupActivity(input: any): Promise<any> {
-    // TODO: Implement send followup activity
-    return { success: true, data: { skipped: true, reason: 'Not implemented yet' } };
-}
-
-export async function WithdrawRequestActivity(input: any): Promise<any> {
-    // TODO: Implement withdraw request activity
-    return { success: true, data: { skipped: true, reason: 'Not implemented yet' } };
-}
-
-export async function NotifyWebhookActivity(input: any): Promise<any> {
-    // TODO: Implement notify webhook activity
+export async function test(input: any): Promise<any> {
     return { success: true, data: { skipped: true, reason: 'Not implemented yet' } };
 }

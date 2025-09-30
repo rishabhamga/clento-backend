@@ -20,8 +20,8 @@ const envSchema = z.object({
   CLERK_WEBHOOK_SECRET: z.string().min(1, 'Clerk Webhook Secret is required'),
 
   // Unipile Integration
-  UNIPILE_API_URL: z.string().default('https://api.unipile.com/v1'),
-  UNIPILE_API_KEY: z.string().optional(),
+  UNIPILE_DNS: z.string().default('https://api.unipile.com/v1'),
+  UNIPILE_ACCESS_TOKEN: z.string().optional(),
 
   // Google Cloud Storage (optional for development)
   GOOGLE_CLOUD_PROJECT_ID: z.string().optional(),

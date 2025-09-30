@@ -7,7 +7,7 @@
 
 import { WorkerOptions } from '@temporalio/worker';
 import { getTemporalConfig } from './temporal.config';
-import logger from '../../utils/logger';
+import logger from '../../src/utils/logger';
 
 export interface WorkerConfig {
     taskQueue: string;

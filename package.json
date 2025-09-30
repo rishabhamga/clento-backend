@@ -8,7 +8,10 @@
     "start": "node dist/index.js",
     "dev": "nodemon --watch src --exec ts-node src/index.ts",
     "lint": "eslint . --ext .ts",
-    "test": "jest"
+    "test": "jest",
+    "test:temporal": "ts-node test-temporal.ts",
+    "test:temporal:simple": "ts-node test-temporal-simple.ts",
+    "test:temporal:worker": "ts-node test-temporal-with-worker.ts"
   },
   "dependencies": {
     "@clerk/backend": "^2.14.0",
