@@ -19,7 +19,7 @@ export const CreateCampaignDto = z.object({
   sender_account: z.string().nullable().optional(),
   prospect_list: z.string().nullable().optional(),
   start_date: z.string().date().nullable().optional(),
-  end_date: z.string().date().nullable().optional(),
+  leads_per_day: z.number().nullable().optional(),
   start_time: z.string().nullable().optional(), // time without time zone
   end_time: z.string().nullable().optional(), // time without time zone
   timezone: z.string().nullable().optional(),
@@ -34,7 +34,7 @@ export const UpdateCampaignDto = z.object({
   sender_account: z.string().nullable().optional(),
   prospect_list: z.string().nullable().optional(),
   start_date: z.string().date().nullable().optional(),
-  end_date: z.string().date().nullable().optional(),
+  leads_per_day: z.number().nullable().optional(),
   start_time: z.string().nullable().optional(), // time without time zone
   end_time: z.string().nullable().optional(), // time without time zone
   timezone: z.string().nullable().optional(),
@@ -54,7 +54,7 @@ export const CampaignResponseDto = z.object({
   sender_account: z.string().nullable(),
   prospect_list: z.string().nullable(),
   start_date: z.string().date().nullable(),
-  end_date: z.string().date().nullable(),
+  leads_per_day: z.number().nullable().optional(),
   start_time: z.string().nullable(), // time without time zone
   end_time: z.string().nullable(), // time without time zone
   timezone: z.string().nullable(),

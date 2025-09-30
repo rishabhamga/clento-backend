@@ -110,7 +110,7 @@ class CreateCampaignAPI extends ClentoAPI {
             const senderAccount = detail.getParamAsString("senderAccount");
             const prospectList = detail.getParamAsString("prospectList");
             const startDate = detail.getParamAsString("startDate");
-            const endDate = detail.getParamAsString("endDate");
+            const leadsPerDay = detail.getParamAsNumber("leadsPerDay");
             const startTime = detail.getParamAsString("startTime");
             const endTime = detail.getParamAsString("endTime");
             const timezone = detail.getParamAsString("timezone");
@@ -249,7 +249,7 @@ class CreateCampaignAPI extends ClentoAPI {
                 sender_account: senderAccount,
                 prospect_list: prospectList,
                 start_date: startDate,
-                end_date: endDate,
+                leads_per_day: leadsPerDay,
                 start_time: startTime,
                 end_time: endTime,
                 timezone
