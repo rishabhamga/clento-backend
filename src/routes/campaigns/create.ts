@@ -5,83 +5,22 @@ import { CampaignService } from '../../services/CampaignService';
 import { CreateCampaignDto, UpdateCampaignDto } from '../../dto/campaigns.dto';
 import '../../utils/expressExtensions'; // Import extensions
 import { StorageService } from '../../services/StorageService';
+import {
+    EAction,
+    EWorkflowNodeType,
+    EPathType,
+    EMessageLength,
+    ETone,
+    ELanguage,
+    EFormality,
+    EApproach,
+    EFocus,
+    EIntention,
+    ECallToAction,
+    EPersonalization,
+    WorkflowJson
+} from '../../types/workflow.types';
 
-// Enums
-export enum EAction {
-    action = "action",
-    addStep = "addStep"
-}
-
-export enum EWorkflowNodeType {
-    profile_visit = 'profile_visit',
-    like_post = 'like_post',
-    follow_profile = 'follow_profile',
-    comment_post = 'comment_post',
-    send_invite = 'send_invite',
-    send_followup = 'send_followup',
-    withdraw_request = 'withdraw_request',
-    send_inmail = 'send_inmail',
-    follow_company = 'follow_company',
-    send_connection_request = 'send_connection_request'
-}
-
-export type EPathType = 'accepted' | 'not-accepted'
-
-export enum EMessageLength {
-    short = 'short',
-    medium = 'medium',
-    long = 'long'
-}
-
-export enum ETone {
-    professional = 'professional',
-    friendly = 'friendly',
-    casual = 'casual',
-    enthusiastic = 'enthusiastic',
-    supportive = 'supportive',
-    cold = 'cold',
-    moderate = 'moderate',
-    warm = 'warm'
-}
-
-export enum ELanguage {
-    english = 'english',
-    spanish = 'spanish',
-    french = 'french',
-    german = 'german',
-    portuguese = 'portuguese'
-}
-
-export enum EFormality {
-    casual = 'casual',
-    approachable = 'approachable',
-    professional = 'professional'
-};
-export enum EApproach {
-    direct = 'direct',
-    diplomatic = 'diplomatic',
-    indirect = 'indirect'
-}
-
-export enum EFocus {
-    personal = 'personal',
-    relational = 'relational',
-    business = 'business'
-}
-export enum EIntention {
-    networking = 'networking',
-    partnership = 'partnership',
-    collaboration = 'collaboration'
-}
-export enum ECallToAction {
-    strong = 'strong',
-    confident = 'confident',
-    subtle = 'subtle'
-}
-export enum EPersonalization {
-    specific = 'specific',
-    generic = 'generic'
-}
 
 
 /**
@@ -256,7 +195,7 @@ class CreateCampaignAPI extends ClentoAPI {
             }
 
             const campaign = await this.campaignService.createCampaign(campaignCreateDto);
-            const worflowJson = {
+            const worflowJson: WorkflowJson = {
                 nodes,
                 edges
             }

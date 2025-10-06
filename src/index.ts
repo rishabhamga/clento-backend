@@ -91,9 +91,6 @@ const startServer = async () => {
       const temporalService = TemporalService.getInstance();
       await temporalService.initialize();
       logger.info('Temporal service initialized successfully');
-
-      // Initialize Temporal worker (only if enabled)
-      await initializeTemporalWorker();
     } catch (temporalError) {
       logger.error('Failed to initialize Temporal service', {
         error: temporalError instanceof Error ? temporalError.message : String(temporalError),

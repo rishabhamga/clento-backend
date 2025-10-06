@@ -13,24 +13,10 @@ class StartCampaignAPI extends ClentoAPI {
     public POST = async (req: Request, res: Response): Promise<Response> => {
         const body = req.getBody();
         const campaignId = body.getParamAsUUID('campaignId', true);
-        const organizationId = body.getParamAsUUID('organizationId', true);
-        const maxConcurrentLeads = body.getParamAsNumber('maxConcurrentLeads', false);
-        const leadProcessingDelay = body.getParamAsNumber('leadProcessingDelay', false);
 
-        // const workflowHandle = await this.temporalService.startCampaign({
-        //     campaignId,
-        //     organizationId,
-        //     maxConcurrentLeads,
-        //     leadProcessingDelay,
-        // });
+        await this.temporalService.startCampaign(campaignId);
 
-        logger.info('Starting campaign execution', {
-            campaignId,
-            organizationId,
-            maxConcurrentLeads,
-            leadProcessingDelay,
-        });
-        return res.sendOKResponse({});
+        return res.sendOKResponse({message: "Campaign Started"});
     };
 }
 

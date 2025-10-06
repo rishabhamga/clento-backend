@@ -1,15 +1,19 @@
-import { TemporalClientService } from "../temporal/services/temporal-client.service";
+import { CampaignOrchestratorInput, TemporalClientService } from "../temporal/services/temporal-client.service";
 import { UnipileWrapperService } from "../temporal/services/unipile-wrapper.service";
 import logger from "../utils/logger";
 import { testWorkflow } from "../temporal/workflows/testWorkflow";
+import { CampaignService } from "./CampaignService";
+import { DisplayError } from "../errors/AppError";
+import { parentWorkflow } from "../temporal/workflows/parentWorkflow";
 
 export class TemporalService {
     private static instance: TemporalService
     private temporalClient = TemporalClientService.getInstance();
     private unipileService = UnipileWrapperService.getInstance();
+    private campaignService = new CampaignService();
 
-    public static getInstance(): TemporalService{
-        if(!TemporalService.instance){
+    public static getInstance(): TemporalService {
+        if (!TemporalService.instance) {
             TemporalService.instance = new TemporalService();
         }
         return TemporalService.instance;
@@ -26,7 +30,7 @@ export class TemporalService {
                 accessToken: process.env.UNIPILE_ACCESS_TOKEN!,
             }
 
-            if(!unipileConfig.dns || !unipileConfig.accessToken){
+            if (!unipileConfig.dns || !unipileConfig.accessToken) {
                 throw new Error("Missing Unipile DNS or Key")
             }
 
@@ -45,8 +49,32 @@ export class TemporalService {
         }
     }
 
-    public async startCampaign() {
+    public async startCampaign(campaignId: string) {
+        const campaign = await this.campaignService.getCampaignById(campaignId)
+        if (!campaign) {
+            throw new DisplayError("Workflow not found");
+        }
+        if(!campaign.organization_id){
+            throw new DisplayError("Organization not found");
+        }
+        if(!campaign.sender_account){
+            throw new DisplayError("Sender account not found");
+        }
+        if(!campaign.prospect_list){
+            throw new DisplayError("Prospect list not found");
+        }
 
+        const campaignInput:CampaignOrchestratorInput = {
+            campaignId,
+            organizationId: campaign.organization_id,
+            accountId: campaign.sender_account,
+            leadListId: campaign.prospect_list,
+            maxConcurrentLeads: campaign.leads_per_day || 0
+        }
+
+        parentWorkflow(campaignInput);
+
+        // await this.temporalClient.startWorkflowCampaign(campaignInput);
     }
 
     public async runTestWorkflow(input: { message: string; delay?: number; iterations?: number }) {

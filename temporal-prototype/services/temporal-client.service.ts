@@ -1,6 +1,6 @@
 /**
  * Temporal Client Service
- * 
+ *
  * Service for managing Temporal client connections and workflow operations.
  * Provides a clean interface for starting, monitoring, and controlling workflows.
  */
@@ -50,7 +50,7 @@ export class TemporalClientService {
 
             // Create connection
             this.connection = await Connection.connect(getTemporalConnectionOptions());
-            
+
             // Create client
             this.client = new Client({
                 connection: this.connection,
@@ -211,7 +211,7 @@ export class TemporalClientService {
                 status: description.status.name as any,
                 startTime: description.startTime.toISOString(),
                 endTime: description.closeTime?.toISOString(),
-                executionTime: description.closeTime 
+                executionTime: description.closeTime
                     ? description.closeTime.getTime() - description.startTime.getTime()
                     : undefined,
                 result: description.status.name === 'COMPLETED' ? await handle.result() : undefined,
@@ -229,7 +229,7 @@ export class TemporalClientService {
     public async getCampaignStatus(campaignId: string): Promise<CampaignStatus> {
         try {
             const client = this.getClient();
-            
+
             // Search for all workflows related to this campaign
             const workflows = client.workflow.list({
                 query: `CampaignId = "${campaignId}"`,
@@ -251,7 +251,7 @@ export class TemporalClientService {
                     status: workflow.status.name as any,
                     startTime: workflow.startTime.toISOString(),
                     endTime: workflow.closeTime?.toISOString(),
-                    executionTime: workflow.closeTime 
+                    executionTime: workflow.closeTime
                         ? workflow.closeTime.getTime() - workflow.startTime.getTime()
                         : undefined,
                 };
@@ -261,7 +261,7 @@ export class TemporalClientService {
                 // Update counters
                 if (workflow.workflowType === WORKFLOW_TYPES.LEAD_OUTREACH) {
                     totalLeads++;
-                    
+
                     if (workflow.status.name === 'COMPLETED') {
                         processedLeads++;
                         successfulLeads++;
@@ -317,7 +317,7 @@ export class TemporalClientService {
         try {
             const handle = await this.getWorkflowHandle(workflowId);
             await handle.signal(SIGNAL_TYPES.PAUSE_CAMPAIGN, signal);
-            
+
             logger.info('Campaign paused successfully', {
                 workflowId,
                 reason: signal.reason,
@@ -338,7 +338,7 @@ export class TemporalClientService {
         try {
             const handle = await this.getWorkflowHandle(workflowId);
             await handle.signal(SIGNAL_TYPES.RESUME_CAMPAIGN, signal);
-            
+
             logger.info('Campaign resumed successfully', {
                 workflowId,
                 resumeAt: signal.resumeAt,
@@ -359,7 +359,7 @@ export class TemporalClientService {
         try {
             const handle = await this.getWorkflowHandle(workflowId);
             await handle.signal(SIGNAL_TYPES.STOP_CAMPAIGN, signal);
-            
+
             logger.info('Campaign stopped successfully', {
                 workflowId,
                 reason: signal.reason,
@@ -378,7 +378,7 @@ export class TemporalClientService {
         try {
             const handle = await this.getWorkflowHandle(workflowId);
             await handle.cancel(reason);
-            
+
             logger.info('Workflow cancelled successfully', {
                 workflowId,
                 reason,
@@ -396,7 +396,7 @@ export class TemporalClientService {
         try {
             const handle = await this.getWorkflowHandle(workflowId);
             await handle.terminate(reason);
-            
+
             logger.info('Workflow terminated successfully', {
                 workflowId,
                 reason,
@@ -416,9 +416,9 @@ export class TemporalClientService {
                 await this.connection.close();
                 this.connection = null;
             }
-            
+
             this.client = null;
-            
+
             logger.info('Temporal client connection closed');
         } catch (error) {
             logger.error('Failed to close Temporal client connection', { error });

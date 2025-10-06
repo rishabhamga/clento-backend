@@ -1,11 +1,11 @@
-import ClentoAPI from '../../utils/apiUtil';
 import { Request, Response } from 'express';
+import { UpdateCampaignDto } from '../../dto/campaigns.dto';
 import { DisplayError, ForbiddenError, NotFoundError } from '../../errors/AppError';
 import { CampaignService } from '../../services/CampaignService';
-import { CreateCampaignDto, UpdateCampaignDto } from '../../dto/campaigns.dto';
-import '../../utils/expressExtensions'; // Import extensions
 import { StorageService } from '../../services/StorageService';
-import { EAction, EApproach, ECallToAction, EFocus, EFormality, EIntention, ELanguage, EMessageLength, EPathType, EPersonalization, ETone, EWorkflowNodeType } from './create';
+import ClentoAPI from '../../utils/apiUtil';
+import '../../utils/expressExtensions'; // Import extensions
+import { EAction, EApproach, ECallToAction, EFocus, EFormality, EIntention, ELanguage, EMessageLength, EPathType, EPersonalization, ETone, EWorkflowNodeType } from '../../types/workflow.types';
 
 /**
  * Create Campaign API - Create new campaign endpoint

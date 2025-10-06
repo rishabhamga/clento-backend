@@ -1,8 +1,11 @@
 import { supabaseAdmin } from '../config/supabase';
 import { CreateCampaignDto, CampaignResponseDto, UpdateCampaignDto } from '../dto/campaigns.dto';
-import { DisplayError } from '../errors/AppError';
+import { BadRequestError, DisplayError, NotFoundError } from '../errors/AppError';
+import { WorkflowJson } from '../types/workflow.types';
+import { StorageService } from './StorageService';
 
 export class CampaignService {
+    private storageService = new StorageService();
     /**
      * Create a new campaign
      */
@@ -78,7 +81,7 @@ export class CampaignService {
             throw new DisplayError("An Error Occured While Fetching Campaigns");
         }
 
-        if(!data){
+        if (!data) {
             return [];
         }
 
@@ -97,10 +100,34 @@ export class CampaignService {
             throw new DisplayError("An Error Occured While Fetching Campaigns");
         }
 
-        if(!data){
+        if (!data) {
             return null;
         }
 
         return data;
+    }
+    async getWorkflow(campaign: CampaignResponseDto) {
+        // Download the workflow file as buffer
+        if (!campaign.organization_id) {
+            throw new DisplayError("Cannot Make a Workflow without Organization id")
+        }
+        if (!campaign.file_name || !campaign.bucket) {
+            throw new BadRequestError('Campaign workflow file not found');
+        }
+        if (campaign.is_deleted) {
+            throw new NotFoundError('Campaign not found');
+        }
+        const file = await this.storageService.downloadFileAsBuffer(
+            campaign.organization_id,
+            campaign.id,
+            campaign.file_name,
+            campaign.bucket,
+            `workflows/${campaign.organization_id}/${campaign.file_name}`
+        );
+
+        // Parse the JSON workflow data
+        const fileString = file.buffer.toString('utf8');
+        const workflowData: WorkflowJson = JSON.parse(fileString);
+        return { workflowData, file }
     }
 }
