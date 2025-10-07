@@ -27,10 +27,12 @@ function getDelayMs(edge: WorkflowEdge): number {
     if (edge.data?.delayData?.delay && edge.data?.delayData?.unit) {
         const delay = parseInt(edge.data.delayData.delay ?? '0', 10);
         switch (edge.data.delayData.unit) {
-            case 'seconds': return delay * 1000;
-            case 'minutes': return delay * 60_000;
-            case 'hours': return delay * 3_600_000;
-            case 'days': return delay * 86_400_000;
+            case 's': return delay * 1000;
+            case 'm': return delay * 60_000;
+            case 'h': return delay * 3_600_000;
+            case 'd': return delay * 86_400_000;
+            case 'w': return delay * 604_800_000;
+            default: CheckNever(edge.data.delayData.unit);
         }
     }
     return 0;

@@ -134,7 +134,7 @@ export interface WorkflowNode {
 
 export interface WorkflowEdgeDelayData {
     delay?: string | null;
-    unit?: string | null;
+    unit?: DelayUnit | null;
 }
 
 export interface WorkflowEdgeData {
@@ -143,6 +143,8 @@ export interface WorkflowEdgeData {
     isConditionalPath?: boolean | null;
     delayData?: WorkflowEdgeDelayData;
 }
+
+export type DelayUnit = 's' | 'm' | 'h' | 'd' | 'w';
 
 export interface WorkflowEdge {
     id: string;

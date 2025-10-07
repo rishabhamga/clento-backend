@@ -1,25 +1,26 @@
-import ClentoAPI from '../../utils/apiUtil';
 import { Request, Response } from 'express';
-import { DisplayError, NotFoundError } from '../../errors/AppError';
-import { CampaignService } from '../../services/CampaignService';
 import { CreateCampaignDto, UpdateCampaignDto } from '../../dto/campaigns.dto';
-import '../../utils/expressExtensions'; // Import extensions
+import { DisplayError } from '../../errors/AppError';
+import { CampaignService } from '../../services/CampaignService';
 import { StorageService } from '../../services/StorageService';
 import {
+    DelayUnit,
     EAction,
-    EWorkflowNodeType,
-    EPathType,
-    EMessageLength,
-    ETone,
-    ELanguage,
-    EFormality,
     EApproach,
-    EFocus,
-    EIntention,
     ECallToAction,
+    EFocus,
+    EFormality,
+    EIntention,
+    ELanguage,
+    EMessageLength,
+    EPathType,
     EPersonalization,
+    ETone,
+    EWorkflowNodeType,
     WorkflowJson
 } from '../../types/workflow.types';
+import ClentoAPI from '../../utils/apiUtil';
+import '../../utils/expressExtensions'; // Import extensions
 
 
 
@@ -160,7 +161,7 @@ class CreateCampaignAPI extends ClentoAPI {
                 let delayDataDelay, delayDataUnit;
                 if (delayData) {
                     delayDataDelay = delayData.getParamAsString("delay", false);
-                    delayDataUnit = delayData.getParamAsString("unit", false);
+                    delayDataUnit = delayData.getParamAsType<DelayUnit>('string', 'unit', false);
                 }
                 return {
                     id: it.getParamAsString("id"),
@@ -201,7 +202,7 @@ class CreateCampaignAPI extends ClentoAPI {
             }
             if (campaign) {
                 await this.storageService.uploadJson(worflowJson, organizationId, `${campaign.id}.json`, this.bucketName);
-            }else{
+            } else {
                 throw new DisplayError("Error while creating the campaign")
             }
 
