@@ -1,6 +1,6 @@
 import { log, proxyActivities, sleep } from "@temporalio/workflow";
 import { LeadUpdateDto } from "../../dto/leads.dto";
-import { EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from "../../types/workflow.types"
+import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from "../../types/workflow.types"
 import type * as activities from "../activities";
 
 const { profile_visit, like_post, follow_profile, comment_post, send_invite, send_followup, withdraw_request, send_inmail, follow_company, send_connection_request, updateLead } = proxyActivities<typeof activities>({
@@ -66,7 +66,8 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
 
     await updateLead(leadId, leadUpdate);
 
-    const nodes = workflow.nodes;
+    // Filter out "add node" type nodes - these are UI/configuration nodes that shouldn't be executed
+    const nodes = workflow.nodes.filter(it => it.type !== EAction.addStep);
     const edges = workflow.edges;
 
     const adjacencyMap: Record<string, { to: string; delay: number }[]> = {};
