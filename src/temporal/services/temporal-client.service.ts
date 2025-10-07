@@ -1,7 +1,8 @@
-import { Client, Connection, WorkflowHandle } from '@temporalio/client';
+import { Client, Connection, WorkflowClient, WorkflowHandle } from '@temporalio/client';
 import logger from '../../utils/logger';
 import { getTemporalConfig, getTemporalConnectionOptions } from '../config/temporal.config';
-import { WORKFLOW_TYPES, WorkflowJson } from '../../types/workflow.types';
+import { runParentWorker } from '../worker';
+import { parentWorkflow } from '../workflows/parentWorkflow';
 
 export interface CampaignOrchestratorInput {
     campaignId: string;
@@ -41,7 +42,6 @@ export class TemporalClientService {
             logger.info('Initializing Temporal client connection');
 
             // Create connection
-            const ConnectionConfig = getTemporalConnectionOptions()
             this.connection = await Connection.connect(getTemporalConnectionOptions());
 
             // Create client
@@ -76,30 +76,28 @@ export class TemporalClientService {
         return this.client;
     }
 
-    public async startWorkflowCampaign(input: CampaignOrchestratorInput) {
+    public async startWorkflowCampaign(input: CampaignOrchestratorInput): Promise<WorkflowHandle | undefined> {
         try {
             logger.info('Starting workflow campaign', { input });
 
-            const handle = await this.client?.workflow.start(WORKFLOW_TYPES.CAMPAIGN_ORCHESTRATOR, {
+            // Ensure client is initialized
+            if (!this.client?.workflow) {
+                await this.initialize();
+            }
+
+            // Start worker in background
+            runParentWorker().catch(console.error);
+
+            const handle = await this.client?.workflow.start(parentWorkflow, {
                 args: [input],
-                taskQueue: this.config.taskQueue,
-                workflowId: input.campaignId,
-                workflowExecutionTimeout: this.config.workflowExecutionTimeout,
-                workflowRunTimeout: this.config.workflowRunTimeout,
-                workflowTaskTimeout: this.config.workflowTaskTimeout,
-                memo: {
-                    campaignId: input.campaignId,
-                    organizationId: input.organizationId,
-                    accountId: input.accountId,
-                },
-                searchAttributes: {
-                    CampaignId: [input.campaignId],
-                    OrganizationId: [input.organizationId],
-                    AccountId: [input.accountId],
-                },
+                taskQueue: 'campaign-task-queue',
+                workflowId: `campaign-${input.campaignId}`,
             });
 
-            logger.info('Workflow campaign started successfully', { handle });
+            logger.info('Workflow campaign started', {
+                workflowId: handle?.workflowId,
+                runId: handle?.firstExecutionRunId
+            });
 
             return handle;
         } catch (error) {

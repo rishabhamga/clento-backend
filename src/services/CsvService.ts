@@ -3,9 +3,19 @@ import { ValidationError, BadRequestError } from '../errors/AppError';
 import logger from '../utils/logger';
 import { UnipileService } from './UnipileService';
 
+export interface CsvLead {
+    first_name: string,
+    last_name?: string,
+    email: string,
+    linkedin_url: string,
+    company?: string,
+    title?: string,
+    phone?: string
+}
+
 export interface CsvParseResult {
   headers: string[];
-  data: Record<string, any>[];
+  data: CsvLead[];
   totalRows: number;
   validRows: number;
   errors: string[];
@@ -76,18 +86,22 @@ export class CsvService {
       }
 
       // Validate and clean data
-      const validRows: Record<string, any>[] = [];
+      const validRows: CsvLead[] = [];
       const errors: string[] = [];
 
       records.forEach((row: any, index) => {
         try {
           // Clean row data
-          const cleanedRow: Record<string, any> = {};
+          const cleanedRow: CsvLead = {
+            first_name: '',
+            email: '',
+            linkedin_url: ''
+          };
 
           headers.forEach(header => {
             const value = row[header];
             if (value !== undefined && value !== null && value !== '') {
-              cleanedRow[header] = String(value).trim();
+              cleanedRow[header as keyof CsvLead] = String(value).trim();
             }
           });
 
@@ -150,7 +164,7 @@ export class CsvService {
       let validLinkedInUrls = 0;
 
       data.forEach((row, index) => {
-        const linkedInUrl = row[linkedInColumn];
+        const linkedInUrl = row.linkedin_url;
         if (linkedInUrl && this.isValidLinkedInUrl(linkedInUrl)) {
           validLinkedInUrls++;
         }
@@ -170,7 +184,7 @@ export class CsvService {
       let validEmails = 0;
       emailColumns.forEach(emailCol => {
         data.forEach(row => {
-          const email = row[emailCol];
+          const email = row.email;
           if (email && this.isValidEmail(email)) {
             validEmails++;
           }
@@ -346,7 +360,7 @@ export class CsvService {
           leadsFromLinkedin = await Promise.all(
             publicIdentifiers.map(async (identifier) => {
               try {
-                  const profile = await unipileService.getUserProfile(accountId, identifier);
+                  const profile = await unipileService.getUserProfile(accountId, identifier || '');
                   return profile;
               } catch (error) {
                 // logger.warn('Failed to get profile for identifier', { identifier, error });

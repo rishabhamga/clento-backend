@@ -72,9 +72,9 @@ export class TemporalService {
             maxConcurrentLeads: campaign.leads_per_day || 0
         }
 
-        parentWorkflow(campaignInput);
-
-        // await this.temporalClient.startWorkflowCampaign(campaignInput);
+        const handle = await this.temporalClient.startWorkflowCampaign(campaignInput);
+        console.log("handle", handle);
+        return handle;
     }
 
     public async runTestWorkflow(input: { message: string; delay?: number; iterations?: number }) {

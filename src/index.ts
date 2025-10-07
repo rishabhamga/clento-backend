@@ -1,19 +1,19 @@
-import 'express-async-errors';
-import express from 'express';
 import cors from 'cors';
+import express from 'express';
+import 'express-async-errors';
 import helmet from 'helmet';
-import multer from 'multer';
-import env from './config/env';
-import logger from './utils/logger';
-import { errorHandler } from './middleware/errorHandler';
-import { setupSwagger } from './config/swagger';
-import supabase from './config/supabase';
-import registerAllRoutes from './utils/registerRoutes';
 import morgan from 'morgan';
-import './utils/expressExtensions'; // Import express extensions
+import multer from 'multer';
 import path from 'path';
+import env from './config/env';
+import supabase from './config/supabase';
+import { setupSwagger } from './config/swagger';
+import { errorHandler } from './middleware/errorHandler';
 import { TemporalService } from './services/TemporalService';
-import { initializeTemporalWorker } from './temporal/worker';
+import './utils/expressExtensions'; // Import express extensions
+import './utils/arrayExtensions'; // Import array extensions globally
+import logger from './utils/logger';
+import registerAllRoutes from './utils/registerRoutes';
 
 // Create Express application
 const app = express();

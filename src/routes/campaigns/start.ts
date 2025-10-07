@@ -1,8 +1,7 @@
-import ClentoAPI from '../../utils/apiUtil';
 import { Request, Response } from 'express';
-import '../../utils/expressExtensions';
 import { TemporalService } from '../../services/TemporalService';
-import logger from '../../utils/logger';
+import ClentoAPI from '../../utils/apiUtil';
+import '../../utils/expressExtensions';
 
 class StartCampaignAPI extends ClentoAPI {
     public path = '/api/campaigns/start';
