@@ -4,8 +4,6 @@ import logger from "../utils/logger";
 import { testWorkflow } from "../temporal/workflows/testWorkflow";
 import { CampaignService } from "./CampaignService";
 import { DisplayError } from "../errors/AppError";
-import { runParentWorker } from "../temporal/worker";
-import env from '../config/env';
 
 export class TemporalService {
     private static instance: TemporalService
@@ -128,6 +126,10 @@ export class TemporalService {
         }
     }
 
+    /**
+     * Get list of active campaign workflows
+     * This is now only for monitoring - workers handle execution automatically
+     */
     public async getActiveCampaignWorkflows() {
         const client = this.temporalClient.getClient();
 
@@ -136,26 +138,32 @@ export class TemporalService {
         const listIterable = client.workflow.list({ query });
 
         const workflows = [];
-        // If there are more than 5 workflows, skip spawning workers entirely
-        let skipWorkerSpawn = false;
         for await (const wf of listIterable) {
             workflows.push(wf);
-            if (workflows.length > 5) {
-                skipWorkerSpawn = true;
-                break;
-            }
-        }
-        if (skipWorkerSpawn) {
-            logger.warn('More than 5 active campaign workflows found, skipping worker spawn');
-            return workflows;
         }
 
-        await workflows.forEachAsyncOneByOne(async wf => {
-            if (env.RUN_PARENT_WORKER) {
-                runParentWorker().catch(console.error);
-            }
-        })
+        logger.info(`Found ${workflows.length} active campaign workflow(s)`, {
+            count: workflows.length,
+            workflowIds: workflows.map(wf => wf.workflowId),
+        });
 
         return workflows;
+    }
+
+    /**
+     * Get campaign statistics
+     */
+    public async getCampaignStats() {
+        const activeWorkflows = await this.getActiveCampaignWorkflows();
+
+        return {
+            activeCampaigns: activeWorkflows.length,
+            workflows: activeWorkflows.map(wf => ({
+                workflowId: wf.workflowId,
+                runId: wf.runId,
+                startTime: wf.startTime,
+                status: wf.status,
+            })),
+        };
     }
 }

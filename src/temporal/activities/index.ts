@@ -1,13 +1,11 @@
-import { startChild } from "@temporalio/workflow";
-import { LeadInsertDto, LeadListResponseDto, LeadResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
+import { CampaignResponseDto } from "../../dto/campaigns.dto";
+import { LeadInsertDto, LeadListResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
 import { CampaignService } from "../../services/CampaignService";
 import { CsvLead, CsvParseResult } from "../../services/CsvService";
 import { LeadListService } from "../../services/LeadListService";
 import { LeadService } from "../../services/LeadService";
 import { WorkflowJson } from "../../types/workflow.types";
 import logger from "../../utils/logger";
-import { leadWorkflow, LeadWorkflowInput } from "../workflows/leadWorkflow";
-import { CampaignResponseDto } from "../../dto/campaigns.dto";
 
 export async function testActivity(input: { message: string; delay?: number }): Promise<{ success: boolean; data: any; timestamp: string }> {
     logger.info('Test activity started', { input });
@@ -163,7 +161,7 @@ export async function send_connection_request(): Promise<ActivityResult> {
     logger.info('send_connection_request');
     // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
     // This is a conditional action - connection request can be accepted or rejected
-    return { success: true, message: 'Connection request sent' };
+    return { success: false, message: 'Connection request sent' };
 }
 
 export function CheckNever(value: never): never {

@@ -1,7 +1,6 @@
 import { Client, Connection, WorkflowClient, WorkflowHandle } from '@temporalio/client';
 import logger from '../../utils/logger';
 import { getTemporalConfig, getTemporalConnectionOptions } from '../config/temporal.config';
-import { runParentWorker } from '../worker';
 import { parentWorkflow } from '../workflows/parentWorkflow';
 
 export interface CampaignOrchestratorInput {
@@ -84,9 +83,6 @@ export class TemporalClientService {
             if (!this.client?.workflow) {
                 await this.initialize();
             }
-
-            // Start worker in background
-            runParentWorker().catch(console.error);
 
             const handle = await this.client?.workflow.start(parentWorkflow, {
                 args: [input],
