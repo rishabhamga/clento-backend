@@ -136,18 +136,25 @@ export class TemporalService {
         const listIterable = client.workflow.list({ query });
 
         const workflows = [];
+        // If there are more than 5 workflows, skip spawning workers entirely
+        let skipWorkerSpawn = false;
         for await (const wf of listIterable) {
             workflows.push(wf);
-            logger.info('Spawning Worker for Campaign Workflow', {
-                workflowId: wf.workflowId,
-                runId: wf.runId,
-                type: wf.type,
-                status: wf.status.name
-            })
-            if(env.RUN_PARENT_WORKER) {
-                await runParentWorker().catch(console.error);
+            if (workflows.length > 5) {
+                skipWorkerSpawn = true;
+                break;
             }
         }
+        if (skipWorkerSpawn) {
+            logger.warn('More than 5 active campaign workflows found, skipping worker spawn');
+            return workflows;
+        }
+
+        await workflows.forEachAsyncOneByOne(async wf => {
+            if (env.RUN_PARENT_WORKER) {
+                runParentWorker().catch(console.error);
+            }
+        })
 
         return workflows;
     }

@@ -3,6 +3,13 @@ import { LeadUpdateDto } from "../../dto/leads.dto";
 import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from "../../types/workflow.types"
 import type * as activities from "../activities";
 
+// Import ActivityResult type
+type ActivityResult = {
+    success: boolean;
+    message?: string;
+    data?: any;
+};
+
 const { profile_visit, like_post, follow_profile, comment_post, send_invite, send_followup, withdraw_request, send_inmail, follow_company, send_connection_request, updateLead } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
@@ -38,7 +45,7 @@ function getDelayMs(edge: WorkflowEdge): number {
     return 0;
 }
 
-async function executeNode(node: WorkflowNode) {
+async function executeNode(node: WorkflowNode): Promise<ActivityResult | null> {
     const type = node.data.type;
     const config = node.data.config;
 
@@ -56,13 +63,14 @@ async function executeNode(node: WorkflowNode) {
         case null: return null;
         case undefined: return null;
         default:
-            CheckNever(type)
+            CheckNever(type);
+            return null;
     }
 }
 
 export async function leadWorkflow(input: LeadWorkflowInput) {
     const { leadId, workflow, accountId } = input
-    const leadUpdate:LeadUpdateDto = {
+    const leadUpdate: LeadUpdateDto = {
         status: "Processing"
     }
 
@@ -70,16 +78,24 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
 
     // Filter out "add node" type nodes - these are UI/configuration nodes that shouldn't be executed
     const nodes = workflow.nodes.filter(it => it.type !== EAction.addStep);
-    const edges = workflow.edges;
 
-    const adjacencyMap: Record<string, { to: string; delay: number }[]> = {};
+    // Create a set of valid node IDs for quick lookup
+    const validNodeIds = new Set(nodes.map(n => n.id));
+
+    // Filter edges to only include those connecting valid nodes (exclude edges to/from "add step" nodes)
+    const edges = workflow.edges.filter(edge =>
+        validNodeIds.has(edge.source) && validNodeIds.has(edge.target)
+    );
+
+    // Build adjacency map with full edge information for conditional handling
+    const adjacencyMap: Record<string, WorkflowEdge[]> = {};
     const incomingCount: Record<string, number> = {};
 
     nodes.forEach(n => (incomingCount[n.id] = 0));
 
     edges.forEach(edge => {
         if (!adjacencyMap[edge.source]) adjacencyMap[edge.source] = [];
-        adjacencyMap[edge.source].push({ to: edge.target, delay: getDelayMs(edge) });
+        adjacencyMap[edge.source].push(edge);
         incomingCount[edge.target] = (incomingCount[edge.target] || 0) + 1;
     });
 
@@ -90,17 +106,42 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
         const currentNode = nodes.find(n => n.id === currentId);
         if (!currentNode) continue;
 
-        await executeNode(currentNode);
+        // Execute the current node and store the result
+        const result = await executeNode(currentNode);
 
-        for (const edge of adjacencyMap[currentId] || []) {
-            if (edge.delay > 0) {
-                log.info(`Sleeping ${edge.delay}ms before next node ${edge.to}`);
-                await sleep(edge.delay);
+        // Get outgoing edges from this node
+        const outgoingEdges = adjacencyMap[currentId] || [];
+
+        for (const edge of outgoingEdges) {
+            const isConditionalEdge = edge.data?.isConditionalPath === true;
+            const isPositivePath = edge.data?.isPositive === true;
+
+            // Decide whether to follow this edge
+            let shouldFollowEdge = true;
+
+            if (isConditionalEdge && result) {
+                // For conditional edges, check if the path matches the result
+                // isPositive=true means "accepted" path (success=true)
+                // isPositive=false means "not-accepted" path (success=false)
+                shouldFollowEdge = (isPositivePath && result.success) || (!isPositivePath && !result.success);
             }
 
-            incomingCount[edge.to] -= 1;
-            if (incomingCount[edge.to] === 0) {
-                queue.push(edge.to);
+            if (!shouldFollowEdge) {
+                // Decrease incoming count since we're not following this edge
+                incomingCount[edge.target] -= 1;
+                continue;
+            }
+
+            // Apply delay if specified
+            const delay = getDelayMs(edge);
+            if (delay > 0) {
+                await sleep(delay);
+            }
+
+            // Decrease incoming count and add to queue if ready
+            incomingCount[edge.target] -= 1;
+            if (incomingCount[edge.target] === 0) {
+                queue.push(edge.target);
             }
         }
     }

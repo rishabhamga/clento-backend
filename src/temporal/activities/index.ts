@@ -94,56 +94,76 @@ export async function getWorkflowByCampaignId(campaign: CampaignResponseDto): Pr
     return workflowData
 }
 
+// Activity Result Type
+export interface ActivityResult {
+    success: boolean;
+    message?: string;
+    data?: any;
+}
+
 // LINKEDIN ACTIONS
-export async function profile_visit() {
-    // FOR NOT JUST LOG THE THINGS WE NEED TO ADD UNIPILE FUNCTIONALITY
-    logger.info('profile_visit')
-    return
+// These activities return ActivityResult to support conditional workflow paths
+
+export async function profile_visit(): Promise<ActivityResult> {
+    logger.info('profile_visit');
+    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
+    return { success: true, message: 'Profile visit completed' };
 }
-export async function like_post() {
-    // FOR NOT JUST LOG THE THINGS WE NEED TO ADD UNIPILE FUNCTIONALITY
-    logger.info('like_post')
-    return
+
+export async function like_post(): Promise<ActivityResult> {
+    logger.info('like_post');
+    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
+    return { success: true, message: 'Post liked successfully' };
 }
-export async function follow_profile() {
-    // FOR NOT JUST LOG THE THINGS WE NEED TO ADD UNIPILE FUNCTIONALITY
-    logger.info('follow_profile')
-    return
+
+export async function follow_profile(): Promise<ActivityResult> {
+    logger.info('follow_profile');
+    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
+    return { success: true, message: 'Profile followed successfully' };
 }
-export async function comment_post() {
-    // FOR NOT JUST LOG THE THINGS WE NEED TO ADD UNIPILE FUNCTIONALITY
-    logger.info('comment_post')
-    return
+
+export async function comment_post(): Promise<ActivityResult> {
+    logger.info('comment_post');
+    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
+    return { success: true, message: 'Comment posted successfully' };
 }
-export async function send_invite() {
-    // FOR NOT JUST LOG THE THINGS WE NEED TO ADD UNIPILE FUNCTIONALITY
-    logger.info('send_invite')
-    return
+
+export async function send_invite(): Promise<ActivityResult> {
+    logger.info('send_invite');
+    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
+    // This is a conditional action - connection request can be accepted or not
+    return { success: true, message: 'Invite sent successfully' };
 }
-export async function send_followup() {
-    // FOR NOT JUST LOG THE THINGS WE NEED TO ADD UNIPILE FUNCTIONALITY
-    logger.info('send_followup')
-    return
+
+export async function send_followup(): Promise<ActivityResult> {
+    logger.info('send_followup');
+    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
+    return { success: true, message: 'Follow-up message sent' };
 }
-export async function withdraw_request() {
-    // FOR NOT JUST LOG THE THINGS WE NEED TO ADD UNIPILE FUNCTIONALITY
-    logger.info('withdraw_request')
-    return
+
+export async function withdraw_request(): Promise<ActivityResult> {
+    logger.info('withdraw_request');
+    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
+    return { success: true, message: 'Request withdrawn' };
 }
-export async function send_inmail() {
-    // FOR NOT JUST LOG THE THINGS WE NEED TO ADD UNIPILE FUNCTIONALITY
-    logger.info('send_inmail')
-    return
+
+export async function send_inmail(): Promise<ActivityResult> {
+    logger.info('send_inmail');
+    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
+    return { success: true, message: 'InMail sent successfully' };
 }
-export async function follow_company() {
-    // FOR NOT JUST LOG THE THINGS WE NEED TO ADD UNIPILE FUNCTIONALITY
-    logger.info('follow_company')
-    return
+
+export async function follow_company(): Promise<ActivityResult> {
+    logger.info('follow_company');
+    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
+    return { success: true, message: 'Company followed successfully' };
 }
-export async function send_connection_request() {
-    // FOR NOT JUST LOG THE THINGS WE NEED TO ADD UNIPILE FUNCTIONALITY
-    logger.info('send_connection_request')
-    return
+
+export async function send_connection_request(): Promise<ActivityResult> {
+    logger.info('send_connection_request');
+    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
+    // This is a conditional action - connection request can be accepted or rejected
+    return { success: true, message: 'Connection request sent' };
 }
 
 export function CheckNever(value: never): never {
