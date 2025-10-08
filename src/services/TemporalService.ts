@@ -4,7 +4,8 @@ import logger from "../utils/logger";
 import { testWorkflow } from "../temporal/workflows/testWorkflow";
 import { CampaignService } from "./CampaignService";
 import { DisplayError } from "../errors/AppError";
-import { parentWorkflow } from "../temporal/workflows/parentWorkflow";
+import { runParentWorker } from "../temporal/worker";
+import env from '../config/env';
 
 export class TemporalService {
     private static instance: TemporalService
@@ -54,17 +55,17 @@ export class TemporalService {
         if (!campaign) {
             throw new DisplayError("Workflow not found");
         }
-        if(!campaign.organization_id){
+        if (!campaign.organization_id) {
             throw new DisplayError("Organization not found");
         }
-        if(!campaign.sender_account){
+        if (!campaign.sender_account) {
             throw new DisplayError("Sender account not found");
         }
-        if(!campaign.prospect_list){
+        if (!campaign.prospect_list) {
             throw new DisplayError("Prospect list not found");
         }
 
-        const campaignInput:CampaignOrchestratorInput = {
+        const campaignInput: CampaignOrchestratorInput = {
             campaignId,
             organizationId: campaign.organization_id,
             accountId: campaign.sender_account,
@@ -125,5 +126,29 @@ export class TemporalService {
             });
             throw error;
         }
+    }
+
+    public async getActiveCampaignWorkflows() {
+        const client = this.temporalClient.getClient();
+
+        const query = `WorkflowType = 'parentWorkflow' AND TaskQueue = 'campaign-task-queue' AND ExecutionStatus = 'Running'`;
+
+        const listIterable = client.workflow.list({ query });
+
+        const workflows = [];
+        for await (const wf of listIterable) {
+            workflows.push(wf);
+            logger.info('Spawning Worker for Campaign Workflow', {
+                workflowId: wf.workflowId,
+                runId: wf.runId,
+                type: wf.type,
+                status: wf.status.name
+            })
+            if(env.RUN_PARENT_WORKER) {
+                await runParentWorker().catch(console.error);
+            }
+        }
+
+        return workflows;
     }
 }

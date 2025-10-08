@@ -34,6 +34,7 @@ const envSchema = z.object({
   // Logging
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'http', 'debug']).default('info'),
   DEBUG_LOGS: z.string().transform(val => val === 'true').default('false'),
+  RUN_PARENT_WORKER: z.string().transform(val => val === 'true').default('false'),
 });
 
 // Parse and validate environment variables

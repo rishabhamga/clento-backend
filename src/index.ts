@@ -91,6 +91,7 @@ const startServer = async () => {
       const temporalService = TemporalService.getInstance();
       await temporalService.initialize();
       logger.info('Temporal service initialized successfully');
+      await temporalService.getActiveCampaignWorkflows();
     } catch (temporalError) {
       logger.error('Failed to initialize Temporal service', {
         error: temporalError instanceof Error ? temporalError.message : String(temporalError),
