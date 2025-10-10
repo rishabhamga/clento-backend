@@ -35,7 +35,7 @@ export function getTemporalConfig(): TemporalConfig {
         address,
         namespace,
         identity: `clento-backend-${process.env.NODE_ENV}`,
-        taskQueue: 'clento-outreach-queue',
+        taskQueue: 'campaign-task-queue', // ✅ Must match worker and client
         workflowExecutionTimeout: '30d', // Maximum campaign duration
         workflowRunTimeout: '30d',
         workflowTaskTimeout: '10s',

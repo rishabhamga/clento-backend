@@ -275,28 +275,13 @@ export class UnipileService {
     /**
      * Get own profile from connected account using SDK
      */
-    async getOwnProfile(accountId: string): Promise<any> {
+    async getOwnProfile(accountId: string) {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
 
         try {
-            logger.info('=== UNIPILE SDK: Getting own profile ===', {
-                accountId,
-                sdkMethod: 'client.users.getOwnProfile',
-                apiUrl: env.UNIPILE_DNS
-            });
-
-            const profile = await UnipileService.client.users.getOwnProfile(accountId);
-
-            logger.info('=== UNIPILE SDK: Profile retrieved successfully ===', {
-                accountId,
-                profileKeys: Object.keys(profile || {}),
-                hasEmail: !!(profile && typeof profile === 'object' && 'email' in profile),
-                hasName: !!(profile && typeof profile === 'object' && ('first_name' in profile || 'last_name' in profile || 'full_name' in profile)),
-                profileData: profile
-            });
-
+            const profile = await UnipileService.client.users.getOwnProfile(accountId)
             return profile;
         } catch (error: any) {
             logger.error('=== UNIPILE SDK: Profile fetch failed ===', {
@@ -308,9 +293,6 @@ export class UnipileService {
                 errorDetail: error && typeof error === 'object' && 'body' in error && error.body && typeof error.body === 'object' && 'detail' in error.body ? error.body.detail : undefined,
                 sdkMethod: 'client.users.getOwnProfile'
             });
-
-            // Re-throw the original error so the caller can handle specific error types
-            throw error;
         }
     }
 
@@ -374,7 +356,6 @@ export class UnipileService {
             return response;
         } catch (error) {
             logger.error('Error sending LinkedIn invitation via SDK', { error, params });
-            throw new ExternalAPIError('Failed to send LinkedIn invitation');
         }
     }
 
@@ -385,7 +366,7 @@ export class UnipileService {
         accountId: string;
         identifier: string;
         notify?: boolean;
-    }): Promise<any> {
+    }) {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
@@ -394,7 +375,7 @@ export class UnipileService {
             const response = await UnipileService.client.users.getProfile({
                 account_id: params.accountId,
                 identifier: params.identifier,
-                linkedin_sections: '*',
+                linkedin_sections: 'about',
                 notify: params.notify || true,
             });
 
@@ -406,7 +387,40 @@ export class UnipileService {
             return response;
         } catch (error) {
             logger.error('Error visiting LinkedIn profile via SDK', { error, params });
-            throw new ExternalAPIError('Failed to visit LinkedIn profile');
+        }
+    }
+
+    async getRecentPosts(params: {
+        accountId: string,
+        linkedInUrn: string,
+        lastDays: number
+    }) {
+        if (!UnipileClient) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const response = await UnipileService.client?.users.getAllPosts({
+                account_id: params.accountId,
+                identifier: params.linkedInUrn,
+                limit: 5
+            });
+            // Filter posts to only those created within the last X days
+            if (Array.isArray(response?.items)) {
+                const now = new Date();
+                const daysAgo = params.lastDays ?? 7;
+                const cutoffDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+
+                response.items = response.items.filter((post: any) => {
+                    // Accept posts that have a valid parsed_datetime within the window
+                    if (!post.parsed_datetime) return false;
+                    const postDate = new Date(post.parsed_datetime);
+                    return postDate >= cutoffDate && postDate <= now;
+                });
+            }
+            const filteredPosts = response?.items
+            return filteredPosts;
+        } catch (error) {
+            logger.error("error fetching posts", { error });
         }
     }
 
@@ -415,32 +429,45 @@ export class UnipileService {
      */
     async likeLinkedInPost(params: {
         accountId: string;
-        postId: string;
+        linkedInUrn: string;
+        lastDays: number;
         reactionType?: string;
-    }): Promise<any> {
+    }) {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
 
         try {
+            const posts = await this.getRecentPosts({
+                accountId: params.accountId,
+                linkedInUrn: params.linkedInUrn,
+                lastDays: params.lastDays
+            });
+
+            const postToLikeFull = posts?.getRandom();
+            const postToLike = postToLikeFull?.id;
+
+            if (!postToLike) {
+                console.log('No post to like');
+                return;
+            }
+
             const response = await UnipileService.client.users.sendPostReaction({
                 account_id: params.accountId,
-                post_id: params.postId,
+                post_id: postToLike,
                 reaction_type: (params.reactionType === 'like' || params.reactionType === 'celebrate' || params.reactionType === 'support' || params.reactionType === 'love' || params.reactionType === 'insightful' || params.reactionType === 'funny') ? params.reactionType : 'like',
             });
-
             logger.info('LinkedIn post liked via SDK', {
                 accountId: params.accountId,
-                postId: params.postId
+                linkedInUrn: params.linkedInUrn
             });
+            return response
 
-            return response;
+
         } catch (error) {
             logger.error('Error liking LinkedIn post via SDK', { error, params });
-            throw new ExternalAPIError('Failed to like LinkedIn post');
         }
     }
-
     /**
      * Comment on LinkedIn post using SDK
      */
@@ -468,7 +495,77 @@ export class UnipileService {
             return response;
         } catch (error) {
             logger.error('Error commenting on LinkedIn post via SDK', { error, params });
-            throw new ExternalAPIError('Failed to comment on LinkedIn post');
+        }
+    }
+
+    async withdrawLinkedInInvitationRequest(params: {
+        accountId: string;
+        providerId: string;
+    }): Promise<any> {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const invitation = await UnipileService.client.users.getAllInvitationsSent({
+                account_id: params.accountId
+            });
+            const invitationId = invitation.items?.find(item => item.invited_user_id === params.providerId)?.id;
+            if(!invitationId){
+                return { success: false, message: 'Invitation ID not found' };
+            }
+            const response = await UnipileService.client.users.cancelInvitationSent({
+                account_id: params.accountId,
+                invitation_id: invitationId,
+            });
+
+            logger.info('LinkedIn invitation request withdrawn via SDK', {
+                accountId: params.accountId,
+                invitationId: invitationId
+            });
+
+            return response;
+        } catch (error) {
+            logger.error('Error withdrawing LinkedIn invitation request via SDK', { error, params });
+        }
+    }
+
+    async isConnected(params: {
+        accountId: string;
+        identifier: string;
+    }): Promise<any> {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const result = await UnipileService.client.users.getAllRelations({
+                account_id: params.accountId
+            });
+            const relation = result.items?.find(item => item.public_identifier === params.identifier);
+            return relation ? true : false;
+        } catch (error) {
+
+        }
+    }
+
+    /**
+     * Check if an invitation is still pending for a specific user
+     */
+    async isInvitationPending(params: {
+        accountId: string;
+        providerId: string;
+    }): Promise<boolean> {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const invitation = await UnipileService.client.users.getAllInvitationsSent({
+                account_id: params.accountId
+            });
+            const invitationExists = invitation.items?.some(item => item.invited_user_id === params.providerId);
+            return invitationExists || false;
+        } catch (error) {
+            logger.error('Error checking invitation status via SDK', { error, params });
+            throw error;
         }
     }
 
@@ -503,7 +600,6 @@ export class UnipileService {
             return response;
         } catch (error) {
             logger.error('Error sending email via SDK', { error, params });
-            throw new ExternalAPIError('Failed to send email');
         }
     }
 

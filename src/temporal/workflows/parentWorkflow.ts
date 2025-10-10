@@ -1,10 +1,13 @@
 import { log, proxyActivities, sleep, startChild } from "@temporalio/workflow";
 import type * as activities from "../activities";
 import { leadWorkflow } from "./leadWorkflow";
+import { UnipileService } from "../../services/UnipileService";
+import { ConnectedAccountService } from "../../services/ConnectedAccountService";
+import logger from "../../utils/logger";
 // IMPORTANT DO NOT IMPORT ANYTHING ELSE HERE EVERY ACTIVITY IS TO BE DONE VIA ACTIVITIES
 
 // Create activity proxies with timeout configuration
-const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkflowByCampaignId } = proxyActivities<typeof activities>({
+const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkflowByCampaignId, verifyUnipileAccount } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
         initialInterval: '1s',
@@ -61,6 +64,7 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
     while (processedLeads < leads.length) {
         // Get campaign Everyday To Catch Any Update
         const campaignFetch = await getCampaignById(campaignId);
+
         if (!campaignFetch) {
             log.error("No Campaign Found")
             return
@@ -69,6 +73,11 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
             log.error("No Sender Found")
             return
         }
+        const unipileAccount = await verifyUnipileAccount(campaignFetch.sender_account);
+
+        console.log(unipileAccount);
+        //TODO if not there pause the campaign
+
         const workflowJson = await getWorkflowByCampaignId(campaignFetch);
 
         const leadsPerDay = campaignFetch.leads_per_day || 10;
@@ -85,9 +94,23 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
             dayNumber: Math.floor(processedLeads / leadsPerDay) + 1
         });
 
-        // Start child workflows for this batch (don't await yet)
-        const batchHandles = todaysLeads.map(lead =>
-            startChild(leadWorkflow, {
+        // Start child workflows for this batch with random delays between each lead
+        for (let i = 0; i < todaysLeads.length; i++) {
+            const lead = todaysLeads[i];
+
+            // Add random delay between 10-30 minutes before starting each lead (except the first one)
+            if (i > 0) {
+                const randomMinutes = Math.floor(Math.random() * 21) + 10; // Random between 10-30 minutes
+                log.info('Waiting before starting next lead', {
+                    leadId: lead.id,
+                    delayMinutes: randomMinutes,
+                    leadNumber: i + 1,
+                    totalInBatch: todaysLeads.length
+                });
+                await sleep(`${randomMinutes} minutes`);
+            }
+
+            const childHandle = startChild(leadWorkflow, {
                 args: [{
                     leadId: lead.id,
                     workflow: workflowJson,
@@ -95,11 +118,11 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
                 }],
                 workflowId: `lead-${lead.id}-day-${Math.floor(processedLeads / leadsPerDay) + 1}`,
                 taskQueue: 'campaign-task-queue',
-            })
-        );
+            });
 
-        // Add all handles to the collection for later awaiting
-        allChildWorkflowHandles.push(...batchHandles);
+            // Add handle to the collection for later awaiting
+            allChildWorkflowHandles.push(childHandle);
+        }
 
         processedLeads += todaysLeads.length;
 

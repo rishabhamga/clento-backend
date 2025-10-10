@@ -86,7 +86,7 @@ export class TemporalService {
 
             const handle = await client.workflow.start(testWorkflow, {
                 args: [input],
-                taskQueue: 'clento-outreach-queue',
+                taskQueue: 'campaign-task-queue', // ✅ Must match worker
                 workflowId,
             });
 

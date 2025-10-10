@@ -1,11 +1,14 @@
 import { CampaignResponseDto } from "../../dto/campaigns.dto";
 import { LeadInsertDto, LeadListResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
 import { CampaignService } from "../../services/CampaignService";
+import { ConnectedAccountService } from "../../services/ConnectedAccountService";
 import { CsvLead, CsvParseResult } from "../../services/CsvService";
 import { LeadListService } from "../../services/LeadListService";
 import { LeadService } from "../../services/LeadService";
+import { UnipileService } from "../../services/UnipileService";
 import { WorkflowJson } from "../../types/workflow.types";
 import logger from "../../utils/logger";
+import { ActivityResult } from "../workflows/leadWorkflow";
 
 export async function testActivity(input: { message: string; delay?: number }): Promise<{ success: boolean; data: any; timestamp: string }> {
     logger.info('Test activity started', { input });
@@ -92,32 +95,57 @@ export async function getWorkflowByCampaignId(campaign: CampaignResponseDto): Pr
     return workflowData
 }
 
-// Activity Result Type
-export interface ActivityResult {
-    success: boolean;
-    message?: string;
-    data?: any;
+export async function verifyUnipileAccount(sender_account: string) {
+    const unipileService = new UnipileService();
+    const connectedAccountService = new ConnectedAccountService();
+    const account = await connectedAccountService.getAccountById(sender_account);
+    if (!account) {
+        logger.error('Account not found', { sender_account });
+        return null;
+    }
+    const unipileAccount = await unipileService.getOwnProfile(account.provider_account_id);
+    if (!unipileAccount) {
+        logger.error('Unipile Account not found', { sender_account });
+        return null;
+    }
+    return account.provider_account_id;
 }
 
 // LINKEDIN ACTIONS
 // These activities return ActivityResult to support conditional workflow paths
 
-export async function profile_visit(): Promise<ActivityResult> {
+export async function profile_visit(accountId: string, identifier: string): Promise<ActivityResult> {
     logger.info('profile_visit');
-    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
-    return { success: true, message: 'Profile visit completed' };
+    if (!accountId) {
+        return { success: false, message: 'Account not found' };
+    }
+    const unipileService = new UnipileService();
+    const result: any = await unipileService.visitLinkedInProfile({
+        accountId: accountId,
+        identifier: identifier,
+        notify: false
+    });
+
+    return { success: true, message: 'Profile visit completed', data: null, providerId: result?.provider_id };
 }
 
-export async function like_post(): Promise<ActivityResult> {
+export async function like_post(accountId: string, identifier: string, lastDays: number): Promise<ActivityResult> {
     logger.info('like_post');
-    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
-    return { success: true, message: 'Post liked successfully' };
-}
+    const unipileService = new UnipileService();
 
-export async function follow_profile(): Promise<ActivityResult> {
-    logger.info('follow_profile');
-    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
-    return { success: true, message: 'Profile followed successfully' };
+    const leadAccount = await profile_visit(accountId, identifier);
+
+    console.log(leadAccount.providerId)
+    if (!leadAccount.providerId) {
+        return { success: false, message: 'Lead LinkedIn Urn not found' };
+    }
+    const result = await unipileService.likeLinkedInPost({
+        accountId: accountId,
+        linkedInUrn: leadAccount.providerId,
+        lastDays: lastDays,
+        reactionType: 'like'
+    });
+    return { success: true, message: 'Post liked successfully' };
 }
 
 export async function comment_post(): Promise<ActivityResult> {
@@ -126,23 +154,10 @@ export async function comment_post(): Promise<ActivityResult> {
     return { success: true, message: 'Comment posted successfully' };
 }
 
-export async function send_invite(): Promise<ActivityResult> {
-    logger.info('send_invite');
-    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
-    // This is a conditional action - connection request can be accepted or not
-    return { success: true, message: 'Invite sent successfully' };
-}
-
 export async function send_followup(): Promise<ActivityResult> {
     logger.info('send_followup');
     // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
     return { success: true, message: 'Follow-up message sent' };
-}
-
-export async function withdraw_request(): Promise<ActivityResult> {
-    logger.info('withdraw_request');
-    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
-    return { success: true, message: 'Request withdrawn' };
 }
 
 export async function send_inmail(): Promise<ActivityResult> {
@@ -151,17 +166,117 @@ export async function send_inmail(): Promise<ActivityResult> {
     return { success: true, message: 'InMail sent successfully' };
 }
 
-export async function follow_company(): Promise<ActivityResult> {
-    logger.info('follow_company');
-    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
-    return { success: true, message: 'Company followed successfully' };
+export async function withdraw_request(accountId: string, identifier: string): Promise<ActivityResult> {
+    logger.info('withdraw_request', { accountId, identifier });
+    const unipileService = new UnipileService();
+    try {
+        const { providerId } = await profile_visit(accountId, identifier);
+        if (!providerId) {
+            return { success: false, message: 'Provider ID not found' };
+        }
+        await unipileService.withdrawLinkedInInvitationRequest({ accountId, providerId });
+        return { success: true, message: 'Request withdrawn' };
+    } catch (error) {
+        logger.error('Error withdrawing request', { error, accountId, identifier });
+        return { success: false, message: 'Failed to withdraw request' };
+    }
 }
 
-export async function send_connection_request(): Promise<ActivityResult> {
-    logger.info('send_connection_request');
-    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
-    // This is a conditional action - connection request can be accepted or rejected
-    return { success: false, message: 'Connection request sent' };
+export async function isConnected(accountId: string, identifier: string): Promise<ActivityResult> {
+    logger.info('isConnected', { accountId, identifier });
+    const unipileService = new UnipileService();
+    const result = await unipileService.isConnected({ accountId, identifier });
+    return { success: true, message: 'Connection status checked' };
+}
+
+export async function send_connection_request(accountId: string, identifier: string, message: string): Promise<ActivityResult> {
+    logger.info('send_connection_request - Starting');
+    const unipileService = new UnipileService();
+
+    // Get provider ID from profile visit
+    const { providerId } = await profile_visit(accountId, identifier);
+    if (!providerId) {
+        return { success: false, message: 'Provider ID not found' };
+    }
+
+    // Check if already connected
+    const alreadyConnected = await unipileService.isConnected({ accountId, identifier });
+    if (alreadyConnected) {
+        logger.info('User already connected', { accountId, identifier });
+        return {
+            success: true,
+            message: 'User is already connected',
+            data: { connected: true, alreadyConnected: true, providerId }
+        };
+    }
+
+    // Send connection request
+    logger.info('Sending connection request', { accountId, identifier, providerId });
+    const invitationResult = await unipileService.sendLinkedInInvitation({
+        accountId: accountId,
+        providerId: providerId,
+        message: message
+    });
+
+    logger.info('Connection request sent successfully', {
+        accountId,
+        identifier,
+        providerId
+    });
+
+    return {
+        success: true,
+        message: 'Connection request sent',
+        data: { providerId, invitationSent: true }
+    };
+}
+
+export async function check_connection_status(accountId: string, identifier: string, providerId: string): Promise<ActivityResult> {
+    logger.info('check_connection_status', { accountId, identifier, providerId });
+    try {
+        const unipileService = new UnipileService();
+
+        // Check if connected (accepted)
+        const connected = await unipileService.isConnected({ accountId, identifier });
+        if (connected) {
+            logger.info('User is CONNECTED (request accepted)', { accountId, identifier });
+            return {
+                success: true,
+                message: 'User is connected',
+                data: { connected: true, status: 'accepted' }
+            };
+        }
+
+        // Check if invitation still pending or was rejected
+        const invitationStillExists = await unipileService.isInvitationPending({
+            accountId,
+            providerId
+        });
+
+        if (!invitationStillExists) {
+            logger.warn('Invitation not found (request rejected)', { accountId, identifier, providerId });
+            return {
+                success: false,
+                message: 'Connection request was rejected',
+                data: { connected: false, status: 'rejected' }
+            };
+        }
+
+        // Still pending
+        logger.info('Connection request still pending', { accountId, identifier });
+        return {
+            success: false,
+            message: 'Connection request still pending',
+            data: { connected: false, status: 'pending' }
+        };
+    } catch (error: any) {
+        logger.error('Error checking connection status', { error: error.message, accountId, identifier });
+        return {
+            success: false,
+            message: `Error checking connection status: ${error.message}`,
+            data: { error: error.message }
+        };
+    }
 }
 
 export function CheckNever(value: never): never {

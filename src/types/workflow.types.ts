@@ -7,13 +7,10 @@ export enum EAction {
 export enum EWorkflowNodeType {
     profile_visit = 'profile_visit',
     like_post = 'like_post',
-    follow_profile = 'follow_profile',
     comment_post = 'comment_post',
-    send_invite = 'send_invite',
     send_followup = 'send_followup',
     withdraw_request = 'withdraw_request',
     send_inmail = 'send_inmail',
-    follow_company = 'follow_company',
     send_connection_request = 'send_connection_request'
 }
 
