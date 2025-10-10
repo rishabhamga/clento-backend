@@ -48,17 +48,17 @@ function getDelayMs(edge: WorkflowEdge): number {
 
 async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResponseDto): Promise<ActivityResult | null> {
     const type = node.data.type;
-    const config = node.data.config;
-    const identifier = lead.linkedin_url?.split('/').pop();
-    if(!identifier){
-        return {success: false, message: 'Identifier not found so skipping the node'}
-    }
-    // const identifier = 'sameer-ahmad-19b890265'
+    const config = node.data.config || {};
+    // const identifier = lead.linkedin_url?.split('/').pop();
+    // if(!identifier){
+    //     return {success: false, message: 'Identifier not found so skipping the node'}
+    // }
+    const identifier = 'ankur-parchani-267b2b20a'
 
     switch (type) {
         case EWorkflowNodeType.profile_visit: return await profile_visit(accountId, identifier);
         case EWorkflowNodeType.like_post: return await like_post(accountId, identifier, config?.recentPostDays || 7);
-        case EWorkflowNodeType.comment_post: return await comment_post();
+        case EWorkflowNodeType.comment_post: return await comment_post(accountId, identifier, config);
         case EWorkflowNodeType.send_followup: return await send_followup();
         case EWorkflowNodeType.withdraw_request: return await withdraw_request(accountId, identifier);
         case EWorkflowNodeType.send_inmail: return await send_inmail();

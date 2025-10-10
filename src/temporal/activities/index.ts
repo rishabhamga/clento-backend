@@ -6,7 +6,7 @@ import { CsvLead, CsvParseResult } from "../../services/CsvService";
 import { LeadListService } from "../../services/LeadListService";
 import { LeadService } from "../../services/LeadService";
 import { UnipileService } from "../../services/UnipileService";
-import { WorkflowJson } from "../../types/workflow.types";
+import { WorkflowJson, WorkflowNodeConfig } from "../../types/workflow.types";
 import logger from "../../utils/logger";
 import { ActivityResult } from "../workflows/leadWorkflow";
 
@@ -148,9 +148,16 @@ export async function like_post(accountId: string, identifier: string, lastDays:
     return { success: true, message: 'Post liked successfully' };
 }
 
-export async function comment_post(): Promise<ActivityResult> {
+export async function comment_post(accountId: string, identifier: string, config: WorkflowNodeConfig): Promise<ActivityResult> {
     logger.info('comment_post');
-    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
+    const unipileService = new UnipileService();
+    const leadAccount = await profile_visit(accountId, identifier);
+    if (!leadAccount.providerId) { return { success: false, message: 'Lead LinkedIn Urn not found' };}
+    const result = await unipileService.commentLinkedInPost({
+        accountId: accountId,
+        linkedInUrn: leadAccount.providerId,
+        config: config
+    });
     return { success: true, message: 'Comment posted successfully' };
 }
 

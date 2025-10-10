@@ -2,6 +2,7 @@ import { PostHostedAuthLinkInput, SupportedProvider, UnipileClient } from 'unipi
 import { ExternalAPIError, ServiceUnavailableError } from '../errors/AppError';
 import logger from '../utils/logger';
 import env from '../config/env';
+import { WorkflowNodeConfig } from '../types/workflow.types';
 
 interface UnipileRequest {
     type: 'create' | 'reconnect';
@@ -468,28 +469,60 @@ export class UnipileService {
             logger.error('Error liking LinkedIn post via SDK', { error, params });
         }
     }
+
+    async generateAtComment(params: {
+        config: WorkflowNodeConfig;
+        author: string
+    }){
+        //@TODO Rishabh Need to implement AI
+        const text = 'Great Info ' + params.author;
+        return text;
+    }
     /**
      * Comment on LinkedIn post using SDK
      */
     async commentLinkedInPost(params: {
         accountId: string;
-        postId: string;
-        text: string;
+        linkedInUrn: string;
+        config: WorkflowNodeConfig;
     }): Promise<any> {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
 
+        const posts = await this.getRecentPosts({
+            accountId: params.accountId,
+            linkedInUrn: params.linkedInUrn,
+            lastDays: params.config.recentPostDays || 7
+        });
+
+        const postToComment = posts?.getRandom();
+        const postToCommentId = postToComment?.id;
+
+        console.log(postToComment);
+
+        const authorName = postToComment?.author;
+
+        const text = params.config.useAI
+                    ? await this.generateAtComment({ config: params.config, author: authorName?.name || '' })
+                    : params.config.customComment
+                        ? params.config.customComment.split('{{first_name}}').join(authorName?.name || '')
+                        : await this.generateAtComment({ config: params.config, author: authorName?.name || '' });
+
+        if(!postToCommentId){
+            return { success: false, message: 'Post to comment not found' };
+        }
+
         try {
             const response = await UnipileService.client.users.sendPostComment({
                 account_id: params.accountId,
-                post_id: params.postId,
-                text: params.text,
+                post_id: postToCommentId,
+                text: text,
             });
 
             logger.info('LinkedIn post commented via SDK', {
                 accountId: params.accountId,
-                postId: params.postId
+                postId: postToCommentId
             });
 
             return response;
