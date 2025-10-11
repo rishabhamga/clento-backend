@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { CreateCampaignDto, UpdateCampaignDto } from '../../dto/campaigns.dto';
+import { CampaignStatus, CreateCampaignDto, UpdateCampaignDto } from '../../dto/campaigns.dto';
 import { DisplayError } from '../../errors/AppError';
 import { CampaignService } from '../../services/CampaignService';
 import { StorageService } from '../../services/StorageService';
@@ -192,7 +192,8 @@ class CreateCampaignAPI extends ClentoAPI {
                 leads_per_day: leadsPerDay,
                 start_time: startTime,
                 end_time: endTime,
-                timezone
+                timezone,
+                status: CampaignStatus.IN_PROGRESS
             }
 
             const campaign = await this.campaignService.createCampaign(campaignCreateDto);

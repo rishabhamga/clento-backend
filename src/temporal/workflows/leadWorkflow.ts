@@ -1,6 +1,6 @@
 import { log, proxyActivities, sleep } from "@temporalio/workflow";
 import { LeadResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
-import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from "../../types/workflow.types"
+import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from "../../types/workflow.types";
 import type * as activities from "../activities";
 
 // Import ActivityResult type
@@ -11,7 +11,20 @@ export type ActivityResult = {
     providerId?: string;
 };
 
-const { profile_visit, like_post, comment_post, send_followup, withdraw_request, send_inmail, send_connection_request, check_connection_status, updateLead, verifyUnipileAccount } = proxyActivities<typeof activities>({
+const {
+    profile_visit,
+    like_post,
+    comment_post,
+    send_followup,
+    withdraw_request,
+    send_inmail,
+    send_connection_request,
+    check_connection_status,
+    updateLead,
+    verifyUnipileAccount,
+    pauseCampaign,
+    updateCampaignStep
+} = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
         initialInterval: '1s',
@@ -29,6 +42,7 @@ export interface LeadWorkflowInput {
     leadId: string,
     workflow: WorkflowJson,
     accountId: string,
+    campaignId: string,
 }
 
 function getDelayMs(edge: WorkflowEdge): number {
@@ -46,43 +60,60 @@ function getDelayMs(edge: WorkflowEdge): number {
     return 0;
 }
 
-async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResponseDto): Promise<ActivityResult | null> {
+async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResponseDto, campaignId: string): Promise<ActivityResult | null> {
     const type = node.data.type;
     const config = node.data.config || {};
     // const identifier = lead.linkedin_url?.split('/').pop();
     // if(!identifier){
     //     return {success: false, message: 'Identifier not found so skipping the node'}
     // }
-    const identifier = 'ankur-parchani-267b2b20a'
+    const identifier = 'chloe-fong'
+
+    let result: ActivityResult | null = null;
 
     switch (type) {
-        case EWorkflowNodeType.profile_visit: return await profile_visit(accountId, identifier);
-        case EWorkflowNodeType.like_post: return await like_post(accountId, identifier, config?.recentPostDays || 7);
-        case EWorkflowNodeType.comment_post: return await comment_post(accountId, identifier, config);
-        case EWorkflowNodeType.send_followup: return await send_followup();
-        case EWorkflowNodeType.withdraw_request: return await withdraw_request(accountId, identifier);
-        case EWorkflowNodeType.send_inmail: return await send_inmail();
+        case EWorkflowNodeType.profile_visit:
+            result = await profile_visit(accountId, identifier, lead.campaign_id);
+            break;
+        case EWorkflowNodeType.like_post:
+            result = await like_post(accountId, identifier, config?.recentPostDays || 7, lead.campaign_id);
+            break;
+        case EWorkflowNodeType.comment_post:
+            result = await comment_post(accountId, identifier, config, lead.campaign_id);
+            break;
+        case EWorkflowNodeType.send_followup:
+            result = await send_followup();
+            break;
+        case EWorkflowNodeType.withdraw_request:
+            result = await withdraw_request(accountId, identifier, lead.campaign_id);
+            break;
+        case EWorkflowNodeType.send_inmail:
+            result = await send_inmail();
+            break;
         case EWorkflowNodeType.send_connection_request: {
             log.info('Executing send_connection_request node', { accountId, identifier });
-            const sendResult = await send_connection_request(accountId, identifier, config?.customMessage || 'YO YO YO YO YO YO');
+            const sendResult = await send_connection_request(accountId, identifier, config?.customMessage || 'YO YO YO YO YO YO', lead.campaign_id);
 
             // If request failed to send or user already connected, return immediately
             if (!sendResult.success) {
                 log.error('Failed to send connection request', { result: sendResult });
-                return sendResult;
+                result = sendResult;
+                break;
             }
 
             // If already connected, return success
             if (sendResult.data?.alreadyConnected) {
                 log.info('User already connected, no polling needed', { accountId, identifier });
-                return sendResult;
+                result = sendResult;
+                break;
             }
 
             // Get providerId from the send result
             const providerId = sendResult.data?.providerId;
             if (!providerId) {
                 log.error('No providerId in send result', { sendResult });
-                return { success: false, message: 'Provider ID not found in send result' };
+                result = { success: false, message: 'Provider ID not found in send result' };
+                break;
             }
 
             log.info('Connection request sent, starting polling', {
@@ -115,7 +146,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                 });
 
                 // Call activity to check status
-                const statusResult = await check_connection_status(accountId, identifier, providerId);
+                const statusResult = await check_connection_status(accountId, identifier, providerId, lead.campaign_id);
 
                 // Check if accepted
                 if (statusResult.success && statusResult.data?.status === 'accepted') {
@@ -125,7 +156,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                         attemptNumber: attempt,
                         hoursWaited: attempt
                     });
-                    return {
+                    result = {
                         success: true,
                         message: `Connection request accepted after ${attempt} hour(s)`,
                         data: {
@@ -134,6 +165,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                             status: 'accepted'
                         }
                     };
+                    break;
                 }
 
                 // Check if rejected
@@ -144,7 +176,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                         attemptNumber: attempt,
                         hoursWaited: attempt
                     });
-                    return {
+                    result = {
                         success: false,
                         message: `Connection request rejected after ${attempt} hour(s)`,
                         data: {
@@ -153,6 +185,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                             status: 'rejected'
                         }
                     };
+                    break;
                 }
 
                 // Still pending, continue polling
@@ -164,30 +197,50 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                 });
             }
 
-            // Timeout after 10 days
-            log.warn('Connection request TIMEOUT - 10 days elapsed', {
-                accountId,
-                identifier,
-                totalDays: 10,
-                totalAttempts: maxAttempts
-            });
-            return {
-                success: false,
-                message: 'Connection request not accepted within 10 days (timeout)',
-                data: {
-                    connected: false,
-                    timeoutReached: true,
-                    status: 'timeout',
-                    daysWaited: 10
-                }
-            };
+            // Timeout after 10 days if result not set
+            if (!result) {
+                log.warn('Connection request TIMEOUT - 10 days elapsed', {
+                    accountId,
+                    identifier,
+                    totalDays: 10,
+                    totalAttempts: maxAttempts
+                });
+                result = {
+                    success: false,
+                    message: 'Connection request not accepted within 10 days (timeout)',
+                    data: {
+                        connected: false,
+                        timeoutReached: true,
+                        status: 'timeout',
+                        daysWaited: 10
+                    }
+                };
+            }
+            break;
         }
-        case null: return null;
-        case undefined: return null;
+        case null:
+            return null;
+        case undefined:
+            return null;
         default:
             CheckNever(type);
             return null;
     }
+
+    // Record step execution in database
+    if (result && type) {
+        log.info('Recording step execution', { nodeId: node.id, type, success: result.success });
+        await updateCampaignStep(
+            campaignId,
+            node.id,
+            type,
+            config,
+            result.success,
+            result
+        );
+    }
+
+    return result;
 }
 
 export async function leadWorkflow(input: LeadWorkflowInput) {
@@ -226,7 +279,8 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
     while (queue.length > 0) {
         const unipileAccountId = await verifyUnipileAccount(accountId);
         if(!unipileAccountId) {
-            log.error("Unipile Account not found")
+            log.error("Unipile Account not found");
+            await pauseCampaign(input.campaignId);
             return
         }
         const currentId = queue.shift()!;
@@ -234,7 +288,19 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
         if (!currentNode) continue;
 
         // Execute the current node and store the result
-        const result = await executeNode(currentNode, unipileAccountId, lead);
+        const result = await executeNode(currentNode, unipileAccountId, lead, input.campaignId);
+
+        // Check if campaign was paused due to error - stop execution for this lead
+        if (result?.data?.campaignPaused) {
+            log.error('Campaign was paused due to error - stopping lead execution', {
+                leadId: lead.id,
+                campaignId: input.campaignId,
+                nodeId: currentNode.id
+            });
+            // Update lead status to reflect the pause
+            await updateLead(leadId, { status: "Failed" });
+            return; // Exit this lead's workflow
+        }
 
         // Get outgoing edges from this node
         const outgoingEdges = adjacencyMap[currentId] || [];

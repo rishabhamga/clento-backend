@@ -5,10 +5,11 @@ import { ConnectedAccountService } from "../../services/ConnectedAccountService"
 import { CsvLead, CsvParseResult } from "../../services/CsvService";
 import { LeadListService } from "../../services/LeadListService";
 import { LeadService } from "../../services/LeadService";
-import { UnipileService } from "../../services/UnipileService";
+import { UnipileError, UnipileService } from "../../services/UnipileService";
 import { WorkflowJson, WorkflowNodeConfig } from "../../types/workflow.types";
 import logger from "../../utils/logger";
 import { ActivityResult } from "../workflows/leadWorkflow";
+import { CampaignStepDto } from "../../dto/campaigns.dto";
 
 export async function testActivity(input: { message: string; delay?: number }): Promise<{ success: boolean; data: any; timestamp: string }> {
     logger.info('Test activity started', { input });
@@ -114,51 +115,147 @@ export async function verifyUnipileAccount(sender_account: string) {
 // LINKEDIN ACTIONS
 // These activities return ActivityResult to support conditional workflow paths
 
-export async function profile_visit(accountId: string, identifier: string): Promise<ActivityResult> {
+export async function profile_visit(accountId: string, identifier: string, campaignId: string): Promise<ActivityResult> {
     logger.info('profile_visit');
-    if (!accountId) {
-        return { success: false, message: 'Account not found' };
-    }
     const unipileService = new UnipileService();
-    const result: any = await unipileService.visitLinkedInProfile({
-        accountId: accountId,
-        identifier: identifier,
-        notify: false
-    });
+    try {
+        const result: any = await unipileService.visitLinkedInProfile({
+            accountId: accountId,
+            identifier: identifier,
+            notify: false
+        });
+        return { success: true, message: 'Profile visit completed', data: null, providerId: result?.provider_id };
+    } catch (error: any) {
+        const errorBody = error as UnipileError;
+        if(errorBody?.error?.body?.status === 422){
+            logger.error('The Profile doesnt exist skipping', errorBody)
+            return {
+                success: false,
+                message: 'Profile does not exist',
+                data: {
+                    error: {
+                        type: 'profile_not_found',
+                        message: 'The LinkedIn profile does not exist or is inaccessible',
+                        statusCode: 422
+                    }
+                }
+            };
+        } else {
+            logger.info('Unipile account not found', { accountId, identifier, campaignId })
+            await pauseCampaign(campaignId)
+            return {
+                success: false,
+                message: 'Unipile account not found',
+                data: {
+                    campaignPaused: true,
+                    error: {
+                        type: 'account_verification_failed',
+                        message: error.message || 'Failed to verify Unipile account',
+                        details: errorBody?.error?.body || {}
+                    }
+                }
+            };
+        }
+    }
 
-    return { success: true, message: 'Profile visit completed', data: null, providerId: result?.provider_id };
 }
 
-export async function like_post(accountId: string, identifier: string, lastDays: number): Promise<ActivityResult> {
+export async function like_post(accountId: string, identifier: string, lastDays: number, campaignId: string): Promise<ActivityResult> {
     logger.info('like_post');
     const unipileService = new UnipileService();
 
-    const leadAccount = await profile_visit(accountId, identifier);
+    const leadAccount = await profile_visit(accountId, identifier, campaignId);
 
     console.log(leadAccount.providerId)
     if (!leadAccount.providerId) {
         return { success: false, message: 'Lead LinkedIn Urn not found' };
     }
-    const result = await unipileService.likeLinkedInPost({
-        accountId: accountId,
-        linkedInUrn: leadAccount.providerId,
-        lastDays: lastDays,
-        reactionType: 'like'
-    });
+    try {
+        const result = await unipileService.likeLinkedInPost({
+            accountId: accountId,
+            linkedInUrn: leadAccount.providerId,
+            lastDays: lastDays,
+            reactionType: 'like'
+        });
+    } catch (error: any) {
+        const errorBody = error as UnipileError;
+        if(errorBody?.error?.body?.status === 422){
+            logger.error('The Profile doesnt exist skipping | Posts are unreachable', errorBody)
+            return {
+                success: false,
+                message: 'Posts are unreachable',
+                data: {
+                    error: {
+                        type: 'posts_unreachable',
+                        message: 'Unable to access or like posts on this profile',
+                        statusCode: 422
+                    }
+                }
+            };
+        } else {
+            logger.error('Error liking LinkedIn post', { error });
+            await pauseCampaign(campaignId);
+            return {
+                success: false,
+                message: 'Error liking LinkedIn post',
+                data: {
+                    campaignPaused: true,
+                    error: {
+                        type: 'like_post_failed',
+                        message: error.message || 'Failed to like LinkedIn post',
+                        details: errorBody?.error?.body || {}
+                    }
+                }
+            };
+        }
+    }
     return { success: true, message: 'Post liked successfully' };
 }
 
-export async function comment_post(accountId: string, identifier: string, config: WorkflowNodeConfig): Promise<ActivityResult> {
+export async function comment_post(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<ActivityResult> {
     logger.info('comment_post');
     const unipileService = new UnipileService();
-    const leadAccount = await profile_visit(accountId, identifier);
-    if (!leadAccount.providerId) { return { success: false, message: 'Lead LinkedIn Urn not found' };}
-    const result = await unipileService.commentLinkedInPost({
-        accountId: accountId,
-        linkedInUrn: leadAccount.providerId,
-        config: config
-    });
-    return { success: true, message: 'Comment posted successfully' };
+    const leadAccount = await profile_visit(accountId, identifier, campaignId);
+    if (!leadAccount.providerId) { return { success: false, message: 'Lead LinkedIn Urn not found' }; }
+    try {
+        const result = await unipileService.commentLinkedInPost({
+            accountId: accountId,
+            linkedInUrn: leadAccount.providerId,
+            config: config
+        });
+        return { success: true, message: 'Comment posted successfully' };
+    } catch (error: any) {
+        const errorBody = error as UnipileError;
+        if (errorBody?.error?.body?.status === 422) {
+            logger.error('Profile doesnt exist or posts unreachable, skipping', errorBody);
+            return {
+                success: false,
+                message: 'Profile doesnt exist or posts unreachable',
+                data: {
+                    error: {
+                        type: 'comment_post_unreachable',
+                        message: 'Unable to access or comment on posts for this profile',
+                        statusCode: 422
+                    }
+                }
+            };
+        } else {
+            logger.error('Error commenting on LinkedIn post', { error });
+            await pauseCampaign(campaignId);
+            return {
+                success: false,
+                message: 'Error commenting on LinkedIn post',
+                data: {
+                    campaignPaused: true,
+                    error: {
+                        type: 'comment_post_failed',
+                        message: error.message || 'Failed to comment on LinkedIn post',
+                        details: errorBody?.error?.body || {}
+                    }
+                }
+            };
+        }
+    }
 }
 
 export async function send_followup(): Promise<ActivityResult> {
@@ -173,72 +270,192 @@ export async function send_inmail(): Promise<ActivityResult> {
     return { success: true, message: 'InMail sent successfully' };
 }
 
-export async function withdraw_request(accountId: string, identifier: string): Promise<ActivityResult> {
+export async function withdraw_request(accountId: string, identifier: string, campaignId: string): Promise<ActivityResult> {
     logger.info('withdraw_request', { accountId, identifier });
     const unipileService = new UnipileService();
     try {
-        const { providerId } = await profile_visit(accountId, identifier);
+        const { providerId } = await profile_visit(accountId, identifier, campaignId);
         if (!providerId) {
             return { success: false, message: 'Provider ID not found' };
         }
         await unipileService.withdrawLinkedInInvitationRequest({ accountId, providerId });
         return { success: true, message: 'Request withdrawn' };
-    } catch (error) {
-        logger.error('Error withdrawing request', { error, accountId, identifier });
-        return { success: false, message: 'Failed to withdraw request' };
+    } catch (error: any) {
+        const errorBody = error as UnipileError;
+        if (errorBody?.error?.body?.status === 422) {
+            logger.error('Invitation not found or already withdrawn, skipping', errorBody);
+            return {
+                success: false,
+                message: 'Invitation not found or already withdrawn',
+                data: {
+                    error: {
+                        type: 'invitation_not_found',
+                        message: 'The invitation request does not exist or was already withdrawn',
+                        statusCode: 422
+                    }
+                }
+            };
+        } else {
+            logger.error('Error withdrawing request', { error, accountId, identifier });
+            await pauseCampaign(campaignId);
+            return {
+                success: false,
+                message: 'Failed to withdraw request',
+                data: {
+                    campaignPaused: true,
+                    error: {
+                        type: 'withdraw_request_failed',
+                        message: error.message || 'Failed to withdraw connection request',
+                        details: errorBody?.error?.body || {}
+                    }
+                }
+            };
+        }
     }
 }
 
-export async function isConnected(accountId: string, identifier: string): Promise<ActivityResult> {
+export async function isConnected(accountId: string, identifier: string, campaignId: string): Promise<ActivityResult> {
     logger.info('isConnected', { accountId, identifier });
     const unipileService = new UnipileService();
-    const result = await unipileService.isConnected({ accountId, identifier });
-    return { success: true, message: 'Connection status checked' };
+    try {
+        const result = await unipileService.isConnected({ accountId, identifier });
+        return { success: true, message: 'Connection status checked', data: { connected: result } };
+    } catch (error: any) {
+        const errorBody = error as UnipileError;
+        if (errorBody?.error?.body?.status === 422) {
+            logger.error('Profile not found, skipping', errorBody);
+            return {
+                success: false,
+                message: 'Profile not found',
+                data: {
+                    error: {
+                        type: 'profile_not_found',
+                        message: 'Profile not found while checking connection status',
+                        statusCode: 422
+                    }
+                }
+            };
+        } else {
+            logger.error('Error checking connection status', { error });
+            await pauseCampaign(campaignId);
+            return {
+                success: false,
+                message: 'Error checking connection status',
+                data: {
+                    campaignPaused: true,
+                    error: {
+                        type: 'connection_check_failed',
+                        message: error.message || 'Failed to check connection status',
+                        details: errorBody?.error?.body || {}
+                    }
+                }
+            };
+        }
+    }
 }
 
-export async function send_connection_request(accountId: string, identifier: string, message: string): Promise<ActivityResult> {
+export async function send_connection_request(accountId: string, identifier: string, message: string, campaignId: string): Promise<ActivityResult> {
     logger.info('send_connection_request - Starting');
     const unipileService = new UnipileService();
 
     // Get provider ID from profile visit
-    const { providerId } = await profile_visit(accountId, identifier);
+    const { providerId } = await profile_visit(accountId, identifier, campaignId);
     if (!providerId) {
         return { success: false, message: 'Provider ID not found' };
     }
 
-    // Check if already connected
-    const alreadyConnected = await unipileService.isConnected({ accountId, identifier });
-    if (alreadyConnected) {
-        logger.info('User already connected', { accountId, identifier });
+    try {
+        // Check if already connected
+        const alreadyConnected = await unipileService.isConnected({ accountId, identifier });
+        if (alreadyConnected) {
+            logger.info('User already connected', { accountId, identifier });
+            return {
+                success: true,
+                message: 'User is already connected',
+                data: { connected: true, alreadyConnected: true, providerId }
+            };
+        }
+
+        // Send connection request
+        logger.info('Sending connection request', { accountId, identifier, providerId });
+        const invitationResult = await unipileService.sendLinkedInInvitation({
+            accountId: accountId,
+            providerId: providerId,
+            message: message
+        });
+
+        console.log(invitationResult);
+
+        logger.info('Connection request sent successfully', {
+            accountId,
+            identifier,
+            providerId
+        });
+
         return {
             success: true,
-            message: 'User is already connected',
-            data: { connected: true, alreadyConnected: true, providerId }
+            message: 'Connection request sent',
+            data: { providerId, invitationSent: true }
         };
+    } catch (error: any) {
+        const errorBody = error as UnipileError;
+        if (errorBody?.error?.body?.status === 422) {
+            logger.error('Cannot send connection request - profile issue or already pending, skipping', errorBody);
+            return {
+                success: false,
+                message: 'Cannot send connection request - profile issue or already pending',
+                data: {
+                    error: {
+                        type: 'connection_request_rejected',
+                        message: errorBody?.error?.body?.detail || 'Cannot send connection request at this time',
+                        statusCode: 422,
+                        errorType: errorBody?.error?.body?.type || 'unknown'
+                    }
+                }
+            };
+        } else {
+            logger.error('Error sending connection request', { error });
+            await pauseCampaign(campaignId);
+            return {
+                success: false,
+                message: 'Error sending connection request',
+                data: {
+                    campaignPaused: true,
+                    error: {
+                        type: 'send_connection_request_failed',
+                        message: error.message || 'Failed to send connection request',
+                        details: errorBody?.error?.body || {}
+                    }
+                }
+            };
+        }
     }
-
-    // Send connection request
-    logger.info('Sending connection request', { accountId, identifier, providerId });
-    const invitationResult = await unipileService.sendLinkedInInvitation({
-        accountId: accountId,
-        providerId: providerId,
-        message: message
-    });
-
-    logger.info('Connection request sent successfully', {
-        accountId,
-        identifier,
-        providerId
-    });
-
-    return {
-        success: true,
-        message: 'Connection request sent',
-        data: { providerId, invitationSent: true }
-    };
 }
 
-export async function check_connection_status(accountId: string, identifier: string, providerId: string): Promise<ActivityResult> {
+export async function pauseCampaign(campaignId: string): Promise<void> {
+    logger.info('pausing campaign', { campaignId });
+    const campaignService = new CampaignService();
+    const campaign = await campaignService.getCampaignById(campaignId);
+    if (!campaign) {
+        logger.error('Campaign not found for pausing', { campaignId });
+        return;
+    }
+    await campaignService.updateCampaign(campaignId, {
+        status: 'paused'
+    })
+    logger.info('Campaign paused successfully', { campaignId });
+}
+
+export async function isCampaignActive(campaignId: string): Promise<boolean> {
+    const campaignService = new CampaignService();
+    const campaign = await campaignService.getCampaignById(campaignId);
+    if (!campaign) {
+        return false;
+    }
+    return campaign.status !== 'paused' && campaign.status !== 'COMPLETED' && campaign.status !== 'FAILED';
+}
+
+export async function check_connection_status(accountId: string, identifier: string, providerId: string, campaignId: string): Promise<ActivityResult> {
     logger.info('check_connection_status', { accountId, identifier, providerId });
     try {
         const unipileService = new UnipileService();
@@ -277,11 +494,118 @@ export async function check_connection_status(accountId: string, identifier: str
             data: { connected: false, status: 'pending' }
         };
     } catch (error: any) {
-        logger.error('Error checking connection status', { error: error.message, accountId, identifier });
+        const errorBody = error as UnipileError;
+        if (errorBody?.error?.body?.status === 422) {
+            logger.error('Profile not found while checking connection, skipping', errorBody);
+            return {
+                success: false,
+                message: 'Profile not found',
+                data: {
+                    connected: false,
+                    status: 'error',
+                    error: {
+                        type: 'profile_not_found',
+                        message: 'Profile not found during connection status check',
+                        statusCode: 422
+                    }
+                }
+            };
+        } else {
+            logger.error('Error checking connection status', { error: error.message, accountId, identifier });
+            await pauseCampaign(campaignId);
+            return {
+                success: false,
+                message: `Error checking connection status: ${error.message}`,
+                data: {
+                    campaignPaused: true,
+                    error: {
+                        type: 'check_connection_status_failed',
+                        message: error.message || 'Failed to check connection status',
+                        details: errorBody?.error?.body || {}
+                    }
+                }
+            };
+        }
+    }
+}
+
+export async function updateCampaignStep(
+    campaignId: string,
+    stepId: string,
+    stepType: string,
+    config: WorkflowNodeConfig,
+    success: boolean,
+    results: any
+): Promise<ActivityResult> {
+    logger.info('updateCampaignStep', { campaignId, stepId, stepType, success });
+
+    try {
+        const campaignService = new CampaignService();
+        const campaign = await campaignService.getCampaignById(campaignId);
+
+        if (!campaign) {
+            logger.error('Campaign not found', { campaignId });
+            return { success: false, message: 'Campaign not found' };
+        }
+
+        // Get existing steps or initialize empty array
+        const existingSteps = campaign.steps?.steps || [];
+
+        // Create new step record - only store what exists
+        const newStep: any = {
+            id: stepId,
+            type: stepType,
+            config: config || {},
+            executed_at: new Date().toISOString(),
+            results: results || {},
+            success: success
+        };
+
+        // Check if step already exists (for retry scenarios)
+        const existingStepIndex = existingSteps.findIndex((s: any) => s.id === stepId);
+
+        let updatedSteps;
+        if (existingStepIndex >= 0) {
+            // Update existing step
+            updatedSteps = [...existingSteps];
+            updatedSteps[existingStepIndex] = newStep;
+            logger.info('Updated existing step', { stepId, existingStepIndex });
+        } else {
+            // Add new step
+            updatedSteps = [...existingSteps, newStep];
+            logger.info('Added new step', { stepId, totalSteps: updatedSteps.length });
+        }
+
+        // Update campaign with new steps
+        await campaignService.updateCampaign(campaignId, {
+            steps: {
+                steps: updatedSteps
+            }
+        });
+
+        logger.info('Campaign step updated successfully', {
+            campaignId,
+            stepId,
+            stepType,
+            success,
+            totalSteps: updatedSteps.length
+        });
+
+        return {
+            success: true,
+            message: 'Campaign step updated successfully',
+            data: { stepId, totalSteps: updatedSteps.length }
+        };
+    } catch (error: any) {
+        logger.error('Error updating campaign step', {
+            error: error.message,
+            campaignId,
+            stepId,
+            stepType
+        });
         return {
             success: false,
-            message: `Error checking connection status: ${error.message}`,
-            data: { error: error.message }
+            message: `Failed to update campaign step: ${error.message}`
         };
     }
 }

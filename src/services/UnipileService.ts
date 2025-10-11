@@ -1,18 +1,28 @@
 import { PostHostedAuthLinkInput, SupportedProvider, UnipileClient } from 'unipile-node-sdk';
-import { ExternalAPIError, ServiceUnavailableError } from '../errors/AppError';
-import logger from '../utils/logger';
 import env from '../config/env';
+import { ExternalAPIError, ServiceUnavailableError } from '../errors/AppError';
 import { WorkflowNodeConfig } from '../types/workflow.types';
+import logger from '../utils/logger';
 
-interface UnipileRequest {
-    type: 'create' | 'reconnect';
-    expiresOn: string;
-    api_url: string;
-    providers: string[];
-    success_redirect_url?: string;
-    failure_redirect_url?: string;
-    notify_url?: string;
-    name?: string;
+export interface UnipileError {
+    error:{
+        body: {
+            title: string,
+            detail: string,
+            instance: string,
+            type: string,
+            status: number,
+            connectionParams?: {
+                imap_host: string,
+                imap_encryption: string,
+                imap_port: number,
+                imap_user: string,
+                smtp_host: string,
+                smtp_port: number,
+                smtp_user: string
+            }
+        }
+    }
 }
 /**
  * Unipile integration service for managing external accounts using Unipile Node SDK
@@ -357,6 +367,7 @@ export class UnipileService {
             return response;
         } catch (error) {
             logger.error('Error sending LinkedIn invitation via SDK', { error, params });
+            throw error;
         }
     }
 
@@ -371,7 +382,6 @@ export class UnipileService {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
-
         try {
             const response = await UnipileService.client.users.getProfile({
                 account_id: params.accountId,
@@ -387,7 +397,8 @@ export class UnipileService {
 
             return response;
         } catch (error) {
-            logger.error('Error visiting LinkedIn profile via SDK', { error, params });
+            logger.error('Error visiting LinkedIn profile via SDK', { error });
+            throw error;
         }
     }
 
@@ -421,7 +432,7 @@ export class UnipileService {
             const filteredPosts = response?.items
             return filteredPosts;
         } catch (error) {
-            logger.error("error fetching posts", { error });
+            throw error
         }
     }
 
@@ -466,14 +477,14 @@ export class UnipileService {
 
 
         } catch (error) {
-            logger.error('Error liking LinkedIn post via SDK', { error, params });
+            throw error
         }
     }
 
     async generateAtComment(params: {
         config: WorkflowNodeConfig;
         author: string
-    }){
+    }) {
         //@TODO Rishabh Need to implement AI
         const text = 'Great Info ' + params.author;
         return text;
@@ -504,12 +515,12 @@ export class UnipileService {
         const authorName = postToComment?.author;
 
         const text = params.config.useAI
-                    ? await this.generateAtComment({ config: params.config, author: authorName?.name || '' })
-                    : params.config.customComment
-                        ? params.config.customComment.split('{{first_name}}').join(authorName?.name || '')
-                        : await this.generateAtComment({ config: params.config, author: authorName?.name || '' });
+            ? await this.generateAtComment({ config: params.config, author: authorName?.name || '' })
+            : params.config.customComment
+                ? params.config.customComment.split('{{first_name}}').join(authorName?.name || '')
+                : await this.generateAtComment({ config: params.config, author: authorName?.name || '' });
 
-        if(!postToCommentId){
+        if (!postToCommentId) {
             return { success: false, message: 'Post to comment not found' };
         }
 
@@ -528,6 +539,7 @@ export class UnipileService {
             return response;
         } catch (error) {
             logger.error('Error commenting on LinkedIn post via SDK', { error, params });
+            throw error;
         }
     }
 
@@ -543,7 +555,7 @@ export class UnipileService {
                 account_id: params.accountId
             });
             const invitationId = invitation.items?.find(item => item.invited_user_id === params.providerId)?.id;
-            if(!invitationId){
+            if (!invitationId) {
                 return { success: false, message: 'Invitation ID not found' };
             }
             const response = await UnipileService.client.users.cancelInvitationSent({
@@ -559,6 +571,7 @@ export class UnipileService {
             return response;
         } catch (error) {
             logger.error('Error withdrawing LinkedIn invitation request via SDK', { error, params });
+            throw error;
         }
     }
 
@@ -576,7 +589,8 @@ export class UnipileService {
             const relation = result.items?.find(item => item.public_identifier === params.identifier);
             return relation ? true : false;
         } catch (error) {
-
+            logger.error('Error checking if connected via SDK', { error, params });
+            throw error;
         }
     }
 
@@ -633,6 +647,7 @@ export class UnipileService {
             return response;
         } catch (error) {
             logger.error('Error sending email via SDK', { error, params });
+            throw error;
         }
     }
 

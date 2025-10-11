@@ -4,10 +4,11 @@ import { leadWorkflow } from "./leadWorkflow";
 import { UnipileService } from "../../services/UnipileService";
 import { ConnectedAccountService } from "../../services/ConnectedAccountService";
 import logger from "../../utils/logger";
+import { CampaignStatus } from "../../dto/campaigns.dto";
 // IMPORTANT DO NOT IMPORT ANYTHING ELSE HERE EVERY ACTIVITY IS TO BE DONE VIA ACTIVITIES
 
 // Create activity proxies with timeout configuration
-const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkflowByCampaignId, verifyUnipileAccount } = proxyActivities<typeof activities>({
+const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkflowByCampaignId, verifyUnipileAccount, pauseCampaign } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
         initialInterval: '1s',
@@ -32,6 +33,12 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
 
     // Get initial campaign data
     const campaign = await getCampaignById(campaignId);
+
+    if(campaign?.is_deleted){
+        log.warn('Campaign is deleted', { campaignId });
+        await pauseCampaign(campaignId);
+        return;
+    }
 
     if (!campaign?.prospect_list) {
         log.warn('No prospect list found for campaign', { campaignId });
@@ -69,14 +76,28 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
             log.error("No Campaign Found")
             return
         }
+        if(campaign?.status === CampaignStatus.PAUSED){
+            log.warn('Campaign is paused', { campaignId });
+            await sleep('1 hour');
+            continue;
+        }
+
+        if(campaign?.is_deleted){
+            log.warn('Campaign is deleted', { campaignId });
+            await pauseCampaign(campaignId);
+            return;
+        }
         if (!campaignFetch.sender_account) {
             log.error("No Sender Found")
             return
         }
         const unipileAccount = await verifyUnipileAccount(campaignFetch.sender_account);
 
-        console.log(unipileAccount);
-        //TODO if not there pause the campaign
+        if(!unipileAccount){
+            log.error("No Unipile Account Found")
+            await pauseCampaign(campaignId);
+            return;
+        }
 
         const workflowJson = await getWorkflowByCampaignId(campaignFetch);
 
@@ -114,7 +135,8 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
                 args: [{
                     leadId: lead.id,
                     workflow: workflowJson,
-                    accountId: campaignFetch.sender_account!
+                    accountId: campaignFetch.sender_account!,
+                    campaignId: campaignFetch.id
                 }],
                 workflowId: `lead-${lead.id}-day-${Math.floor(processedLeads / leadsPerDay) + 1}`,
                 taskQueue: 'campaign-task-queue',
