@@ -72,7 +72,6 @@ export class TemporalService {
         }
 
         const handle = await this.temporalClient.startWorkflowCampaign(campaignInput);
-        console.log("handle", handle);
         return handle;
     }
 

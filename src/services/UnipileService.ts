@@ -330,13 +330,51 @@ export class UnipileService {
 
             logger.info('Message sent via SDK', {
                 accountId: params.accountId,
-                attendeesCount: params.attendeesIds.length
+                attendeesCount: params.attendeesIds.length,
+                text: params.text,
+                options: params.options,
             });
 
             return response;
         } catch (error) {
             logger.error('Error sending message via SDK', { error, params });
             throw new ExternalAPIError('Failed to send message');
+        }
+    }
+
+    async generateAiText(params: {
+        config: WorkflowNodeConfig;
+        author: string;
+    }): Promise<string> {
+        //@TODO Rishabh Need to implement AI
+        const text = 'WSUP ';
+        return text;
+    }
+
+    async sendFollowUp(params: {
+        accountId: string;
+        linkedInUrn: string;
+        config: WorkflowNodeConfig;
+    }): Promise<any> {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        let message: string | null = null;
+        if(params.config.useAI) {
+            message = await this.generateAiText({ config: params.config, author: params.linkedInUrn });
+        } else {
+            message = params.config.customMessage || null;
+        }
+        try {
+            const response = await this.sendMessage({
+                accountId: params.accountId,
+                attendeesIds: [params.linkedInUrn],
+                text: message || 'Wsup wsup wsup',
+            });
+            return response;
+        } catch (error) {
+            logger.error('Error sending follow up via SDK', { error, params });
+            throw error;
         }
     }
 

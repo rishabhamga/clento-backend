@@ -258,8 +258,35 @@ export async function comment_post(accountId: string, identifier: string, config
     }
 }
 
-export async function send_followup(): Promise<ActivityResult> {
+export async function send_followup(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<ActivityResult> {
     logger.info('send_followup');
+    const unipileService = new UnipileService();
+    const leadAccount = await profile_visit(accountId, identifier, campaignId);
+    if (!leadAccount.providerId) { return { success: false, message: 'Lead LinkedIn Urn not found' }; }
+    try {
+        const result = await unipileService.sendFollowUp({
+            accountId: accountId,
+            linkedInUrn: leadAccount.providerId,
+            config: config
+        });
+        return { success: true, message: 'Follow-up message sent' };
+    } catch (error: any) {
+        const errorBody = error as UnipileError;
+        if (errorBody?.error?.body?.status === 422) {
+            logger.error('Profile doesnt exist or posts unreachable, skipping', errorBody);
+            return {
+                success: false,
+                message: 'Profile doesnt exist or posts unreachable',
+                data: {
+                    error: {
+                        type: 'comment_post_unreachable',
+                        message: 'Unable to access or comment on posts for this profile',
+                        statusCode: 422
+                    }
+                }
+            };
+        }
+    }
     // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
     return { success: true, message: 'Follow-up message sent' };
 }

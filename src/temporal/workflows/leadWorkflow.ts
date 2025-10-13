@@ -67,7 +67,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
     // if(!identifier){
     //     return {success: false, message: 'Identifier not found so skipping the node'}
     // }
-    const identifier = 'chloe-fong'
+    const identifier = 'rishabh-amga-1938a819a'
 
     let result: ActivityResult | null = null;
 
@@ -82,7 +82,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
             result = await comment_post(accountId, identifier, config, lead.campaign_id);
             break;
         case EWorkflowNodeType.send_followup:
-            result = await send_followup();
+            result = await send_followup(accountId, identifier, config, lead.campaign_id);
             break;
         case EWorkflowNodeType.withdraw_request:
             result = await withdraw_request(accountId, identifier, lead.campaign_id);
