@@ -60,14 +60,14 @@ function getDelayMs(edge: WorkflowEdge): number {
     return 0;
 }
 
-async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResponseDto, campaignId: string): Promise<ActivityResult | null> {
+async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResponseDto, campaignId: string, workflow: WorkflowJson): Promise<ActivityResult | null> {
     const type = node.data.type;
     const config = node.data.config || {};
     // const identifier = lead.linkedin_url?.split('/').pop();
     // if(!identifier){
     //     return {success: false, message: 'Identifier not found so skipping the node'}
     // }
-    const identifier = 'rishabh-amga-1938a819a'
+    const identifier = 'deepanshu-verma-b37754256'
 
     let result: ActivityResult | null = null;
 
@@ -116,26 +116,40 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                 break;
             }
 
+            // Get polling configuration from workflow edges
+            const outgoingEdges = workflow.edges.filter((edge: WorkflowEdge) => edge.source === node.id);
+            const rejectedEdge = outgoingEdges.find((edge: WorkflowEdge) => edge.data?.isConditionalPath === true && edge.data?.isPositive === false);
+
+            // Default values if no edge configuration found
+            let maxAttempts = 240; // 10 days * 24 hours (default)
+            let pollInterval = '1 hour'; // default
+
+            if (rejectedEdge?.data?.delayData) {
+                const delayMs = getDelayMs(rejectedEdge);
+                if (delayMs > 0) {
+                    // Convert delay to polling configuration
+                    const delayHours = delayMs / (1000 * 60 * 60);
+                    maxAttempts = Math.floor(delayHours);
+                    pollInterval = `${Math.max(1, Math.floor(delayHours / maxAttempts))} hour`;
+                }
+            }
+
             log.info('Connection request sent, starting polling', {
                 accountId,
                 identifier,
                 providerId,
-                maxDays: 10,
-                pollInterval: '1 hour'
+                maxAttempts,
+                pollInterval,
+                delayFromEdge: rejectedEdge?.data?.delayData
             });
-
-            // Poll for connection status for up to 10 days
-            const maxAttempts = 240; // 10 days * 24 hours
-            const pollInterval = '1 hour';
-
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                // Wait 1 hour before checking
+                // Wait before checking (use configured interval)
                 log.info('Waiting before next status check', {
                     attempt,
                     maxAttempts,
                     waitTime: pollInterval
                 });
-                await sleep('10 seconds');
+                await sleep(pollInterval);
 
                 log.info('Checking connection status (activity call)', {
                     accountId,
@@ -288,7 +302,7 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
         if (!currentNode) continue;
 
         // Execute the current node and store the result
-        const result = await executeNode(currentNode, unipileAccountId, lead, input.campaignId);
+        const result = await executeNode(currentNode, unipileAccountId, lead, input.campaignId, workflow);
 
         // Check if campaign was paused due to error - stop execution for this lead
         if (result?.data?.campaignPaused) {
