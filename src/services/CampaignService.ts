@@ -1,11 +1,13 @@
 import { supabaseAdmin } from '../config/supabase';
-import { CreateCampaignDto, CampaignResponseDto, UpdateCampaignDto } from '../dto/campaigns.dto';
+import { CreateCampaignDto, CampaignResponseDto, UpdateCampaignDto, CreateCampaignStepDto, CampaignStepResponseDto } from '../dto/campaigns.dto';
 import { BadRequestError, DisplayError, NotFoundError } from '../errors/AppError';
 import { WorkflowJson } from '../types/workflow.types';
 import { StorageService } from './StorageService';
+import { CampaignStepRepository } from '../repositories/CampaignStepRepository';
 
 export class CampaignService {
     private storageService = new StorageService();
+    private campaignStepRepository = new CampaignStepRepository();
     /**
      * Create a new campaign
      */
@@ -87,6 +89,27 @@ export class CampaignService {
 
         return data;
     }
+    async getRecentCampaigns(organization_id: string): Promise<CampaignResponseDto[]> {
+        if (!supabaseAdmin) {
+            throw new Error('Supabase admin client not initialized');
+        }
+        const { data, error } = await supabaseAdmin
+            .from('campaigns')
+            .select('*')
+            .order('updated_at', { ascending: false })
+            .eq('organization_id', organization_id)
+            .neq('is_deleted', true)
+            .limit(5);
+
+        if (error) {
+            throw new DisplayError("An Error Occured While Fetching Campaigns");
+        }
+
+        if (!data) {
+            return [];
+        }
+        return data;
+    }
     async getCampaignById(campaignId: string): Promise<CampaignResponseDto | null> {
         if (!supabaseAdmin) {
             throw new Error('Supabase admin client not initialized');
@@ -129,5 +152,12 @@ export class CampaignService {
         const fileString = file.buffer.toString('utf8');
         const workflowData: WorkflowJson = JSON.parse(fileString);
         return { workflowData, file }
+    }
+
+    async createCampaignStep(campaignStep: CreateCampaignStepDto): Promise<CampaignStepResponseDto> {
+        return this.campaignStepRepository.create(campaignStep);
+    }
+    async getCampaignSteps(campaignId: string): Promise<CampaignStepResponseDto[]> {
+        return this.campaignStepRepository.findByCampaignId(campaignId);
     }
 }

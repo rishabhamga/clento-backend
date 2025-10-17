@@ -1,4 +1,4 @@
-import { CampaignResponseDto } from "../../dto/campaigns.dto";
+import { CampaignResponseDto, CampaignStepResponseDto, CreateCampaignStepDto } from "../../dto/campaigns.dto";
 import { LeadInsertDto, LeadListResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
 import { CampaignService } from "../../services/CampaignService";
 import { ConnectedAccountService } from "../../services/ConnectedAccountService";
@@ -9,7 +9,7 @@ import { UnipileError, UnipileService } from "../../services/UnipileService";
 import { WorkflowJson, WorkflowNodeConfig } from "../../types/workflow.types";
 import logger from "../../utils/logger";
 import { ActivityResult } from "../workflows/leadWorkflow";
-import { CampaignStepDto } from "../../dto/campaigns.dto";
+import { NotFoundError } from "../../errors/AppError";
 
 export async function testActivity(input: { message: string; delay?: number }): Promise<{ success: boolean; data: any; timestamp: string }> {
     logger.info('Test activity started', { input });
@@ -558,76 +558,60 @@ export async function check_connection_status(accountId: string, identifier: str
 
 export async function updateCampaignStep(
     campaignId: string,
-    stepId: string,
     stepType: string,
     config: WorkflowNodeConfig,
     success: boolean,
-    results: any
+    results: Record<string, any>,
+    stepIndex: number,
+    organizationId: string
 ): Promise<ActivityResult> {
-    logger.info('updateCampaignStep', { campaignId, stepId, stepType, success });
+    logger.info('updateCampaignStep', { campaignId, stepType, success, stepIndex });
 
     try {
         const campaignService = new CampaignService();
         const campaign = await campaignService.getCampaignById(campaignId);
+        const steps = await campaignService.getCampaignSteps(campaignId);
 
         if (!campaign) {
             logger.error('Campaign not found', { campaignId });
             return { success: false, message: 'Campaign not found' };
         }
 
-        // Get existing steps or initialize empty array
-        const existingSteps = campaign.steps?.steps || [];
-
-        // Create new step record - only store what exists
-        const newStep: any = {
-            id: stepId,
-            type: stepType,
-            config: config || {},
-            executed_at: new Date().toISOString(),
-            results: results || {},
-            success: success
-        };
-
-        // Check if step already exists (for retry scenarios)
-        const existingStepIndex = existingSteps.findIndex((s: any) => s.id === stepId);
-
-        let updatedSteps;
-        if (existingStepIndex >= 0) {
-            // Update existing step
-            updatedSteps = [...existingSteps];
-            updatedSteps[existingStepIndex] = newStep;
-            logger.info('Updated existing step', { stepId, existingStepIndex });
-        } else {
-            // Add new step
-            updatedSteps = [...existingSteps, newStep];
-            logger.info('Added new step', { stepId, totalSteps: updatedSteps.length });
+        const step = steps.find((s: CampaignStepResponseDto) => s.step_index === stepIndex);
+        if (step) {
+            logger.info('Step already exists', { stepId: step.id, stepIndex });
+            return { success: true, message: 'Step already exists' };
         }
 
-        // Update campaign with new steps
-        await campaignService.updateCampaign(campaignId, {
-            steps: {
-                steps: updatedSteps
-            }
-        });
+        // Create new step record - only store what exists
+        const newStep: CreateCampaignStepDto = {
+            type: stepType,
+            config: config || {},
+            result: results || null,
+            success: success,
+            step_index: stepIndex,
+            organization_id: organizationId,
+            campaign_id: campaignId
+        };
 
+        await campaignService.createCampaignStep(newStep);
         logger.info('Campaign step updated successfully', {
             campaignId,
-            stepId,
             stepType,
             success,
-            totalSteps: updatedSteps.length
+            stepIndex
         });
 
         return {
             success: true,
             message: 'Campaign step updated successfully',
-            data: { stepId, totalSteps: updatedSteps.length }
+            data: { stepIndex }
         };
     } catch (error: any) {
         logger.error('Error updating campaign step', {
             error: error.message,
             campaignId,
-            stepId,
+            stepIndex,
             stepType
         });
         return {

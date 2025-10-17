@@ -136,7 +136,8 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
                     leadId: lead.id,
                     workflow: workflowJson,
                     accountId: campaignFetch.sender_account!,
-                    campaignId: campaignFetch.id
+                    campaignId: campaignFetch.id,
+                    organizationId: organizationId
                 }],
                 workflowId: `lead-${lead.id}-day-${Math.floor(processedLeads / leadsPerDay) + 1}`,
                 taskQueue: 'campaign-task-queue',

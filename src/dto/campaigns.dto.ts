@@ -31,6 +31,36 @@ export const CampaignStepDto = z.object({
     success: z.boolean()
 })
 
+// Campaign Step DTOs for the campaign_steps table
+export const CreateCampaignStepDto = z.object({
+  campaign_id: z.string().uuid('Invalid campaign ID format'),
+  organization_id: z.string().uuid('Invalid organization ID format'),
+  step_index: z.number().int().min(0, 'Step index must be non-negative'),
+  type: z.enum(Object.values(EWorkflowNodeType) as [string, ...string[]]),
+  config: z.record(z.any()).nullable().optional(),
+  success: z.boolean().default(false),
+  result: z.record(z.any()).nullable().optional(),
+});
+
+export const UpdateCampaignStepDto = z.object({
+  step_index: z.number().int().min(0, 'Step index must be non-negative').optional(),
+  type: z.enum(Object.values(EWorkflowNodeType) as [string, ...string[]]).optional(),
+  config: z.record(z.any()).nullable().optional(),
+  success: z.boolean().optional(),
+  result: z.record(z.any()).nullable().optional(),
+});
+
+export const CampaignStepResponseDto = z.object({
+  id: z.string().uuid(),
+  campaign_id: z.string().uuid(),
+  organization_id: z.string().uuid(),
+  step_index: z.number().int(),
+  type: z.enum(Object.values(EWorkflowNodeType) as [string, ...string[]]),
+  config: z.record(z.any()).nullable(),
+  success: z.boolean(),
+  result: z.record(z.any()).nullable(),
+  created_at: z.string().datetime(),
+});
 // Campaign DTOs
 export const CreateCampaignDto = z.object({
   organization_id: z.string().uuid().nullable().optional(),
@@ -195,6 +225,9 @@ export type UpdateCampaignDto = z.infer<typeof UpdateCampaignDto>;
 export type CampaignResponseDto = z.infer<typeof CampaignResponseDto>;
 export type CampaignQueryDto = z.infer<typeof CampaignQueryDto>;
 export type CampaignStepDto = z.infer<typeof CampaignStepDto>;
+export type CreateCampaignStepDto = z.infer<typeof CreateCampaignStepDto>;
+export type UpdateCampaignStepDto = z.infer<typeof UpdateCampaignStepDto>;
+export type CampaignStepResponseDto = z.infer<typeof CampaignStepResponseDto>;
 export type CampaignAnalyticsDto = z.infer<typeof CampaignAnalyticsDto>;
 export type CampaignExecutionQueryDto = z.infer<typeof CampaignExecutionQueryDto>;
 export type UpdateCampaignExecutionDto = z.infer<typeof UpdateCampaignExecutionDto>;

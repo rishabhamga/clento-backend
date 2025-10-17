@@ -43,6 +43,7 @@ export interface LeadWorkflowInput {
     workflow: WorkflowJson,
     accountId: string,
     campaignId: string,
+    organizationId: string
 }
 
 function getDelayMs(edge: WorkflowEdge): number {
@@ -60,14 +61,14 @@ function getDelayMs(edge: WorkflowEdge): number {
     return 0;
 }
 
-async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResponseDto, campaignId: string, workflow: WorkflowJson): Promise<ActivityResult | null> {
+async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResponseDto, campaignId: string, workflow: WorkflowJson, index: number): Promise<ActivityResult | null> {
     const type = node.data.type;
     const config = node.data.config || {};
-    // const identifier = lead.linkedin_url?.split('/').pop();
-    // if(!identifier){
-    //     return {success: false, message: 'Identifier not found so skipping the node'}
-    // }
-    const identifier = 'deepanshu-verma-b37754256'
+    const identifier = lead.linkedin_url?.split('/').pop();
+    if(!identifier){
+        return {success: false, message: 'Identifier not found so skipping the node'}
+    }
+    // const identifier = 'rishabh-amga-1938a819a'
 
     let result: ActivityResult | null = null;
 
@@ -243,22 +244,16 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
 
     // Record step execution in database
     if (result && type) {
-        log.info('Recording step execution', { nodeId: node.id, type, success: result.success });
-        await updateCampaignStep(
-            campaignId,
-            node.id,
-            type,
-            config,
-            result.success,
-            result
-        );
+        log.info('Recording step execution', {step: `step-${index}`, nodeId: node.id, type, success: result.success });
+
+        await updateCampaignStep(campaignId, type, config, result.success, result.data, index, lead.organization_id);
     }
 
     return result;
 }
 
 export async function leadWorkflow(input: LeadWorkflowInput) {
-    const { leadId, workflow, accountId } = input
+    const { leadId, workflow, accountId, campaignId, organizationId } = input
     const leadUpdate: LeadUpdateDto = {
         status: "Processing"
     }
@@ -290,11 +285,13 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
 
     let queue: string[] = nodes.filter(n => incomingCount[n.id] === 0).map(n => n.id);
 
+    let stepIndex = 0;
+
     while (queue.length > 0) {
         const unipileAccountId = await verifyUnipileAccount(accountId);
         if(!unipileAccountId) {
             log.error("Unipile Account not found");
-            await pauseCampaign(input.campaignId);
+            await pauseCampaign(campaignId);
             return
         }
         const currentId = queue.shift()!;
@@ -302,13 +299,13 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
         if (!currentNode) continue;
 
         // Execute the current node and store the result
-        const result = await executeNode(currentNode, unipileAccountId, lead, input.campaignId, workflow);
+        const result = await executeNode(currentNode, unipileAccountId, lead, campaignId, workflow, stepIndex);
 
         // Check if campaign was paused due to error - stop execution for this lead
         if (result?.data?.campaignPaused) {
             log.error('Campaign was paused due to error - stopping lead execution', {
                 leadId: lead.id,
-                campaignId: input.campaignId,
+                campaignId: campaignId,
                 nodeId: currentNode.id
             });
             // Update lead status to reflect the pause
@@ -351,5 +348,6 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
                 queue.push(edge.target);
             }
         }
+        stepIndex++;
     }
 }
