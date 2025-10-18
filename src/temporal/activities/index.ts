@@ -1,4 +1,4 @@
-import { CampaignResponseDto, CampaignStepResponseDto, CreateCampaignStepDto } from "../../dto/campaigns.dto";
+import { CampaignResponseDto, CampaignStatus, CampaignStepResponseDto, CreateCampaignStepDto } from "../../dto/campaigns.dto";
 import { LeadInsertDto, LeadListResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
 import { CampaignService } from "../../services/CampaignService";
 import { ConnectedAccountService } from "../../services/ConnectedAccountService";
@@ -6,7 +6,7 @@ import { CsvLead, CsvParseResult } from "../../services/CsvService";
 import { LeadListService } from "../../services/LeadListService";
 import { LeadService } from "../../services/LeadService";
 import { UnipileError, UnipileService } from "../../services/UnipileService";
-import { WorkflowJson, WorkflowNodeConfig } from "../../types/workflow.types";
+import { EWorkflowNodeType, WorkflowJson, WorkflowNodeConfig } from "../../types/workflow.types";
 import logger from "../../utils/logger";
 import { ActivityResult } from "../workflows/leadWorkflow";
 import { NotFoundError } from "../../errors/AppError";
@@ -468,7 +468,7 @@ export async function pauseCampaign(campaignId: string): Promise<void> {
         return;
     }
     await campaignService.updateCampaign(campaignId, {
-        status: 'paused'
+        status: CampaignStatus.PAUSED
     })
     logger.info('Campaign paused successfully', { campaignId });
 }
@@ -479,7 +479,7 @@ export async function isCampaignActive(campaignId: string): Promise<boolean> {
     if (!campaign) {
         return false;
     }
-    return campaign.status !== 'paused' && campaign.status !== 'COMPLETED' && campaign.status !== 'FAILED';
+    return campaign.status !== 'PAUSED' && campaign.status !== 'COMPLETED' && campaign.status !== 'FAILED';
 }
 
 export async function check_connection_status(accountId: string, identifier: string, providerId: string, campaignId: string): Promise<ActivityResult> {
@@ -558,7 +558,7 @@ export async function check_connection_status(accountId: string, identifier: str
 
 export async function updateCampaignStep(
     campaignId: string,
-    stepType: string,
+    stepType: EWorkflowNodeType,
     config: WorkflowNodeConfig,
     success: boolean,
     results: Record<string, any>,

@@ -24,7 +24,7 @@ export enum CampaignStatus {
 
 export const CampaignStepDto = z.object({
     id: z.string(),
-    type: z.enum(Object.values(EWorkflowNodeType) as [string, ...string[]]),
+    type: z.nativeEnum(EWorkflowNodeType),
     config: z.record(z.any()).default({}),
     executed_at: z.string().datetime(),
     results: z.record(z.any()).default({}),
@@ -36,7 +36,7 @@ export const CreateCampaignStepDto = z.object({
   campaign_id: z.string().uuid('Invalid campaign ID format'),
   organization_id: z.string().uuid('Invalid organization ID format'),
   step_index: z.number().int().min(0, 'Step index must be non-negative'),
-  type: z.enum(Object.values(EWorkflowNodeType) as [string, ...string[]]),
+  type: z.nativeEnum(EWorkflowNodeType),
   config: z.record(z.any()).nullable().optional(),
   success: z.boolean().default(false),
   result: z.record(z.any()).nullable().optional(),
@@ -44,7 +44,7 @@ export const CreateCampaignStepDto = z.object({
 
 export const UpdateCampaignStepDto = z.object({
   step_index: z.number().int().min(0, 'Step index must be non-negative').optional(),
-  type: z.enum(Object.values(EWorkflowNodeType) as [string, ...string[]]).optional(),
+  type: z.nativeEnum(EWorkflowNodeType).optional(),
   config: z.record(z.any()).nullable().optional(),
   success: z.boolean().optional(),
   result: z.record(z.any()).nullable().optional(),
@@ -55,7 +55,7 @@ export const CampaignStepResponseDto = z.object({
   campaign_id: z.string().uuid(),
   organization_id: z.string().uuid(),
   step_index: z.number().int(),
-  type: z.enum(Object.values(EWorkflowNodeType) as [string, ...string[]]),
+  type: z.nativeEnum(EWorkflowNodeType),
   config: z.record(z.any()).nullable(),
   success: z.boolean(),
   result: z.record(z.any()).nullable(),
@@ -76,7 +76,7 @@ export const CreateCampaignDto = z.object({
   file_name: z.string().nullable().optional(),
   bucket: z.string().nullable().optional(),
   is_deleted: z.boolean().default(false).optional(),
-  status: z.enum(Object.values(CampaignStatus) as [string, ...string[]]).default(CampaignStatus.DRAFT),
+  status: z.nativeEnum(CampaignStatus).default(CampaignStatus.DRAFT),
   steps: z.object({
     steps: z.array(CampaignStepDto).default([]).optional().nullable()
   }).optional().nullable()
@@ -95,7 +95,7 @@ export const UpdateCampaignDto = z.object({
   file_name: z.string().nullable().optional(),
   bucket: z.string().nullable().optional(),
   is_deleted: z.boolean().default(false).optional(),
-  status: z.enum(Object.values(CampaignStatus) as [string, ...string[]]).optional(),
+  status: z.nativeEnum(CampaignStatus).optional(),
   steps: z.object({
     steps: z.array(CampaignStepDto).default([]).optional().nullable()
   }).optional().nullable()
@@ -121,7 +121,7 @@ export const CampaignResponseDto = z.object({
   created_at: z.string().datetime().nullable(),
   updated_at: z.string().datetime().nullable(),
   is_deleted: z.boolean().default(false).optional(),
-  status: z.enum(Object.values(CampaignStatus) as [string, ...string[]]).default(CampaignStatus.DRAFT),
+  status: z.nativeEnum(CampaignStatus).default(CampaignStatus.DRAFT),
   steps: z.object({
     steps: z.array(CampaignStepDto).default([]).optional().nullable()
   }).optional().nullable()

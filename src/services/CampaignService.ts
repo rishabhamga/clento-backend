@@ -1,133 +1,62 @@
-import { supabaseAdmin } from '../config/supabase';
 import { CreateCampaignDto, CampaignResponseDto, UpdateCampaignDto, CreateCampaignStepDto, CampaignStepResponseDto } from '../dto/campaigns.dto';
 import { BadRequestError, DisplayError, NotFoundError } from '../errors/AppError';
-import { WorkflowJson } from '../types/workflow.types';
+import { EWorkflowNodeType, WorkflowJson } from '../types/workflow.types';
 import { StorageService } from './StorageService';
 import { CampaignStepRepository } from '../repositories/CampaignStepRepository';
+import { CampaignRepository } from '../repositories/CampaignRepository';
 
 export class CampaignService {
     private storageService = new StorageService();
     private campaignStepRepository = new CampaignStepRepository();
+    private campaignRepository = new CampaignRepository();
     /**
      * Create a new campaign
      */
     async createCampaign(
         campaignData: CreateCampaignDto
     ): Promise<CampaignResponseDto> {
-        if (!supabaseAdmin) {
-            throw new Error('Supabase admin client not initialized');
-        }
-
-        const { data, error } = await supabaseAdmin
-            .from('campaigns')
-            .insert(campaignData)
-            .select()
-            .single();
-
-        if (error) {
-            throw new Error(`Failed to create campaign: ${error.message}`);
-        }
-
-        return data;
+        return this.campaignRepository.create(campaignData);
     }
 
     async updateCampaign(
         campaignId: string,
         campaignData: UpdateCampaignDto
     ): Promise<CampaignResponseDto> {
-        if (!supabaseAdmin) {
-            throw new Error('Supabase admin client not initialized');
-        }
-
-        const { data, error } = await supabaseAdmin
-            .from('campaigns')
-            .update(campaignData)
-            .eq('id', campaignId)
-            .select()
-            .single();
-
-        if (error) {
-            throw new Error(`Failed to update campaign: ${error.message}`);
-        }
-
-        return data;
+        return this.campaignRepository.update(campaignId, campaignData);
     }
 
     async deleteCampaign(
         campaignId: string
     ): Promise<void> {
-        if (!supabaseAdmin) {
-            throw new Error('Supabase admin client not initialized');
-        }
-        const { error } = await supabaseAdmin
-            .from('campaigns')
-            .update({ is_deleted: true })
-            .eq('id', campaignId);
-        if (error) {
-            throw new Error(`Failed to delete campaign: ${error.message}`);
-        }
+        return this.campaignRepository.softDelete(campaignId);
     }
 
     async getCampaigns(organization_id: string): Promise<CampaignResponseDto[]> {
-        if (!supabaseAdmin) {
-            throw new Error('Supabase admin client not initialized');
-        }
-        const { data, error } = await supabaseAdmin
-            .from('campaigns')
-            .select('*')
-            .eq('organization_id', organization_id)
-            .neq('is_deleted', true)
-            .order('created_at', { ascending: false });
-
-        if (error) {
+        try {
+            return await this.campaignRepository.findByOrganizationId(organization_id);
+        } catch (error) {
             throw new DisplayError("An Error Occured While Fetching Campaigns");
         }
-
-        if (!data) {
-            return [];
-        }
-
-        return data;
     }
-    async getRecentCampaigns(organization_id: string): Promise<CampaignResponseDto[]> {
-        if (!supabaseAdmin) {
-            throw new Error('Supabase admin client not initialized');
-        }
-        const { data, error } = await supabaseAdmin
-            .from('campaigns')
-            .select('*')
-            .order('updated_at', { ascending: false })
-            .eq('organization_id', organization_id)
-            .neq('is_deleted', true)
-            .limit(5);
+    async getRecentCampaigns(organization_id: string){
+        try {
+            const recentStepCampaigns = await this.campaignStepRepository.getMostRecentStepsPerCampaign(organization_id, 7)
+            // Retrieves the campaign IDs from the recentStepCampaigns object and selects the first 5.
+            const campaignIds = Object.keys(recentStepCampaigns).slice(0, 5);
 
-        if (error) {
+            const campaigns = await this.campaignRepository.findByIdIn(campaignIds)
+
+            return campaigns
+        } catch (error) {
             throw new DisplayError("An Error Occured While Fetching Campaigns");
         }
-
-        if (!data) {
-            return [];
-        }
-        return data;
     }
     async getCampaignById(campaignId: string): Promise<CampaignResponseDto | null> {
-        if (!supabaseAdmin) {
-            throw new Error('Supabase admin client not initialized');
-        }
-        const { data, error } = await supabaseAdmin
-            .from('campaigns')
-            .select('*')
-            .eq('id', campaignId).single();
-
-        if (error) {
+        try {
+            return await this.campaignRepository.findById(campaignId);
+        } catch (error) {
             throw new DisplayError("An Error Occured While Fetching Campaigns");
         }
-
-        if (!data) {
-            return null;
-        }
-
-        return data;
     }
     async getWorkflow(campaign: CampaignResponseDto) {
         // Download the workflow file as buffer
@@ -159,5 +88,18 @@ export class CampaignService {
     }
     async getCampaignSteps(campaignId: string): Promise<CampaignStepResponseDto[]> {
         return this.campaignStepRepository.findByCampaignId(campaignId);
+    }
+    async getRecentStats(organization_id: string, days: number){
+        try {
+            const recentSteps = await this.campaignStepRepository.getRecentCampaignStepsByOrgIdAndDays(organization_id, days)
+            const stats ={
+                success_rate: (recentSteps.filter(step => step.success).length * 100) / recentSteps.length,
+                requests_sent: recentSteps.filter(step => step.type === EWorkflowNodeType.send_connection_request).length,
+                total_steps: recentSteps.length
+            }
+            return stats
+        } catch (error) {
+            throw new DisplayError("An Error Occured While Fetching Campaigns");
+        }
     }
 }
