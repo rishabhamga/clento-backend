@@ -64,11 +64,11 @@ function getDelayMs(edge: WorkflowEdge): number {
 async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResponseDto, campaignId: string, workflow: WorkflowJson, index: number): Promise<ActivityResult | null> {
     const type = node.data.type;
     const config = node.data.config || {};
-    // const identifier = lead.linkedin_url?.split('/').pop();
-    // if(!identifier){
-    //     return {success: false, message: 'Identifier not found so skipping the node'}
-    // }
-    const identifier = 'rishabh-amga-1938a819a'
+    const identifier = lead.linkedin_url?.split('/').pop();
+    if(!identifier){
+        return {success: false, message: 'Identifier not found so skipping the node'}
+    }
+    // const identifier = 'rishabh-amga-1938a819a'
 
     let result: ActivityResult | null = null;
 
