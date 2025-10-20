@@ -21,14 +21,12 @@ import env from '../config/env';
  */
 export class LeadListService {
   private leadListRepository: LeadListRepository;
-  private leadRepository: LeadRepository;
   private connectedAccountRepository: ConnectedAccountRepository;
   private storageService: StorageService;
   private bucketName: string;
 
   constructor() {
     this.leadListRepository = new LeadListRepository();
-    this.leadRepository = new LeadRepository();
     this.connectedAccountRepository = new ConnectedAccountRepository();
     this.storageService = new StorageService();
     this.bucketName = env.GOOGLE_CLOUD_STORAGE_BUCKET;
@@ -49,7 +47,6 @@ export class LeadListService {
         description: data.description,
         source: data.source,
         tags: data.tags,
-        // filters: data.filters, // TODO: Remove - not in database schema
         creator_id: creatorId,
         connected_account_id: data.connected_account_id,
       };

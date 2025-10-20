@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { ValidationError } from '../errors/AppError';
+import { DisplayError } from '../errors/AppError';
 
 // Define UploadedFile interface for multer
 interface UploadedFile {
@@ -22,7 +22,7 @@ declare module 'express-serve-static-core' {
     export interface Response {
         sendOKResponse(json: object): this;
         sendErrorResponse(statusCode: number, errorMessage: string, json?: object): this;
-        sendValidationError(errorMessage: string): this;
+        sendDisplayError(errorMessage: string): this;
         sendCreatedResponse(json: object): this;
         sendNoContentResponse(): this;
     }
@@ -136,7 +136,7 @@ export class ClentoRequestBody {
         if (Object.values(enumm).includes(paramAsString)) {
             return paramAsString as T;
         } else {
-            throw new ValidationError(`${parameterName} is not a valid enum value in ${this.bodyName}`);
+            throw new DisplayError(`${parameterName} is not a valid enum value in ${this.bodyName}`);
         }
     };
 
@@ -172,7 +172,7 @@ export class ClentoRequestBody {
         }
         const date = new Date(dateString);
         if (isNaN(date.getTime())) {
-            throw new ValidationError(`${parameterName} is not a valid date in ${this.bodyName}`);
+            throw new DisplayError(`${parameterName} is not a valid date in ${this.bodyName}`);
         }
         return date;
     }
@@ -189,7 +189,7 @@ export class ClentoRequestBody {
         }
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
         if (!uuidRegex.test(uuid)) {
-            throw new ValidationError(`${parameterName} is not a valid UUID in ${this.bodyName}`);
+            throw new DisplayError(`${parameterName} is not a valid UUID in ${this.bodyName}`);
         }
         return uuid;
     }
@@ -206,7 +206,7 @@ export class ClentoRequestBody {
         }
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
-            throw new ValidationError(`${parameterName} is not a valid email in ${this.bodyName}`);
+            throw new DisplayError(`${parameterName} is not a valid email in ${this.bodyName}`);
         }
         return email;
     }
@@ -227,7 +227,7 @@ export class ClentoRequestBody {
         if (!required) {
             return null;
         } else {
-            throw new ValidationError(`${FormFieldName} is required as image/jpg or image/jpeg`);
+            throw new DisplayError(`${FormFieldName} is required as image/jpg or image/jpeg`);
         }
     };
 
@@ -241,12 +241,12 @@ export class ClentoRequestBody {
     public getFile(FormFieldName: string) {
         const files = this.rawBody as UploadedFile[];
         if (!files || !Array.isArray(files)) {
-            throw new ValidationError(`${FormFieldName} is not present in req.files`);
+            throw new DisplayError(`${FormFieldName} is not present in req.files`);
         }
 
         const file = files.find(f => f.fieldname === FormFieldName);
         if (!file) {
-            throw new ValidationError(`${FormFieldName} is not present in req.files`);
+            throw new DisplayError(`${FormFieldName} is not present in req.files`);
         }
 
         return file;
@@ -278,7 +278,7 @@ export class ClentoRequestBody {
                 const arr: any[] = result;
                 arr.forEach(ele => {
                     if (typeof ele !== 'string') {
-                        throw new ValidationError(`${parameterName} in ${this.bodyName} is not a ${type}`);
+                        throw new DisplayError(`${parameterName} in ${this.bodyName} is not a ${type}`);
                     }
                 })
                 return arr as string[];
@@ -286,14 +286,14 @@ export class ClentoRequestBody {
         }
         if (type === 'object[]') {
             if (!Array.isArray(result)) {
-                throw new ValidationError(`${parameterName} in ${this.bodyName} is not a ${type}`);
+                throw new DisplayError(`${parameterName} in ${this.bodyName} is not a ${type}`);
             }
             return result.map((it, idx) => {
                 if (typeof (it) !== 'object') {
-                    throw new ValidationError(`${parameterName}[${idx}] in ${this.bodyName} is not an object`);
+                    throw new DisplayError(`${parameterName}[${idx}] in ${this.bodyName} is not an object`);
                 }
                 if (Array.isArray(it)) {
-                    throw new ValidationError(`${parameterName}[${idx}] in ${this.bodyName} is not an object`);
+                    throw new DisplayError(`${parameterName}[${idx}] in ${this.bodyName} is not an object`);
                 }
                 return it;
             });
@@ -302,14 +302,14 @@ export class ClentoRequestBody {
             result = result.toString();
         }
         if (typeof (result) !== type) {
-            throw new ValidationError(`${parameterName} in ${this.bodyName} is not a ${type}`);
+            throw new DisplayError(`${parameterName} in ${this.bodyName} is not a ${type}`);
         }
         if (type === 'object') {
             if (typeof (result) !== type) {
-                throw new ValidationError(`${parameterName} in ${this.bodyName} is not a ${type}`);
+                throw new DisplayError(`${parameterName} in ${this.bodyName} is not a ${type}`);
             }
             if (Array.isArray(result)) {
-                throw new ValidationError(`${parameterName} in ${this.bodyName} is not a ${type}`);
+                throw new DisplayError(`${parameterName} in ${this.bodyName} is not a ${type}`);
             }
         }
         return result;
@@ -323,7 +323,7 @@ export class ClentoRequestBody {
             if (!required) {
                 return null;
             }
-            throw new ValidationError(
+            throw new DisplayError(
                 `MimeType for ${FormFieldName} is ${result.mimetype} and not ${mimetype}`);
         }
     }
@@ -335,7 +335,7 @@ export class ClentoRequestBody {
         }
         arr.forEach(ele => {
             if (!Object.values(enumm).includes(ele)) {
-                throw new ValidationError(`${parameterName} is not a valid enum array - ${ele} failed`);
+                throw new DisplayError(`${parameterName} is not a valid enum array - ${ele} failed`);
             }
         })
         return arr as any as T[];
@@ -443,7 +443,7 @@ export const extendExpressPrototypes = () => {
         configurable: true
     });
 
-    Object.defineProperty(express.response, 'sendValidationError', {
+    Object.defineProperty(express.response, 'sendDisplayError', {
         value: function (errorMessage: string) {
             return this.sendErrorResponse(422, errorMessage);
         },

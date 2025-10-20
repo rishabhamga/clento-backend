@@ -57,33 +57,14 @@ class CampaignsAPI extends ClentoAPI {
             const campaignId = reqBody.getParamAsString('campaignId', true);
 
             const campaign = await this.campaignService.getCampaignById(campaignId);
-            if(organizationId !==  campaign?.organization_id){
+            if (organizationId !== campaign?.organization_id) {
                 throw new ForbiddenError('You are not allowed to access this campaign');
             }
             if (!campaign) {
                 throw new NotFoundError('Campaign not found');
             }
 
-            if (!campaign.file_name || !campaign.bucket) {
-                throw new BadRequestError('Campaign workflow file not found');
-            }
-            if(campaign.is_deleted){
-                throw new NotFoundError('Campaign not found');
-            }
-
-            // Download the workflow file as buffer
-            const file = await this.storageService.downloadFileAsBuffer(
-                organizationId,
-                campaign.id,
-                campaign.file_name,
-                campaign.bucket,
-                `workflows/${organizationId}/${campaign.file_name}`
-            );
-
-            // Parse the JSON workflow data
-            const fileString = file.buffer.toString('utf8');
-            const workflowData = JSON.parse(fileString);
-
+            const { workflowData, file } = await this.campaignService.getWorkflow(campaign)
 
             return res.sendOKResponse({
                 campaign,

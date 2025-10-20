@@ -229,6 +229,8 @@ export const PublishLeadListResponseDto = z.object({
  */
 export const LeadResponseDto = z.object({
   id: z.string().uuid(),
+  organization_id: z.string().uuid(),
+  campaign_id: z.string().uuid(),
   lead_list_id: z.string().uuid().nullable(),
   full_name: z.string(),
   first_name: z.string().nullable(),
@@ -253,6 +255,8 @@ export const LeadResponseDto = z.object({
  */
 export const LeadInsertDto = z.object({
   id: z.string().uuid().optional(),
+  organization_id: z.string().uuid(),
+  campaign_id: z.string().uuid(),
   lead_list_id: z.string().uuid().nullable().optional(),
   full_name: z.string(),
   first_name: z.string().nullable().optional(),

@@ -1,11 +1,11 @@
-import ClentoAPI from '../../utils/apiUtil';
 import { Request, Response } from 'express';
+import { UpdateCampaignDto } from '../../dto/campaigns.dto';
 import { DisplayError, ForbiddenError, NotFoundError } from '../../errors/AppError';
 import { CampaignService } from '../../services/CampaignService';
-import { CreateCampaignDto, UpdateCampaignDto } from '../../dto/campaigns.dto';
-import '../../utils/expressExtensions'; // Import extensions
 import { StorageService } from '../../services/StorageService';
-import { EAction, EApproach, ECallToAction, EFocus, EFormality, EIntention, ELanguage, EMessageLength, EPathType, EPersonalization, ETone, EWorkflowNodeType } from './create';
+import ClentoAPI from '../../utils/apiUtil';
+import '../../utils/expressExtensions'; // Import extensions
+import { EAction, EApproach, ECallToAction, EFocus, EFormality, EIntention, ELanguage, EMessageLength, EPathType, EPersonalization, ETone, EWorkflowNodeType } from '../../types/workflow.types';
 
 /**
  * Create Campaign API - Create new campaign endpoint
@@ -40,7 +40,7 @@ class CreateCampaignAPI extends ClentoAPI {
             const senderAccount = detail.getParamAsString("senderAccount");
             const prospectList = detail.getParamAsString("prospectList");
             const startDate = detail.getParamAsString("startDate");
-            const endDate = detail.getParamAsString("endDate");
+            const leadsPerDay = detail.getParamAsNumber("leadsPerDay");
             const startTime = detail.getParamAsString("startTime");
             const endTime = detail.getParamAsString("endTime");
             const timezone = detail.getParamAsString("timezone");
@@ -178,7 +178,7 @@ class CreateCampaignAPI extends ClentoAPI {
                 sender_account: senderAccount,
                 prospect_list: prospectList,
                 start_date: startDate,
-                end_date: endDate,
+                leads_per_day: leadsPerDay,
                 start_time: startTime,
                 end_time: endTime,
                 timezone

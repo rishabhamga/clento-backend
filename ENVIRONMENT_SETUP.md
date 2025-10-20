@@ -25,8 +25,8 @@ CLERK_WEBHOOK_SECRET=your_clerk_webhook_secret_here
 
 ### Unipile Integration
 ```
-UNIPILE_API_URL=https://api.unipile.com/v1
-UNIPILE_API_KEY=your_unipile_api_key_here
+UNIPILE_DNS=https://api.unipile.com/v1
+UNIPILE_ACCESS_TOKEN=your_UNIPILE_ACCESS_TOKEN_here
 ```
 
 ### Google Cloud Storage
@@ -41,6 +41,20 @@ GCS_BUCKET_NAME=clento-lead-lists
 CORS_ORIGIN=http://localhost:3000,http://localhost:3001,http://localhost:3004
 ```
 
+### Temporal Configuration
+```
+# For local development (no TLS required)
+TEMPORAL_ADDRESS=localhost:7233
+TEMPORAL_NAMESPACE=default
+
+# For production/Temporal Cloud (TLS optional)
+# TEMPORAL_CLOUD_ENABLED=true
+# TEMPORAL_ADDRESS=your_temporal_cloud_address
+# TEMPORAL_NAMESPACE=your_temporal_namespace
+# TEMPORAL_CLIENT_CERT=your_base64_encoded_client_cert (optional)
+# TEMPORAL_CLIENT_KEY=your_base64_encoded_client_key (optional)
+```
+
 ### Logging
 ```
 LOG_LEVEL=info
@@ -48,8 +62,9 @@ LOG_LEVEL=info
 
 ## Notes
 
-- **Unipile Integration**: The system will use mock data if `UNIPILE_API_KEY` is not provided
+- **Unipile Integration**: The system will use mock data if `UNIPILE_ACCESS_TOKEN` is not provided
 - **Google Cloud Storage**: The system will use mock storage if GCS credentials are not provided
+- **Temporal**: TLS and client certificates are optional - the system will work without them for local development
 - **Development Mode**: Most services will work in mock mode for development without requiring actual API keys
 - **Port Configuration**: Make sure the frontend is configured to call the backend on the correct port (3004)
 
