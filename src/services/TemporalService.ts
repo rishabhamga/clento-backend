@@ -1,15 +1,18 @@
-import { TemporalClientService } from "../temporal/services/temporal-client.service";
+import { CampaignOrchestratorInput, TemporalClientService } from "../temporal/services/temporal-client.service";
 import { UnipileWrapperService } from "../temporal/services/unipile-wrapper.service";
 import logger from "../utils/logger";
 import { testWorkflow } from "../temporal/workflows/testWorkflow";
+import { CampaignService } from "./CampaignService";
+import { DisplayError } from "../errors/AppError";
 
 export class TemporalService {
     private static instance: TemporalService
     private temporalClient = TemporalClientService.getInstance();
     private unipileService = UnipileWrapperService.getInstance();
+    private campaignService = new CampaignService();
 
-    public static getInstance(): TemporalService{
-        if(!TemporalService.instance){
+    public static getInstance(): TemporalService {
+        if (!TemporalService.instance) {
             TemporalService.instance = new TemporalService();
         }
         return TemporalService.instance;
@@ -26,7 +29,7 @@ export class TemporalService {
                 accessToken: process.env.UNIPILE_ACCESS_TOKEN!,
             }
 
-            if(!unipileConfig.dns || !unipileConfig.accessToken){
+            if (!unipileConfig.dns || !unipileConfig.accessToken) {
                 throw new Error("Missing Unipile DNS or Key")
             }
 
@@ -45,8 +48,31 @@ export class TemporalService {
         }
     }
 
-    public async startCampaign() {
+    public async startCampaign(campaignId: string) {
+        const campaign = await this.campaignService.getCampaignById(campaignId)
+        if (!campaign) {
+            throw new DisplayError("Workflow not found");
+        }
+        if (!campaign.organization_id) {
+            throw new DisplayError("Organization not found");
+        }
+        if (!campaign.sender_account) {
+            throw new DisplayError("Sender account not found");
+        }
+        if (!campaign.prospect_list) {
+            throw new DisplayError("Prospect list not found");
+        }
 
+        const campaignInput: CampaignOrchestratorInput = {
+            campaignId,
+            organizationId: campaign.organization_id,
+            accountId: campaign.sender_account,
+            leadListId: campaign.prospect_list,
+            maxConcurrentLeads: campaign.leads_per_day || 0
+        }
+
+        const handle = await this.temporalClient.startWorkflowCampaign(campaignInput);
+        return handle;
     }
 
     public async runTestWorkflow(input: { message: string; delay?: number; iterations?: number }) {
@@ -59,7 +85,7 @@ export class TemporalService {
 
             const handle = await client.workflow.start(testWorkflow, {
                 args: [input],
-                taskQueue: 'clento-outreach-queue',
+                taskQueue: 'campaign-task-queue', // ✅ Must match worker
                 workflowId,
             });
 
@@ -97,5 +123,46 @@ export class TemporalService {
             });
             throw error;
         }
+    }
+
+    /**
+     * Get list of active campaign workflows
+     * This is now only for monitoring - workers handle execution automatically
+     */
+    public async getActiveCampaignWorkflows() {
+        const client = this.temporalClient.getClient();
+
+        const query = `WorkflowType = 'parentWorkflow' AND TaskQueue = 'campaign-task-queue' AND ExecutionStatus = 'Running'`;
+
+        const listIterable = client.workflow.list({ query });
+
+        const workflows = [];
+        for await (const wf of listIterable) {
+            workflows.push(wf);
+        }
+
+        logger.info(`Found ${workflows.length} active campaign workflow(s)`, {
+            count: workflows.length,
+            workflowIds: workflows.map(wf => wf.workflowId),
+        });
+
+        return workflows;
+    }
+
+    /**
+     * Get campaign statistics
+     */
+    public async getCampaignStats() {
+        const activeWorkflows = await this.getActiveCampaignWorkflows();
+
+        return {
+            activeCampaigns: activeWorkflows.length,
+            workflows: activeWorkflows.map(wf => ({
+                workflowId: wf.workflowId,
+                runId: wf.runId,
+                startTime: wf.startTime,
+                status: wf.status,
+            })),
+        };
     }
 }

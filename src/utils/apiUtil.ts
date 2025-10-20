@@ -23,6 +23,10 @@ declare global {
 
 export const isNullOrUndefined = (it: any) => it === null || it === undefined;
 
+export const CheckNever = (value: never): never => {
+    throw new Error(`Unhandled case: ${value}`)
+}
+
 export default abstract class ClentoAPI {
 
     public abstract path: string;

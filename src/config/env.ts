@@ -34,6 +34,9 @@ const envSchema = z.object({
   // Logging
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'http', 'debug']).default('info'),
   DEBUG_LOGS: z.string().transform(val => val === 'true').default('false'),
+  // Temporal Worker Configuration
+  ENABLE_TEMPORAL_WORKER: z.string().transform(val => val === 'true').default('true'),
+  TEMPORAL_WORKER_COUNT: z.string().transform(val => parseInt(val, 10)).default('1'),
 });
 
 // Parse and validate environment variables

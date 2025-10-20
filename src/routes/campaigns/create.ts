@@ -1,87 +1,27 @@
-import ClentoAPI from '../../utils/apiUtil';
 import { Request, Response } from 'express';
-import { DisplayError, NotFoundError } from '../../errors/AppError';
+import { CampaignStatus, CreateCampaignDto, UpdateCampaignDto } from '../../dto/campaigns.dto';
+import { DisplayError } from '../../errors/AppError';
 import { CampaignService } from '../../services/CampaignService';
-import { CreateCampaignDto, UpdateCampaignDto } from '../../dto/campaigns.dto';
-import '../../utils/expressExtensions'; // Import extensions
 import { StorageService } from '../../services/StorageService';
+import {
+    DelayUnit,
+    EAction,
+    EApproach,
+    ECallToAction,
+    EFocus,
+    EFormality,
+    EIntention,
+    ELanguage,
+    EMessageLength,
+    EPathType,
+    EPersonalization,
+    ETone,
+    EWorkflowNodeType,
+    WorkflowJson
+} from '../../types/workflow.types';
+import ClentoAPI from '../../utils/apiUtil';
+import '../../utils/expressExtensions'; // Import extensions
 
-// Enums
-export enum EAction {
-    action = "action",
-    addStep = "addStep"
-}
-
-export enum EWorkflowNodeType {
-    profile_visit = 'profile_visit',
-    like_post = 'like_post',
-    follow_profile = 'follow_profile',
-    comment_post = 'comment_post',
-    send_invite = 'send_invite',
-    send_followup = 'send_followup',
-    withdraw_request = 'withdraw_request',
-    send_inmail = 'send_inmail',
-    follow_company = 'follow_company',
-    send_connection_request = 'send_connection_request'
-}
-
-export type EPathType = 'accepted' | 'not-accepted'
-
-export enum EMessageLength {
-    short = 'short',
-    medium = 'medium',
-    long = 'long'
-}
-
-export enum ETone {
-    professional = 'professional',
-    friendly = 'friendly',
-    casual = 'casual',
-    enthusiastic = 'enthusiastic',
-    supportive = 'supportive',
-    cold = 'cold',
-    moderate = 'moderate',
-    warm = 'warm'
-}
-
-export enum ELanguage {
-    english = 'english',
-    spanish = 'spanish',
-    french = 'french',
-    german = 'german',
-    portuguese = 'portuguese'
-}
-
-export enum EFormality {
-    casual = 'casual',
-    approachable = 'approachable',
-    professional = 'professional'
-};
-export enum EApproach {
-    direct = 'direct',
-    diplomatic = 'diplomatic',
-    indirect = 'indirect'
-}
-
-export enum EFocus {
-    personal = 'personal',
-    relational = 'relational',
-    business = 'business'
-}
-export enum EIntention {
-    networking = 'networking',
-    partnership = 'partnership',
-    collaboration = 'collaboration'
-}
-export enum ECallToAction {
-    strong = 'strong',
-    confident = 'confident',
-    subtle = 'subtle'
-}
-export enum EPersonalization {
-    specific = 'specific',
-    generic = 'generic'
-}
 
 
 /**
@@ -110,7 +50,7 @@ class CreateCampaignAPI extends ClentoAPI {
             const senderAccount = detail.getParamAsString("senderAccount");
             const prospectList = detail.getParamAsString("prospectList");
             const startDate = detail.getParamAsString("startDate");
-            const endDate = detail.getParamAsString("endDate");
+            const leadsPerDay = detail.getParamAsNumber("leadsPerDay");
             const startTime = detail.getParamAsString("startTime");
             const endTime = detail.getParamAsString("endTime");
             const timezone = detail.getParamAsString("timezone");
@@ -221,7 +161,7 @@ class CreateCampaignAPI extends ClentoAPI {
                 let delayDataDelay, delayDataUnit;
                 if (delayData) {
                     delayDataDelay = delayData.getParamAsString("delay", false);
-                    delayDataUnit = delayData.getParamAsString("unit", false);
+                    delayDataUnit = delayData.getParamAsType<DelayUnit>('string', 'unit', false);
                 }
                 return {
                     id: it.getParamAsString("id"),
@@ -249,20 +189,21 @@ class CreateCampaignAPI extends ClentoAPI {
                 sender_account: senderAccount,
                 prospect_list: prospectList,
                 start_date: startDate,
-                end_date: endDate,
+                leads_per_day: leadsPerDay,
                 start_time: startTime,
                 end_time: endTime,
-                timezone
+                timezone,
+                status: CampaignStatus.IN_PROGRESS
             }
 
             const campaign = await this.campaignService.createCampaign(campaignCreateDto);
-            const worflowJson = {
+            const worflowJson: WorkflowJson = {
                 nodes,
                 edges
             }
             if (campaign) {
                 await this.storageService.uploadJson(worflowJson, organizationId, `${campaign.id}.json`, this.bucketName);
-            }else{
+            } else {
                 throw new DisplayError("Error while creating the campaign")
             }
 

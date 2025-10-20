@@ -1,17 +1,28 @@
 import { PostHostedAuthLinkInput, SupportedProvider, UnipileClient } from 'unipile-node-sdk';
-import { ExternalAPIError, ServiceUnavailableError } from '../errors/AppError';
-import logger from '../utils/logger';
 import env from '../config/env';
+import { ExternalAPIError, ServiceUnavailableError } from '../errors/AppError';
+import { WorkflowNodeConfig } from '../types/workflow.types';
+import logger from '../utils/logger';
 
-interface UnipileRequest {
-    type: 'create' | 'reconnect';
-    expiresOn: string;
-    api_url: string;
-    providers: string[];
-    success_redirect_url?: string;
-    failure_redirect_url?: string;
-    notify_url?: string;
-    name?: string;
+export interface UnipileError {
+    error:{
+        body: {
+            title: string,
+            detail: string,
+            instance: string,
+            type: string,
+            status: number,
+            connectionParams?: {
+                imap_host: string,
+                imap_encryption: string,
+                imap_port: number,
+                imap_user: string,
+                smtp_host: string,
+                smtp_port: number,
+                smtp_user: string
+            }
+        }
+    }
 }
 /**
  * Unipile integration service for managing external accounts using Unipile Node SDK
@@ -275,28 +286,13 @@ export class UnipileService {
     /**
      * Get own profile from connected account using SDK
      */
-    async getOwnProfile(accountId: string): Promise<any> {
+    async getOwnProfile(accountId: string) {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
 
         try {
-            logger.info('=== UNIPILE SDK: Getting own profile ===', {
-                accountId,
-                sdkMethod: 'client.users.getOwnProfile',
-                apiUrl: env.UNIPILE_DNS
-            });
-
-            const profile = await UnipileService.client.users.getOwnProfile(accountId);
-
-            logger.info('=== UNIPILE SDK: Profile retrieved successfully ===', {
-                accountId,
-                profileKeys: Object.keys(profile || {}),
-                hasEmail: !!(profile && typeof profile === 'object' && 'email' in profile),
-                hasName: !!(profile && typeof profile === 'object' && ('first_name' in profile || 'last_name' in profile || 'full_name' in profile)),
-                profileData: profile
-            });
-
+            const profile = await UnipileService.client.users.getOwnProfile(accountId)
             return profile;
         } catch (error: any) {
             logger.error('=== UNIPILE SDK: Profile fetch failed ===', {
@@ -308,9 +304,6 @@ export class UnipileService {
                 errorDetail: error && typeof error === 'object' && 'body' in error && error.body && typeof error.body === 'object' && 'detail' in error.body ? error.body.detail : undefined,
                 sdkMethod: 'client.users.getOwnProfile'
             });
-
-            // Re-throw the original error so the caller can handle specific error types
-            throw error;
         }
     }
 
@@ -337,13 +330,51 @@ export class UnipileService {
 
             logger.info('Message sent via SDK', {
                 accountId: params.accountId,
-                attendeesCount: params.attendeesIds.length
+                attendeesCount: params.attendeesIds.length,
+                text: params.text,
+                options: params.options,
             });
 
             return response;
         } catch (error) {
             logger.error('Error sending message via SDK', { error, params });
             throw new ExternalAPIError('Failed to send message');
+        }
+    }
+
+    async generateAiText(params: {
+        config: WorkflowNodeConfig;
+        author: string;
+    }): Promise<string> {
+        //@TODO Rishabh Need to implement AI
+        const text = 'WSUP ';
+        return text;
+    }
+
+    async sendFollowUp(params: {
+        accountId: string;
+        linkedInUrn: string;
+        config: WorkflowNodeConfig;
+    }): Promise<any> {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        let message: string | null = null;
+        if(params.config.useAI) {
+            message = await this.generateAiText({ config: params.config, author: params.linkedInUrn });
+        } else {
+            message = params.config.customMessage || null;
+        }
+        try {
+            const response = await this.sendMessage({
+                accountId: params.accountId,
+                attendeesIds: [params.linkedInUrn],
+                text: message || 'Wsup wsup wsup',
+            });
+            return response;
+        } catch (error) {
+            logger.error('Error sending follow up via SDK', { error, params });
+            throw error;
         }
     }
 
@@ -374,7 +405,7 @@ export class UnipileService {
             return response;
         } catch (error) {
             logger.error('Error sending LinkedIn invitation via SDK', { error, params });
-            throw new ExternalAPIError('Failed to send LinkedIn invitation');
+            throw error;
         }
     }
 
@@ -385,16 +416,15 @@ export class UnipileService {
         accountId: string;
         identifier: string;
         notify?: boolean;
-    }): Promise<any> {
+    }) {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
-
         try {
             const response = await UnipileService.client.users.getProfile({
                 account_id: params.accountId,
                 identifier: params.identifier,
-                linkedin_sections: '*',
+                linkedin_sections: 'about',
                 notify: params.notify || true,
             });
 
@@ -405,8 +435,42 @@ export class UnipileService {
 
             return response;
         } catch (error) {
-            logger.error('Error visiting LinkedIn profile via SDK', { error, params });
-            throw new ExternalAPIError('Failed to visit LinkedIn profile');
+            logger.error('Error visiting LinkedIn profile via SDK', { error });
+            throw error;
+        }
+    }
+
+    async getRecentPosts(params: {
+        accountId: string,
+        linkedInUrn: string,
+        lastDays: number
+    }) {
+        if (!UnipileClient) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const response = await UnipileService.client?.users.getAllPosts({
+                account_id: params.accountId,
+                identifier: params.linkedInUrn,
+                limit: 5
+            });
+            // Filter posts to only those created within the last X days
+            if (Array.isArray(response?.items)) {
+                const now = new Date();
+                const daysAgo = params.lastDays ?? 7;
+                const cutoffDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+
+                response.items = response.items.filter((post: any) => {
+                    // Accept posts that have a valid parsed_datetime within the window
+                    if (!post.parsed_datetime) return false;
+                    const postDate = new Date(post.parsed_datetime);
+                    return postDate >= cutoffDate && postDate <= now;
+                });
+            }
+            const filteredPosts = response?.items
+            return filteredPosts;
+        } catch (error) {
+            throw error
         }
     }
 
@@ -415,60 +479,178 @@ export class UnipileService {
      */
     async likeLinkedInPost(params: {
         accountId: string;
-        postId: string;
+        linkedInUrn: string;
+        lastDays: number;
         reactionType?: string;
-    }): Promise<any> {
+    }) {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
 
         try {
+            const posts = await this.getRecentPosts({
+                accountId: params.accountId,
+                linkedInUrn: params.linkedInUrn,
+                lastDays: params.lastDays
+            });
+
+            const postToLikeFull = posts?.getRandom();
+            const postToLike = postToLikeFull?.id;
+
+            if (!postToLike) {
+                console.log('No post to like');
+                return;
+            }
+
             const response = await UnipileService.client.users.sendPostReaction({
                 account_id: params.accountId,
-                post_id: params.postId,
+                post_id: postToLike,
                 reaction_type: (params.reactionType === 'like' || params.reactionType === 'celebrate' || params.reactionType === 'support' || params.reactionType === 'love' || params.reactionType === 'insightful' || params.reactionType === 'funny') ? params.reactionType : 'like',
             });
-
             logger.info('LinkedIn post liked via SDK', {
                 accountId: params.accountId,
-                postId: params.postId
+                linkedInUrn: params.linkedInUrn
             });
+            return response
 
-            return response;
+
         } catch (error) {
-            logger.error('Error liking LinkedIn post via SDK', { error, params });
-            throw new ExternalAPIError('Failed to like LinkedIn post');
+            throw error
         }
     }
 
+    async generateAtComment(params: {
+        config: WorkflowNodeConfig;
+        author: string
+    }) {
+        //@TODO Rishabh Need to implement AI
+        const text = 'Great Info ' + params.author;
+        return text;
+    }
     /**
      * Comment on LinkedIn post using SDK
      */
     async commentLinkedInPost(params: {
         accountId: string;
-        postId: string;
-        text: string;
+        linkedInUrn: string;
+        config: WorkflowNodeConfig;
     }): Promise<any> {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
 
+        const posts = await this.getRecentPosts({
+            accountId: params.accountId,
+            linkedInUrn: params.linkedInUrn,
+            lastDays: params.config.recentPostDays || 7
+        });
+
+        const postToComment = posts?.getRandom();
+        const postToCommentId = postToComment?.id;
+
+        console.log(postToComment);
+
+        const authorName = postToComment?.author;
+
+        const text = params.config.useAI
+            ? await this.generateAtComment({ config: params.config, author: authorName?.name || '' })
+            : params.config.customComment
+                ? params.config.customComment.split('{{first_name}}').join(authorName?.name || '')
+                : await this.generateAtComment({ config: params.config, author: authorName?.name || '' });
+
+        if (!postToCommentId) {
+            return { success: false, message: 'Post to comment not found' };
+        }
+
         try {
             const response = await UnipileService.client.users.sendPostComment({
                 account_id: params.accountId,
-                post_id: params.postId,
-                text: params.text,
+                post_id: postToCommentId,
+                text: text,
             });
 
             logger.info('LinkedIn post commented via SDK', {
                 accountId: params.accountId,
-                postId: params.postId
+                postId: postToCommentId
             });
 
             return response;
         } catch (error) {
             logger.error('Error commenting on LinkedIn post via SDK', { error, params });
-            throw new ExternalAPIError('Failed to comment on LinkedIn post');
+            throw error;
+        }
+    }
+
+    async withdrawLinkedInInvitationRequest(params: {
+        accountId: string;
+        providerId: string;
+    }): Promise<any> {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const invitation = await UnipileService.client.users.getAllInvitationsSent({
+                account_id: params.accountId
+            });
+            const invitationId = invitation.items?.find(item => item.invited_user_id === params.providerId)?.id;
+            if (!invitationId) {
+                return { success: false, message: 'Invitation ID not found' };
+            }
+            const response = await UnipileService.client.users.cancelInvitationSent({
+                account_id: params.accountId,
+                invitation_id: invitationId,
+            });
+
+            logger.info('LinkedIn invitation request withdrawn via SDK', {
+                accountId: params.accountId,
+                invitationId: invitationId
+            });
+
+            return response;
+        } catch (error) {
+            logger.error('Error withdrawing LinkedIn invitation request via SDK', { error, params });
+            throw error;
+        }
+    }
+
+    async isConnected(params: {
+        accountId: string;
+        identifier: string;
+    }): Promise<any> {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const result = await UnipileService.client.users.getAllRelations({
+                account_id: params.accountId
+            });
+            const relation = result.items?.find(item => item.public_identifier === params.identifier);
+            return relation ? true : false;
+        } catch (error) {
+            logger.error('Error checking if connected via SDK', { error, params });
+            throw error;
+        }
+    }
+
+    /**
+     * Check if an invitation is still pending for a specific user
+     */
+    async isInvitationPending(params: {
+        accountId: string;
+        providerId: string;
+    }): Promise<boolean> {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const invitation = await UnipileService.client.users.getAllInvitationsSent({
+                account_id: params.accountId
+            });
+            const invitationExists = invitation.items?.some(item => item.invited_user_id === params.providerId);
+            return invitationExists || false;
+        } catch (error) {
+            logger.error('Error checking invitation status via SDK', { error, params });
+            throw error;
         }
     }
 
@@ -503,7 +685,7 @@ export class UnipileService {
             return response;
         } catch (error) {
             logger.error('Error sending email via SDK', { error, params });
-            throw new ExternalAPIError('Failed to send email');
+            throw error;
         }
     }
 

@@ -1,6 +1,17 @@
-import { Client, Connection, WorkflowHandle } from '@temporalio/client';
+import { Client, Connection, WorkflowClient, WorkflowHandle } from '@temporalio/client';
 import logger from '../../utils/logger';
 import { getTemporalConfig, getTemporalConnectionOptions } from '../config/temporal.config';
+import { parentWorkflow } from '../workflows/parentWorkflow';
+
+export interface CampaignOrchestratorInput {
+    campaignId: string;
+    organizationId: string;
+    accountId: string;
+    leadListId: string;
+    maxConcurrentLeads?: number;
+    leadProcessingDelay?: number;
+}
+
 
 export class TemporalClientService {
     private static instance: TemporalClientService;
@@ -8,7 +19,7 @@ export class TemporalClientService {
     private connection: Connection | null = null;
     private config = getTemporalConfig();
 
-    private constructor() {}
+    private constructor() { }
 
     public static getInstance(): TemporalClientService {
         if (!TemporalClientService.instance) {
@@ -30,7 +41,6 @@ export class TemporalClientService {
             logger.info('Initializing Temporal client connection');
 
             // Create connection
-            const ConnectionConfig = getTemporalConnectionOptions()
             this.connection = await Connection.connect(getTemporalConnectionOptions());
 
             // Create client
@@ -65,7 +75,30 @@ export class TemporalClientService {
         return this.client;
     }
 
-    public async startCampaign() {
-        
+    public async startWorkflowCampaign(input: CampaignOrchestratorInput): Promise<WorkflowHandle | undefined> {
+        try {
+            logger.info('Starting workflow campaign', { input });
+
+            // Ensure client is initialized
+            if (!this.client?.workflow) {
+                await this.initialize();
+            }
+
+            const handle = await this.client?.workflow.start(parentWorkflow, {
+                args: [input],
+                taskQueue: 'campaign-task-queue',
+                workflowId: `campaign-${input.campaignId}`,
+            });
+
+            logger.info('Workflow campaign started', {
+                workflowId: handle?.workflowId,
+                runId: handle?.firstExecutionRunId
+            });
+
+            return handle;
+        } catch (error) {
+            logger.error('Failed to start workflow campaign', { error });
+            throw error;
+        }
     }
 }
