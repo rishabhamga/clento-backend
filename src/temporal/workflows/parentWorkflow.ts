@@ -121,7 +121,7 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
 
             // Add random delay between 10-30 minutes before starting each lead (except the first one)
             if (i > 0) {
-                const randomMinutes = Math.floor(Math.random() * 21) + 10; // Random between 10-30 minutes
+                const randomMinutes = Math.floor(Math.random() * 21); // Random between 10-30 minutes
                 log.info('Waiting before starting next lead', {
                     leadId: lead.id,
                     delayMinutes: randomMinutes,

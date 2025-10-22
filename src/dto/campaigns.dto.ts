@@ -36,6 +36,7 @@ export const CreateCampaignStepDto = z.object({
   campaign_id: z.string().uuid('Invalid campaign ID format'),
   organization_id: z.string().uuid('Invalid organization ID format'),
   step_index: z.number().int().min(0, 'Step index must be non-negative'),
+  lead_id: z.string().uuid('Invalid lead ID format'),
   type: z.nativeEnum(EWorkflowNodeType),
   config: z.record(z.any()).nullable().optional(),
   success: z.boolean().default(false),
@@ -52,8 +53,9 @@ export const UpdateCampaignStepDto = z.object({
 
 export const CampaignStepResponseDto = z.object({
   id: z.string().uuid(),
-  campaign_id: z.string().uuid(),
-  organization_id: z.string().uuid(),
+  campaign_id: z.string().uuid('Invalid campaign ID format'),
+  organization_id: z.string().uuid('Invalid organization ID format'),
+  lead_id: z.string().uuid('Invalid lead ID format'),
   step_index: z.number().int(),
   type: z.nativeEnum(EWorkflowNodeType),
   config: z.record(z.any()).nullable(),

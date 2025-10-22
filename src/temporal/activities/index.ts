@@ -2,7 +2,7 @@ import { CampaignResponseDto, CampaignStatus, CampaignStepResponseDto, CreateCam
 import { LeadInsertDto, LeadListResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
 import { CampaignService } from "../../services/CampaignService";
 import { ConnectedAccountService } from "../../services/ConnectedAccountService";
-import { CsvLead, CsvParseResult } from "../../services/CsvService";
+import { CsvLead, CsvParseResult, CsvService } from "../../services/CsvService";
 import { LeadListService } from "../../services/LeadListService";
 import { LeadService } from "../../services/LeadService";
 import { UnipileError, UnipileService } from "../../services/UnipileService";
@@ -563,7 +563,8 @@ export async function updateCampaignStep(
     success: boolean,
     results: Record<string, any>,
     stepIndex: number,
-    organizationId: string
+    organizationId: string,
+    leadId: string
 ): Promise<ActivityResult> {
     logger.info('updateCampaignStep', { campaignId, stepType, success, stepIndex });
 
@@ -577,14 +578,15 @@ export async function updateCampaignStep(
             return { success: false, message: 'Campaign not found' };
         }
 
-        const step = steps.find((s: CampaignStepResponseDto) => s.step_index === stepIndex);
+        const step = steps.find((s: CampaignStepResponseDto) => s.step_index === stepIndex && s.lead_id === leadId);
         if (step) {
-            logger.info('Step already exists', { stepId: step.id, stepIndex });
-            return { success: true, message: 'Step already exists' };
+            logger.info('Step already exists for this lead', { stepId: step.id, stepIndex, leadId });
+            return { success: true, message: 'Step already exists for this lead' };
         }
 
         // Create new step record - only store what exists
         const newStep: CreateCampaignStepDto = {
+            lead_id: leadId,
             type: stepType,
             config: config || {},
             result: results || null,
@@ -626,3 +628,7 @@ export function CheckNever(value: never): never {
 }
 
 export const isNullOrUndefined = (it: any) => it === null || it === undefined;
+
+export async function extractLinkedInPublicIdentifier(url: string): Promise<string | null> {
+    return CsvService.extractLinkedInPublicIdentifier(url);
+}

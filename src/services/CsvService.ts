@@ -315,6 +315,43 @@ export class CsvService {
   }
 
   /**
+   * Extract LinkedIn public identifier from URL
+   * Handles URLs with and without trailing slashes
+   * Examples:
+   * - 'https://www.linkedin.com/in/jason-segall-694a6583/' -> 'jason-segall-694a6583'
+   * - 'https://www.linkedin.com/in/jason-segall-694a6583' -> 'jason-segall-694a6583'
+   */
+  public static extractLinkedInPublicIdentifier(url: string): string | null {
+    try {
+      const urlObj = new URL(url);
+
+      // Check if it's a LinkedIn URL
+      if (!urlObj.hostname.includes('linkedin.com')) {
+        return null;
+      }
+
+      // Extract pathname and remove leading/trailing slashes
+      let pathname = urlObj.pathname.replace(/^\/+|\/+$/g, '');
+
+      // Handle /in/ pattern for personal profiles
+      if (pathname.startsWith('in/')) {
+        const identifier = pathname.substring(3); // Remove 'in/' prefix
+        return identifier || null;
+      }
+
+      // Handle /company/ pattern for company profiles
+      if (pathname.startsWith('company/')) {
+        const identifier = pathname.substring(8); // Remove 'company/' prefix
+        return identifier || null;
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Validate email format
    */
   private static isValidEmail(email: string): boolean {
@@ -344,7 +381,10 @@ export class CsvService {
   //@TODO yash complete this after setting up authentication
   static async getPreviewFromUnipile(parseResult: CsvParseResult, maxRows: number = 5, accountId: string){
       const leads = parseResult.data.slice(0, maxRows);
-      const publicIdentifiers = leads.map(it => it.linkedin_url.split("/").pop());
+
+      const publicIdentifiers = leads.map(lead =>
+        CsvService.extractLinkedInPublicIdentifier(lead.linkedin_url)
+      ).filter(identifier => identifier !== null);
 
       // Create a map of identifier to lead data
       const leadMap = new Map();

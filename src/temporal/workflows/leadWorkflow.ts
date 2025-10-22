@@ -23,7 +23,8 @@ const {
     updateLead,
     verifyUnipileAccount,
     pauseCampaign,
-    updateCampaignStep
+    updateCampaignStep,
+    extractLinkedInPublicIdentifier
 } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
@@ -63,12 +64,19 @@ function getDelayMs(edge: WorkflowEdge): number {
 
 async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResponseDto, campaignId: string, workflow: WorkflowJson, index: number): Promise<ActivityResult | null> {
     const type = node.data.type;
-    const config = node.data.config || {};
-    const identifier = lead.linkedin_url?.split('/').pop();
-    if(!identifier){
-        return {success: false, message: 'Identifier not found so skipping the node'}
+    const config = node.data.config ?? {};
+    let identifier: string;
+
+    try {
+        const extractedIdentifier = await extractLinkedInPublicIdentifier(lead.linkedin_url!);
+        if (!extractedIdentifier) {
+            return {success: false, message: 'Invalid linkedin_url: Could not extract identifier'};
+        }
+        identifier = extractedIdentifier as string;
+    } catch (error) {
+        log.error('Failed to extract public identifier from linkedin_url', { linkedin_url: lead.linkedin_url, error });
+        return {success: false, message: 'Invalid linkedin_url: Failed to extract identifier'};
     }
-    // const identifier = 'rishabh-amga-1938a819a'
 
     let result: ActivityResult | null = null;
 
@@ -246,7 +254,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
     if (result && type) {
         log.info('Recording step execution', {step: `step-${index}`, nodeId: node.id, type, success: result.success });
 
-        await updateCampaignStep(campaignId, type, config, result.success, result.data, index, lead.organization_id);
+        await updateCampaignStep(campaignId, type, config, result.success, result.data, index, lead.organization_id, lead.id);
     }
 
     return result;
