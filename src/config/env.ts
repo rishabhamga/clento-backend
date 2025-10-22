@@ -20,8 +20,8 @@ const envSchema = z.object({
   CLERK_WEBHOOK_SECRET: z.string().min(1, 'Clerk Webhook Secret is required'),
 
   // Unipile Integration
-  UNIPILE_API_URL: z.string().default('https://api.unipile.com/v1'),
-  UNIPILE_API_KEY: z.string().optional(),
+  UNIPILE_DNS: z.string().default('https://api.unipile.com/v1'),
+  UNIPILE_ACCESS_TOKEN: z.string().optional(),
 
   // Google Cloud Storage (optional for development)
   GOOGLE_CLOUD_PROJECT_ID: z.string().optional(),
@@ -34,6 +34,9 @@ const envSchema = z.object({
   // Logging
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'http', 'debug']).default('info'),
   DEBUG_LOGS: z.string().transform(val => val === 'true').default('false'),
+  // Temporal Worker Configuration
+  ENABLE_TEMPORAL_WORKER: z.string().transform(val => val === 'true').default('true'),
+  TEMPORAL_WORKER_COUNT: z.string().transform(val => parseInt(val, 10)).default('1'),
 });
 
 // Parse and validate environment variables

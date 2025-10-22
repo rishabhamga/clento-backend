@@ -1,18 +1,20 @@
-import 'express-async-errors';
-import express from 'express';
 import cors from 'cors';
+import express from 'express';
+import 'express-async-errors';
 import helmet from 'helmet';
-import multer from 'multer';
-import env from './config/env';
-import logger from './utils/logger';
-import { errorHandler } from './middleware/errorHandler';
-import { setupSwagger } from './config/swagger';
-import supabase from './config/supabase';
-import registerAllRoutes from './utils/registerRoutes';
 import morgan from 'morgan';
-import './utils/expressExtensions'; // Import express extensions
+import multer from 'multer';
 import path from 'path';
-import { ConnectedAccountService } from './services/ConnectedAccountService';
+import env from './config/env';
+import supabase from './config/supabase';
+import { setupSwagger } from './config/swagger';
+import { errorHandler } from './middleware/errorHandler';
+import { TemporalService } from './services/TemporalService';
+import { WorkerManager } from './temporal/worker';
+import './utils/expressExtensions'; // Import express extensions
+import './utils/arrayExtensions'; // Import array extensions globally
+import logger from './utils/logger';
+import registerAllRoutes from './utils/registerRoutes';
 
 // Create Express application
 const app = express();
@@ -85,19 +87,87 @@ const startServer = async () => {
     // Initialize Supabase connection
     await supabase.initSupabase();
 
+    // Initialize Temporal service
+    let workerManager: WorkerManager | null = null;
+    try {
+      const temporalService = TemporalService.getInstance();
+      await temporalService.initialize();
+      logger.info('Temporal service initialized successfully');
+
+      // Start Temporal worker if enabled
+      if (env.ENABLE_TEMPORAL_WORKER) {
+        workerManager = WorkerManager.getInstance();
+        const workerCount = env.TEMPORAL_WORKER_COUNT || 1;
+
+        if (workerCount > 1) {
+          await workerManager.startMultipleWorkers(workerCount);
+        } else {
+          await workerManager.startWorker();
+        }
+
+        logger.info('✅ Temporal worker(s) started successfully', {
+          workerCount,
+          maxConcurrentCampaigns: 50 * workerCount, // Based on worker config
+        });
+      } else {
+        logger.info('Temporal workers disabled by configuration');
+      }
+
+      // Log active campaigns for monitoring
+      const stats = await temporalService.getCampaignStats();
+      logger.info('Campaign statistics', stats);
+    } catch (temporalError) {
+      logger.error('Failed to initialize Temporal service', {
+        error: temporalError instanceof Error ? temporalError.message : String(temporalError),
+        stack: temporalError instanceof Error ? temporalError.stack : undefined,
+        name: temporalError instanceof Error ? temporalError.name : undefined,
+        cause: temporalError instanceof Error ? temporalError.cause : undefined,
+        fullError: temporalError
+      });
+      logger.info('Server will continue without Temporal functionality');
+    }
+
     // Start server
     const server = app.listen(env.PORT, () => {
-      logger.info(`Server running on port ${env.PORT} in ${env.NODE_ENV} mode`);
-      logger.info(`API documentation available at http://localhost:${env.PORT}/api-docs`);
+      logger.info(`🚀 Server running on port ${env.PORT} in ${env.NODE_ENV} mode`);
+      logger.info(`📚 API documentation available at http://localhost:${env.PORT}/api-docs`);
+
+      if (workerManager?.isWorkerRunning()) {
+        logger.info('⚡ Temporal workers are running and processing campaigns');
+      }
     });
+
+    // Graceful shutdown handler
+    const gracefulShutdown = async (signal: string) => {
+      logger.info(`${signal} received, starting graceful shutdown...`);
+
+      try {
+        // Stop accepting new connections
+        server.close(() => {
+          logger.info('HTTP server closed');
+        });
+
+        // Shutdown Temporal workers gracefully
+        if (workerManager) {
+          await workerManager.shutdown();
+        }
+
+        logger.info('✅ Graceful shutdown completed');
+        process.exit(0);
+      } catch (error) {
+        logger.error('Error during graceful shutdown', { error });
+        process.exit(1);
+      }
+    };
+
+    // Handle shutdown signals
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
     // Handle unhandled promise rejections
     process.on('unhandledRejection', (err: Error) => {
       logger.error('Unhandled Rejection:', err);
-      // Close server and exit process
-      server.close(() => {
-        process.exit(1);
-      });
+      gracefulShutdown('UNHANDLED_REJECTION');
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

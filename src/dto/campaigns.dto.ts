@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import id from 'zod/v4/locales/id.js';
+import { EWorkflowNodeType } from '../types/workflow.types';
 
 // Workflow Step Schema
 const WorkflowStepSchema = z.object({
@@ -11,6 +13,56 @@ const WorkflowStepSchema = z.object({
   error_handling: z.enum(['skip', 'retry', 'stop']).default('skip'),
 });
 
+export enum CampaignStatus {
+  DRAFT = 'DRAFT',
+  SCHEDULED = 'SCHEDULED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  PAUSED = 'PAUSED',
+}
+
+export const CampaignStepDto = z.object({
+    id: z.string(),
+    type: z.nativeEnum(EWorkflowNodeType),
+    config: z.record(z.any()).default({}),
+    executed_at: z.string().datetime(),
+    results: z.record(z.any()).default({}),
+    success: z.boolean()
+})
+
+// Campaign Step DTOs for the campaign_steps table
+export const CreateCampaignStepDto = z.object({
+  campaign_id: z.string().uuid('Invalid campaign ID format'),
+  organization_id: z.string().uuid('Invalid organization ID format'),
+  step_index: z.number().int().min(0, 'Step index must be non-negative'),
+  lead_id: z.string().uuid('Invalid lead ID format'),
+  type: z.nativeEnum(EWorkflowNodeType),
+  config: z.record(z.any()).nullable().optional(),
+  success: z.boolean().default(false),
+  result: z.record(z.any()).nullable().optional(),
+});
+
+export const UpdateCampaignStepDto = z.object({
+  step_index: z.number().int().min(0, 'Step index must be non-negative').optional(),
+  type: z.nativeEnum(EWorkflowNodeType).optional(),
+  config: z.record(z.any()).nullable().optional(),
+  success: z.boolean().optional(),
+  result: z.record(z.any()).nullable().optional(),
+});
+
+export const CampaignStepResponseDto = z.object({
+  id: z.string().uuid(),
+  campaign_id: z.string().uuid('Invalid campaign ID format'),
+  organization_id: z.string().uuid('Invalid organization ID format'),
+  lead_id: z.string().uuid('Invalid lead ID format'),
+  step_index: z.number().int(),
+  type: z.nativeEnum(EWorkflowNodeType),
+  config: z.record(z.any()).nullable(),
+  success: z.boolean(),
+  result: z.record(z.any()).nullable(),
+  created_at: z.string().datetime(),
+});
 // Campaign DTOs
 export const CreateCampaignDto = z.object({
   organization_id: z.string().uuid().nullable().optional(),
@@ -19,13 +71,17 @@ export const CreateCampaignDto = z.object({
   sender_account: z.string().nullable().optional(),
   prospect_list: z.string().nullable().optional(),
   start_date: z.string().date().nullable().optional(),
-  end_date: z.string().date().nullable().optional(),
+  leads_per_day: z.number().nullable().optional(),
   start_time: z.string().nullable().optional(), // time without time zone
   end_time: z.string().nullable().optional(), // time without time zone
   timezone: z.string().nullable().optional(),
   file_name: z.string().nullable().optional(),
   bucket: z.string().nullable().optional(),
-  is_deleted: z.boolean().default(false).optional()
+  is_deleted: z.boolean().default(false).optional(),
+  status: z.nativeEnum(CampaignStatus).default(CampaignStatus.DRAFT),
+  steps: z.object({
+    steps: z.array(CampaignStepDto).default([]).optional().nullable()
+  }).optional().nullable()
 });
 
 export const UpdateCampaignDto = z.object({
@@ -34,13 +90,17 @@ export const UpdateCampaignDto = z.object({
   sender_account: z.string().nullable().optional(),
   prospect_list: z.string().nullable().optional(),
   start_date: z.string().date().nullable().optional(),
-  end_date: z.string().date().nullable().optional(),
+  leads_per_day: z.number().nullable().optional(),
   start_time: z.string().nullable().optional(), // time without time zone
   end_time: z.string().nullable().optional(), // time without time zone
   timezone: z.string().nullable().optional(),
   file_name: z.string().nullable().optional(),
   bucket: z.string().nullable().optional(),
-  is_deleted: z.boolean().default(false).optional()
+  is_deleted: z.boolean().default(false).optional(),
+  status: z.nativeEnum(CampaignStatus).optional(),
+  steps: z.object({
+    steps: z.array(CampaignStepDto).default([]).optional().nullable()
+  }).optional().nullable()
 });
 
 /**
@@ -54,7 +114,7 @@ export const CampaignResponseDto = z.object({
   sender_account: z.string().nullable(),
   prospect_list: z.string().nullable(),
   start_date: z.string().date().nullable(),
-  end_date: z.string().date().nullable(),
+  leads_per_day: z.number().nullable().optional(),
   start_time: z.string().nullable(), // time without time zone
   end_time: z.string().nullable(), // time without time zone
   timezone: z.string().nullable(),
@@ -62,7 +122,11 @@ export const CampaignResponseDto = z.object({
   bucket: z.string().nullable(),
   created_at: z.string().datetime().nullable(),
   updated_at: z.string().datetime().nullable(),
-  is_deleted: z.boolean().default(false).optional()
+  is_deleted: z.boolean().default(false).optional(),
+  status: z.nativeEnum(CampaignStatus).default(CampaignStatus.DRAFT),
+  steps: z.object({
+    steps: z.array(CampaignStepDto).default([]).optional().nullable()
+  }).optional().nullable()
 });
 
 export const CampaignQueryDto = z.object({
@@ -76,26 +140,6 @@ export const CampaignQueryDto = z.object({
   start_date_to: z.string().date().optional(),
   created_from: z.string().date().optional(),
   created_to: z.string().date().optional(),
-});
-
-// Campaign Control DTOs
-export const StartCampaignDto = z.object({
-  start_immediately: z.boolean().default(false),
-  scheduled_start: z.string().datetime().optional(),
-});
-
-export const PauseCampaignDto = z.object({
-  reason: z.string().max(500).optional(),
-});
-
-export const ResumeCampaignDto = z.object({
-  resume_immediately: z.boolean().default(true),
-  scheduled_resume: z.string().datetime().optional(),
-});
-
-export const StopCampaignDto = z.object({
-  reason: z.string().max(500).optional(),
-  complete_current_executions: z.boolean().default(true),
 });
 
 // Campaign Analytics DTO
@@ -182,10 +226,10 @@ export type CreateCampaignDto = z.infer<typeof CreateCampaignDto>;
 export type UpdateCampaignDto = z.infer<typeof UpdateCampaignDto>;
 export type CampaignResponseDto = z.infer<typeof CampaignResponseDto>;
 export type CampaignQueryDto = z.infer<typeof CampaignQueryDto>;
-export type StartCampaignDto = z.infer<typeof StartCampaignDto>;
-export type PauseCampaignDto = z.infer<typeof PauseCampaignDto>;
-export type ResumeCampaignDto = z.infer<typeof ResumeCampaignDto>;
-export type StopCampaignDto = z.infer<typeof StopCampaignDto>;
+export type CampaignStepDto = z.infer<typeof CampaignStepDto>;
+export type CreateCampaignStepDto = z.infer<typeof CreateCampaignStepDto>;
+export type UpdateCampaignStepDto = z.infer<typeof UpdateCampaignStepDto>;
+export type CampaignStepResponseDto = z.infer<typeof CampaignStepResponseDto>;
 export type CampaignAnalyticsDto = z.infer<typeof CampaignAnalyticsDto>;
 export type CampaignExecutionQueryDto = z.infer<typeof CampaignExecutionQueryDto>;
 export type UpdateCampaignExecutionDto = z.infer<typeof UpdateCampaignExecutionDto>;
