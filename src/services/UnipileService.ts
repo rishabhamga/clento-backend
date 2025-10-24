@@ -705,6 +705,20 @@ export class UnipileService {
         }
     }
 
+    async getChat(accountId: string, chatId: string) {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const response = await UnipileService.client.messaging.getAllMessagesFromChat({
+                chat_id: chatId
+            });
+            return response;
+        }catch(error){
+            logger.error('Error getting chat via SDK', { error, accountId, chatId });
+        }
+    }
+
     /**
      * Get supported providers
      */

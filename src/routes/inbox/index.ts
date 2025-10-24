@@ -63,6 +63,7 @@ class DashboardAPI extends ClentoAPI {
         const inboxWithAccounts = inbox?.items.map(it => {
             const attendee = attendesMap.get(it?.attendee_provider_id || '');
             return {
+                id: it.id,
                 name: it.name,
                 folder: it.folder,
                 unread_count: it.unread_count,
@@ -93,6 +94,20 @@ class DashboardAPI extends ClentoAPI {
             }))
         });
     };
+    public POST = async (req: Request, res: Response) => {
+        const orgId = req.organization?.id;
+        const reqBody = req.getBody();
+        const chatId = reqBody.getParamAsString('chat_id');
+        const accountId = reqBody.getParamAsString('account_id');
+
+        const account = await this.connectedAccountService.getAccountById(accountId);
+
+        const chat = await this.unipileService.getChat(account.provider_account_id, chatId);
+
+        return res.sendOKResponse({
+            chat
+        })
+    }
 }
 
 export default new DashboardAPI();
