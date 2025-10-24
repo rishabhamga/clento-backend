@@ -392,7 +392,7 @@ export class CsvService {
         leadMap.set(identifier, leads[index]);
       });
 
-      let leadsFromLinkedin = [];
+      let leadsFromLinkedin: any[] = [];
       if (accountId) {
         try {
           const unipileService = new UnipileService();

@@ -93,9 +93,9 @@ export class CampaignService {
         try {
             const recentSteps = await this.campaignStepRepository.getRecentCampaignStepsByOrgIdAndDays(organization_id, days)
             const stats ={
-                success_rate: (recentSteps.filter(step => step.success).length * 100) / recentSteps.length,
+                success_rate: ((recentSteps.filter(step => step.success).length * 100) / recentSteps.length).toFixed(2),
                 requests_sent: recentSteps.filter(step => step.type === EWorkflowNodeType.send_connection_request).length,
-                total_steps: recentSteps.length
+                total_steps: recentSteps.length,
             }
             return stats
         } catch (error) {
