@@ -4,67 +4,49 @@ import * as path from 'path';
 import ClentoAPI from './apiUtil';
 
 /**
- * Recursively require all files in a directory and return API instances
+ * Recursively require all route files from a folder.
+ * @param folderPath absolute path (use path.join(__dirname, 'routes'))
  */
-const requireDirectory = (dirPath: string): Record<string, ClentoAPI> => {
-    const routes: Record<string, ClentoAPI> = {};
+export const requireDirectory = <T>(folderPath: string): { [key: string]: T } => {
+    const returningMap: { [key: string]: T } = {};
 
-    const readDirectory = (currentPath: string, prefix = '') => {
-        const items = fs.readdirSync(currentPath);
+    fs.readdirSync(folderPath).forEach((file) => {
+        const filePath = path.join(folderPath, file);
 
-        for (const item of items) {
-            const itemPath = path.join(currentPath, item);
-            const stat = fs.statSync(itemPath);
+        // Load only runtime files: .js (compiled) or .ts (source), but never .d.ts
+        const isJs = file.endsWith('.js');
+        const isTs = file.endsWith('.ts') && !file.endsWith('.d.ts');
 
-            if (stat.isDirectory()) {
-                // Recursively read subdirectories
-                readDirectory(itemPath, prefix ? `${prefix}_${item}` : item);
-            } else if (item.endsWith('.ts') || item.endsWith('.js')) {
-                // Skip index files and test files
-                if (item === 'index.js' || item.includes('.test.') || item.includes('.spec.')) {
-                    continue;
-                }
-
-                try {
-                    const modulePath = itemPath;
-                    const module = require(modulePath);
-                    const apiInstance = module.default;
-
-                    if (apiInstance && apiInstance instanceof ClentoAPI) {
-                        const routeName = prefix ? `${prefix}_${item.replace(/\.(ts|js)$/, '')}` : item.replace(/\.(ts|js)$/, '');
-                        routes[routeName] = apiInstance;
-                    }
-                } catch (error: any) {
-                    console.warn(`Failed to load route from ${itemPath}:`, error.message);
-                }
-            }
+        if (isJs || isTs) {
+            const relativeFilePath = path.relative(__dirname, filePath);
+            const required = require(filePath).default;
+            returningMap[file.replace(/\.(ts|js)$/i, '')] = required;
+        } else if (fs.lstatSync(filePath).isDirectory()) {
+            const innerFiles = requireDirectory<T>(filePath);
+            Object.keys(innerFiles).forEach((innerKey) => {
+                returningMap[`${file}/${innerKey}`] = innerFiles[innerKey];
+            });
         }
-    };
+    });
 
-    readDirectory(dirPath);
-    return routes;
+    return returningMap;
 };
 
 /**
- * Register all routes from a directory with the Express app
+ * Registers all routes automatically.
  */
 const registerAllRoutes = (app: Application, routesFolder: string) => {
-    const routes = requireDirectory(routesFolder);
+    const routes = requireDirectory<ClentoAPI>(routesFolder);
     const allPaths = new Set<string>();
 
-    Object.keys(routes).forEach((route: string) => {
-        const clentoAPI = routes[route];
-
-        if (!clentoAPI || !clentoAPI.path) {
-            throw new Error(`Not a valid API file for routes folder = '${route}'`);
-        }
+    Object.values(routes).forEach((clentoAPI) => {
+        if (!(clentoAPI instanceof ClentoAPI)) return;
 
         if (allPaths.has(clentoAPI.path)) {
             throw new Error(`Double registration of route with path = '${clentoAPI.path}'`);
         }
         allPaths.add(clentoAPI.path);
 
-        // Register all HTTP methods with the API wrapper
         app.get(clentoAPI.path, clentoAPI.wrapper);
         app.post(clentoAPI.path, clentoAPI.wrapper);
         app.put(clentoAPI.path, clentoAPI.wrapper);
@@ -72,7 +54,7 @@ const registerAllRoutes = (app: Application, routesFolder: string) => {
         app.head(clentoAPI.path, clentoAPI.wrapper);
         app.options(clentoAPI.path, clentoAPI.wrapper);
 
-        console.log(`✅ Registered route: ${clentoAPI.path}`);
+        console.log(`✅ Registered: ${clentoAPI.path}`);
     });
 
     console.log(`🚀 Total routes registered: ${allPaths.size}`);
