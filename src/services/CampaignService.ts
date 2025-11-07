@@ -93,7 +93,14 @@ export class CampaignService {
         try {
             const recentSteps = await this.campaignStepRepository.getRecentCampaignStepsByOrgIdAndDays(organization_id, days)
             const stats ={
-                success_rate: ((recentSteps.filter(step => step.success).length * 100) / recentSteps.length).toFixed(2),
+                success_rate: (() => {
+                    const sent = recentSteps.length;
+                    const rate = sent > 0
+                        ? ((recentSteps.filter(step => step.success).length * 100) / sent)
+                        : 0;
+                    const fixed = Number.isFinite(rate) ? rate.toFixed(2) : "0";
+                    return fixed;
+                })(),
                 requests_sent: recentSteps.filter(step => step.type === EWorkflowNodeType.send_connection_request).length,
                 total_steps: recentSteps.length,
             }
