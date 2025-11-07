@@ -28,8 +28,10 @@ app.use(helmet());
 const corsOptions = {
   origin: env.NODE_ENV === 'development'
     ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-        // Allow all localhost origins in development
-        if (!origin || origin.match(/^http:\/\/localhost:\d+$/)) {
+        // Allow all localhost origins and app.clento.ai in development
+        if (!origin ||
+            origin.match(/^http:\/\/localhost:\d+$/) ||
+            origin === 'https://app.clento.ai') {
           callback(null, true);
         } else {
           callback(new Error('Not allowed by CORS'));

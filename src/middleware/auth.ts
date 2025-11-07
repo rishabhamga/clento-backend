@@ -26,7 +26,7 @@ declare global {
         avatar_url?: string;
         timezone?: string;
       };
-      organization?: {
+      organization: {
         id: string;
         name: string;
         slug?: string;

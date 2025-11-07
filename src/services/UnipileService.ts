@@ -5,7 +5,7 @@ import { WorkflowNodeConfig } from '../types/workflow.types';
 import logger from '../utils/logger';
 
 export interface UnipileError {
-    error:{
+    error: {
         body: {
             title: string,
             detail: string,
@@ -263,7 +263,7 @@ export class UnipileService {
     /**
      * Get user profile from connected account using SDK
      */
-    async getUserProfile(accountId: string, identifier: string): Promise<any> {
+    async getUserProfile(accountId: string, identifier: string) {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
@@ -279,7 +279,7 @@ export class UnipileService {
             return profile;
         } catch (error) {
             logger.error('Error getting user profile via SDK', { error, accountId, identifier });
-            throw new ExternalAPIError('Failed to retrieve user profile');
+            return null;
         }
     }
 
@@ -360,7 +360,7 @@ export class UnipileService {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
         let message: string | null = null;
-        if(params.config.useAI) {
+        if (params.config.useAI) {
             message = await this.generateAiText({ config: params.config, author: params.linkedInUrn });
         } else {
             message = params.config.customMessage || null;
@@ -686,6 +686,36 @@ export class UnipileService {
         } catch (error) {
             logger.error('Error sending email via SDK', { error, params });
             throw error;
+        }
+    }
+    async getInbox(accountId: string, limit?: number, cursor?: string) {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const response = await UnipileService.client.messaging.getAllChats({
+                account_id: accountId,
+                limit: limit,
+                cursor: cursor
+            });
+            return response;
+        } catch (error) {
+            logger.error('Error getting inbox via SDK', { error, accountId, limit, cursor });
+            throw error;
+        }
+    }
+
+    async getChat(accountId: string, chatId: string) {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const response = await UnipileService.client.messaging.getAllMessagesFromChat({
+                chat_id: chatId
+            });
+            return response;
+        }catch(error){
+            logger.error('Error getting chat via SDK', { error, accountId, chatId });
         }
     }
 
