@@ -202,8 +202,7 @@ export class LeadListService {
   ): Promise<LeadListResponseDto> {
     try {
       // Verify lead list exists and belongs to organization
-      const tempOrgId = '550e8400-e29b-41d4-a716-446655440001'
-      await this.getLeadListById(leadListId, tempOrgId);
+      await this.getLeadListById(leadListId, organizationId);
 
       // Check for disallowed fields - only allow name and connected_account_id updates
       const allowedFields = ['name', 'connected_account_id'];
