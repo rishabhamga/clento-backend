@@ -1,7 +1,7 @@
 import ClentoAPI from '../../utils/apiUtil';
 import { LeadListService } from '../../services/LeadListService';
 import { Request, Response } from 'express';
-import { DisplayError, NotFoundError, ValidationError } from '../../errors/AppError';
+import { DisplayError, NotFoundError } from '../../errors/AppError';
 import '../../utils/expressExtensions';
 
 /**
@@ -100,7 +100,7 @@ export default new LeadListPublishAPI();
  *                 description: ID of the connected account to use for outreach
  *               csv_data:
  *                 type: string
- *                 description: CSV data as string (maximum size: 10MB)
+ *                 description: 'CSV data as string (maximum size: 10MB)'
  *               mapping:
  *                 type: object
  *                 additionalProperties:
@@ -142,7 +142,7 @@ export default new LeadListPublishAPI();
  *                 message:
  *                   type: string
  *       400:
- *          description: Bad request - invalid data (e.g., file size exceeds 10MB limit)
+ *         description: Bad request - invalid data (e.g., file size exceeds 10MB limit)
  *       404:
  *         description: Organization or user not found
  *       422:

@@ -22,4 +22,11 @@ export class LeadService {
         const lead =  await this.leadRepository.update(id, data);
         return lead
     }
+
+    public async getRecentLeads(organizationId: string) {
+        const leads = await this.leadRepository.findByOrganizationId(organizationId, {
+            limit: 10
+        });
+        return leads
+    }
 }
