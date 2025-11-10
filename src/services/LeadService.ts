@@ -25,7 +25,7 @@ export class LeadService {
 
     public async getRecentLeads(organizationId: string) {
         const leads = await this.leadRepository.findByOrganizationId(organizationId, {
-            limit: 10
+            limit: 20
         });
         return leads
     }
