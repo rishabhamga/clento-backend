@@ -1,9 +1,6 @@
 import { log, proxyActivities, sleep, startChild } from "@temporalio/workflow";
 import type * as activities from "../activities";
-import { leadWorkflow } from "./leadWorkflow";
-import { UnipileService } from "../../services/UnipileService";
-import { ConnectedAccountService } from "../../services/ConnectedAccountService";
-import logger from "../../utils/logger";
+import { ActivityResult, leadWorkflow } from "./leadWorkflow";
 import { CampaignStatus } from "../../dto/campaigns.dto";
 // IMPORTANT DO NOT IMPORT ANYTHING ELSE HERE EVERY ACTIVITY IS TO BE DONE VIA ACTIVITIES
 
@@ -34,7 +31,7 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
     // Get initial campaign data
     const campaign = await getCampaignById(campaignId);
 
-    if(campaign?.is_deleted){
+    if (campaign?.is_deleted) {
         log.warn('Campaign is deleted', { campaignId });
         await pauseCampaign(campaignId);
         return;
@@ -76,13 +73,13 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
             log.error("No Campaign Found")
             return
         }
-        if(campaign?.status === CampaignStatus.PAUSED){
+        if (campaign?.status === CampaignStatus.PAUSED) {
             log.warn('Campaign is paused', { campaignId });
             await sleep('1 hour');
             continue;
         }
 
-        if(campaign?.is_deleted){
+        if (campaign?.is_deleted) {
             log.warn('Campaign is deleted', { campaignId });
             await pauseCampaign(campaignId);
             return;
@@ -93,7 +90,7 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
         }
         const unipileAccount = await verifyUnipileAccount(campaignFetch.sender_account);
 
-        if(!unipileAccount){
+        if (!unipileAccount) {
             log.error("No Unipile Account Found")
             await pauseCampaign(campaignId);
             return;
