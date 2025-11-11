@@ -342,12 +342,17 @@ export class UnipileService {
         }
     }
 
+    /**
+     * Generate AI text for messages (placeholder)
+     * TODO: Implement actual AI generation
+     */
     async generateAiText(params: {
         config: WorkflowNodeConfig;
         author: string;
     }): Promise<string> {
-        //@TODO Rishabh Need to implement AI
-        const text = 'WSUP ';
+        // Placeholder AI generation - returns hardcoded value for now
+        // This will be replaced with actual AI generation later
+        const text = 'Hey just saw your work great stuff lets connect?';
         return text;
     }
 
@@ -359,17 +364,25 @@ export class UnipileService {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
+
+        // Use configureWithAI (from frontend) instead of useAI
         let message: string | null = null;
-        if (params.config.useAI) {
+        if (params.config.configureWithAI) {
             message = await this.generateAiText({ config: params.config, author: params.linkedInUrn });
         } else {
             message = params.config.customMessage || null;
         }
+
+        // Default fallback message if neither AI nor custom message is provided
+        if (!message) {
+            message = 'Hey just saw your work great stuff lets connect?';
+        }
+
         try {
             const response = await this.sendMessage({
                 accountId: params.accountId,
                 attendeesIds: [params.linkedInUrn],
-                text: message || 'Wsup wsup wsup',
+                text: message,
             });
             return response;
         } catch (error) {
@@ -384,17 +397,31 @@ export class UnipileService {
     async sendLinkedInInvitation(params: {
         accountId: string;
         providerId: string;
-        message?: string;
+        config: WorkflowNodeConfig;
     }): Promise<any> {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
+        }
+
+        // Generate message based on config
+        let message: string | undefined;
+
+        if (params.config.useAI) {
+            // AI generation - placeholder function with hardcoded value
+            message = this.generateConnectionRequestMessage(params.config);
+        } else if (params.config.customMessage) {
+            // Use custom message from user
+            message = params.config.customMessage;
+        } else {
+            // Default fallback message
+            message = 'Hey just saw your work great stuff lets connect?';
         }
 
         try {
             const response = await UnipileService.client.users.sendInvitation({
                 account_id: params.accountId,
                 provider_id: params.providerId,
-                message: params.message,
+                message: message,
             });
 
             logger.info('LinkedIn invitation sent via SDK', {
@@ -407,6 +434,16 @@ export class UnipileService {
             logger.error('Error sending LinkedIn invitation via SDK', { error, params });
             throw error;
         }
+    }
+
+    /**
+     * Generate connection request message using AI (placeholder)
+     * TODO: Implement actual AI generation
+     */
+    private generateConnectionRequestMessage(config: WorkflowNodeConfig): string {
+        // Placeholder AI generation - returns hardcoded value for now
+        // This will be replaced with actual AI generation later
+        return 'Hey just saw your work great stuff lets connect?';
     }
 
     /**
@@ -519,11 +556,16 @@ export class UnipileService {
         }
     }
 
+    /**
+     * Generate comment using AI (placeholder)
+     * TODO: Implement actual AI generation
+     */
     async generateAtComment(params: {
         config: WorkflowNodeConfig;
         author: string
     }) {
-        //@TODO Rishabh Need to implement AI
+        // Placeholder AI generation - returns hardcoded value for now
+        // This will be replaced with actual AI generation later
         const text = 'Great Info ' + params.author;
         return text;
     }
@@ -552,11 +594,18 @@ export class UnipileService {
 
         const authorName = postToComment?.author;
 
-        const text = params.config.useAI
-            ? await this.generateAtComment({ config: params.config, author: authorName?.name || '' })
-            : params.config.customComment
-                ? params.config.customComment.split('{{first_name}}').join(authorName?.name || '')
-                : await this.generateAtComment({ config: params.config, author: authorName?.name || '' });
+        // Use configureWithAI (from frontend) instead of useAI
+        let text: string;
+        if (params.config.configureWithAI) {
+            // AI generation - placeholder function with hardcoded value
+            text = await this.generateAtComment({ config: params.config, author: authorName?.name || '' });
+        } else if (params.config.customComment) {
+            // Use custom comment from user, replace variables
+            text = params.config.customComment.split('{{first_name}}').join(authorName?.name || '');
+        } else {
+            // Default fallback message if neither AI nor custom comment is provided
+            text = 'Great post! Thanks for sharing.';
+        }
 
         if (!postToCommentId) {
             return { success: false, message: 'Post to comment not found' };

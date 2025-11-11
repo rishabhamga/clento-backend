@@ -160,7 +160,7 @@ export async function profile_visit(accountId: string, identifier: string, campa
 
 }
 
-export async function like_post(accountId: string, identifier: string, lastDays: number, campaignId: string): Promise<ActivityResult> {
+export async function like_post(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<ActivityResult> {
     logger.info('like_post');
     const unipileService = new UnipileService();
 
@@ -174,7 +174,7 @@ export async function like_post(accountId: string, identifier: string, lastDays:
         const result = await unipileService.likeLinkedInPost({
             accountId: accountId,
             linkedInUrn: leadAccount.providerId,
-            lastDays: lastDays,
+            lastDays: config?.recentPostDays || 7,
             reactionType: 'like'
         });
     } catch (error: any) {
@@ -381,7 +381,7 @@ export async function isConnected(accountId: string, identifier: string, campaig
     }
 }
 
-export async function send_connection_request(accountId: string, identifier: string, message: string, campaignId: string): Promise<ActivityResult> {
+export async function send_connection_request(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<ActivityResult> {
     logger.info('send_connection_request - Starting');
     const unipileService = new UnipileService();
 
@@ -408,7 +408,7 @@ export async function send_connection_request(accountId: string, identifier: str
         const invitationResult = await unipileService.sendLinkedInInvitation({
             accountId: accountId,
             providerId: providerId,
-            message: message
+            config: config
         });
 
         console.log(invitationResult);
