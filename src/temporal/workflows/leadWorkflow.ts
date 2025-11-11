@@ -208,36 +208,67 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
             const outgoingEdges = workflow.edges.filter((edge: WorkflowEdge) => edge.source === node.id);
             const rejectedEdge = outgoingEdges.find((edge: WorkflowEdge) => edge.data?.isConditionalPath === true && edge.data?.isPositive === false);
 
-            // Default values if no edge configuration found
-            let maxAttempts = 240; // 10 days * 24 hours (default)
-            let pollInterval = '1 hour'; // default
+            // Default values: 10 days = 240 hours, check every hour
+            let totalWaitDurationMs = 10 * 24 * 60 * 60 * 1000; // 10 days in milliseconds (default)
+            let pollIntervalMs = 60 * 60 * 1000; // 1 hour in milliseconds (default)
+            let pollInterval = '1 hour'; // Temporal sleep format
 
-            if (rejectedEdge?.data?.delayData) {
-                const delayMs = getDelayMs(rejectedEdge);
-                if (delayMs > 0) {
-                    // Convert delay to polling configuration
-                    const delayHours = delayMs / (1000 * 60 * 60);
-                    maxAttempts = Math.floor(delayHours);
-                    pollInterval = `${Math.max(1, Math.floor(delayHours / maxAttempts))} hour`;
+            // If edge has delayData, use it to calculate total wait time
+            if (rejectedEdge?.data?.delayData?.delay && rejectedEdge?.data?.delayData?.unit) {
+                const edgeDelayMs = getDelayMs(rejectedEdge);
+                if (edgeDelayMs > 0) {
+                    totalWaitDurationMs = edgeDelayMs;
+
+                    // Calculate polling interval based on total wait time
+                    // Poll every hour, but if total wait is less than a day, poll more frequently
+                    if (totalWaitDurationMs < 24 * 60 * 60 * 1000) {
+                        // Less than 1 day: poll every 15 minutes
+                        pollIntervalMs = 15 * 60 * 1000;
+                        pollInterval = '15 minutes';
+                    } else if (totalWaitDurationMs < 7 * 24 * 60 * 60 * 1000) {
+                        // Less than 7 days: poll every 30 minutes
+                        pollIntervalMs = 30 * 60 * 1000;
+                        pollInterval = '30 minutes';
+                    } else {
+                        // 7+ days: poll every hour
+                        pollIntervalMs = 60 * 60 * 1000;
+                        pollInterval = '1 hour';
+                    }
                 }
             }
+
+            // Calculate number of polling attempts needed
+            const maxAttempts = Math.ceil(totalWaitDurationMs / pollIntervalMs);
+            const totalDays = totalWaitDurationMs / (24 * 60 * 60 * 1000);
 
             log.info('Connection request sent, starting polling', {
                 accountId,
                 identifier,
                 providerId,
-                maxAttempts,
+                totalWaitDurationMs,
+                totalWaitDays: totalDays,
+                pollIntervalMs,
                 pollInterval,
+                maxAttempts,
                 delayFromEdge: rejectedEdge?.data?.delayData
             });
-            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+
+            // Wait and poll for connection status
+            let attempt = 0;
+            let elapsedTimeMs = 0;
+
+            while (elapsedTimeMs < totalWaitDurationMs) {
+                attempt++;
+
                 // Check campaign status before each polling attempt
                 const isActive = await checkCampaignStatus(lead.campaign_id);
                 if (!isActive) {
                     log.warn('Campaign is no longer active during connection polling - stopping', {
                         campaignId: lead.campaign_id,
                         attempt,
-                        maxAttempts
+                        elapsedTimeMs,
+                        totalWaitDurationMs,
+                        elapsedDays: elapsedTimeMs / (24 * 60 * 60 * 1000)
                     });
                     result = {
                         success: false,
@@ -251,20 +282,61 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                     break;
                 }
 
-                // Wait before checking (use configured interval)
-                log.info('Waiting before next status check', {
-                    attempt,
-                    maxAttempts,
-                    waitTime: pollInterval
-                });
-                await sleep(pollInterval);
+                // Calculate remaining wait time
+                const remainingTimeMs = totalWaitDurationMs - elapsedTimeMs;
+                const waitTimeMs = Math.min(pollIntervalMs, remainingTimeMs);
+
+                // Convert to Temporal sleep format
+                let sleepDuration: string;
+                if (waitTimeMs >= 3600000) {
+                    // Hours
+                    sleepDuration = `${Math.floor(waitTimeMs / 3600000)} hours`;
+                } else if (waitTimeMs >= 60000) {
+                    // Minutes
+                    sleepDuration = `${Math.floor(waitTimeMs / 60000)} minutes`;
+                } else if (waitTimeMs >= 1000) {
+                    // Seconds
+                    sleepDuration = `${Math.floor(waitTimeMs / 1000)} seconds`;
+                } else {
+                    // Less than 1 second, skip to status check
+                    sleepDuration = '0 seconds';
+                }
+
+                if (waitTimeMs > 0) {
+                    log.info('Waiting before next status check', {
+                        attempt,
+                        maxAttempts,
+                        waitTime: sleepDuration,
+                        elapsedTimeMs,
+                        elapsedDays: elapsedTimeMs / (24 * 60 * 60 * 1000),
+                        remainingTimeMs,
+                        remainingDays: remainingTimeMs / (24 * 60 * 60 * 1000)
+                    });
+                    await sleep(sleepDuration);
+                    elapsedTimeMs += waitTimeMs;
+                }
+
+                // Only check status if we haven't exceeded total wait time
+                if (elapsedTimeMs >= totalWaitDurationMs) {
+                    log.info('Total wait time elapsed, performing final status check', {
+                        accountId,
+                        identifier,
+                        totalWaitDurationMs,
+                        totalWaitDays: totalDays,
+                        elapsedTimeMs
+                    });
+                }
 
                 log.info('Checking connection status (activity call)', {
                     accountId,
                     identifier,
                     providerId,
                     attempt,
-                    maxAttempts
+                    maxAttempts,
+                    elapsedTimeMs,
+                    elapsedDays: elapsedTimeMs / (24 * 60 * 60 * 1000),
+                    remainingTimeMs: totalWaitDurationMs - elapsedTimeMs,
+                    remainingDays: (totalWaitDurationMs - elapsedTimeMs) / (24 * 60 * 60 * 1000)
                 });
 
                 // Call activity to check status
@@ -272,18 +344,23 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
 
                 // Check if accepted
                 if (statusResult.success && statusResult.data?.status === 'accepted') {
+                    const elapsedHours = elapsedTimeMs / (60 * 60 * 1000);
+                    const elapsedDays = elapsedTimeMs / (24 * 60 * 60 * 1000);
                     log.info('Connection request ACCEPTED!', {
                         accountId,
                         identifier,
                         attemptNumber: attempt,
-                        hoursWaited: attempt
+                        elapsedTimeMs,
+                        elapsedHours,
+                        elapsedDays
                     });
                     result = {
                         success: true,
-                        message: `Connection request accepted after ${attempt} hour(s)`,
+                        message: `Connection request accepted after ${elapsedDays.toFixed(1)} day(s)`,
                         data: {
                             connected: true,
-                            hoursWaited: attempt,
+                            hoursWaited: elapsedHours,
+                            daysWaited: elapsedDays,
                             status: 'accepted'
                         }
                     };
@@ -292,49 +369,72 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
 
                 // Check if rejected
                 if (statusResult.data?.status === 'rejected') {
+                    const elapsedHours = elapsedTimeMs / (60 * 60 * 1000);
+                    const elapsedDays = elapsedTimeMs / (24 * 60 * 60 * 1000);
                     log.warn('Connection request REJECTED!', {
                         accountId,
                         identifier,
                         attemptNumber: attempt,
-                        hoursWaited: attempt
+                        elapsedTimeMs,
+                        elapsedHours,
+                        elapsedDays
                     });
                     result = {
                         success: false,
-                        message: `Connection request rejected after ${attempt} hour(s)`,
+                        message: `Connection request rejected after ${elapsedDays.toFixed(1)} day(s)`,
                         data: {
                             connected: false,
-                            hoursWaited: attempt,
+                            hoursWaited: elapsedHours,
+                            daysWaited: elapsedDays,
                             status: 'rejected'
                         }
                     };
                     break;
                 }
 
-                // Still pending, continue polling
+                // Still pending, continue polling if we haven't exceeded total wait time
+                if (elapsedTimeMs >= totalWaitDurationMs) {
+                    log.info('Total wait time reached, connection still pending', {
+                        accountId,
+                        identifier,
+                        totalWaitDurationMs,
+                        totalWaitDays: totalDays,
+                        elapsedTimeMs
+                    });
+                    break;
+                }
+
                 log.info('Connection request still pending, continuing to poll', {
                     accountId,
                     identifier,
                     attempt,
-                    remainingAttempts: maxAttempts - attempt
+                    maxAttempts,
+                    elapsedTimeMs,
+                    elapsedDays: elapsedTimeMs / (24 * 60 * 60 * 1000),
+                    remainingTimeMs: totalWaitDurationMs - elapsedTimeMs,
+                    remainingDays: (totalWaitDurationMs - elapsedTimeMs) / (24 * 60 * 60 * 1000)
                 });
             }
 
-            // Timeout after 10 days if result not set
+            // Timeout after total wait duration if result not set
             if (!result) {
-                log.warn('Connection request TIMEOUT - 10 days elapsed', {
+                log.warn('Connection request TIMEOUT - total wait time elapsed', {
                     accountId,
                     identifier,
-                    totalDays: 10,
-                    totalAttempts: maxAttempts
+                    totalWaitDurationMs,
+                    totalWaitDays: totalDays,
+                    totalAttempts: attempt,
+                    elapsedTimeMs
                 });
                 result = {
                     success: false,
-                    message: 'Connection request not accepted within 10 days (timeout)',
+                    message: `Connection request not accepted within ${totalDays.toFixed(1)} day(s) (timeout)`,
                     data: {
                         connected: false,
                         timeoutReached: true,
                         status: 'timeout',
-                        daysWaited: 10
+                        daysWaited: totalDays,
+                        hoursWaited: totalDays * 24
                     }
                 };
             }
