@@ -5,6 +5,7 @@ declare global {
         forEachAsyncParallel: (fn: (arg0: T, idx?: number) => Promise<any>) => Promise<void>;
         getRandom: () => T;
         mapAsyncOneByOne: <U>(fn: (arg0: T, idx?: number) => Promise<U>) => Promise<U[]>;
+        mapAsyncParallel: <U>(fn: (arg0: T, idx?: number) => Promise<U>) => Promise<U[]>;
     }
 }
 Object.defineProperty(Array.prototype, 'chunked', {
@@ -44,6 +45,12 @@ Object.defineProperty(Array.prototype, 'mapAsyncOneByOne', {
             resultSet.push(await fn(t, i++));
         }
         return resultSet;
+    }
+});
+
+Object.defineProperty(Array.prototype, 'mapAsyncParallel', {
+    value: async function (fn: any) {
+        return await Promise.all(this.map(fn));
     }
 });
 

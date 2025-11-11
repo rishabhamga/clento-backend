@@ -85,7 +85,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
             result = await profile_visit(accountId, identifier, lead.campaign_id);
             break;
         case EWorkflowNodeType.like_post:
-            result = await like_post(accountId, identifier, config?.recentPostDays || 7, lead.campaign_id);
+            result = await like_post(accountId, identifier, config || {}, lead.campaign_id);
             break;
         case EWorkflowNodeType.comment_post:
             result = await comment_post(accountId, identifier, config, lead.campaign_id);
@@ -101,7 +101,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
             break;
         case EWorkflowNodeType.send_connection_request: {
             log.info('Executing send_connection_request node', { accountId, identifier });
-            const sendResult = await send_connection_request(accountId, identifier, config?.customMessage || 'YO YO YO YO YO YO', lead.campaign_id);
+            const sendResult = await send_connection_request(accountId, identifier, config || {}, lead.campaign_id);
 
             // If request failed to send or user already connected, return immediately
             if (!sendResult.success) {
