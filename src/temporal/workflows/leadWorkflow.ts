@@ -1,6 +1,7 @@
 import { log, proxyActivities, sleep } from "@temporalio/workflow";
 import { LeadResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
 import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from "../../types/workflow.types";
+import { CampaignStatus } from "../../dto/campaigns.dto";
 import type * as activities from "../activities";
 
 // Import ActivityResult type
@@ -24,7 +25,9 @@ const {
     verifyUnipileAccount,
     pauseCampaign,
     updateCampaignStep,
-    extractLinkedInPublicIdentifier
+    extractLinkedInPublicIdentifier,
+    getCampaignById,
+    isCampaignActive
 } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
@@ -45,6 +48,82 @@ export interface LeadWorkflowInput {
     accountId: string,
     campaignId: string,
     organizationId: string
+}
+
+/**
+ * Helper function to wait for campaign to be unpaused
+ * Keeps checking campaign status until it's no longer paused
+ */
+async function waitForCampaignResume(campaignId: string): Promise<void> {
+    while (true) {
+        const campaign = await getCampaignById(campaignId);
+        if (!campaign) {
+            log.error('Campaign not found while waiting for resume', { campaignId });
+            return;
+        }
+
+        // If campaign is deleted, completed, or failed, exit
+        if (campaign.is_deleted || campaign.status === CampaignStatus.COMPLETED || campaign.status === CampaignStatus.FAILED) {
+            log.warn('Campaign is deleted, completed, or failed - stopping wait', {
+                campaignId,
+                status: campaign.status,
+                is_deleted: campaign.is_deleted
+            });
+            return;
+        }
+
+        // If campaign is not paused, resume execution
+        if (campaign.status !== CampaignStatus.PAUSED) {
+            log.info('Campaign is no longer paused - resuming execution', { campaignId, status: campaign.status });
+            return;
+        }
+
+        // Campaign is still paused, wait and check again
+        log.info('Campaign is paused - waiting before checking again', { campaignId });
+        await sleep('5 minutes'); // Check every 5 minutes
+    }
+}
+
+/**
+ * Check if campaign is paused and wait if necessary
+ * Returns true if campaign is active, false if campaign ended
+ */
+async function checkCampaignStatus(campaignId: string): Promise<boolean> {
+    const campaign = await getCampaignById(campaignId);
+    if (!campaign) {
+        log.error('Campaign not found', { campaignId });
+        return false;
+    }
+
+    // If campaign is paused, wait for resume
+    if (campaign.status === CampaignStatus.PAUSED) {
+        log.warn('Campaign is paused - waiting for resume', { campaignId });
+        await waitForCampaignResume(campaignId);
+        // Re-check after resume
+        const campaignAfterWait = await getCampaignById(campaignId);
+        if (!campaignAfterWait) {
+            return false;
+        }
+        // If still paused or ended, return false
+        if (campaignAfterWait.status === CampaignStatus.PAUSED ||
+            campaignAfterWait.status === CampaignStatus.COMPLETED ||
+            campaignAfterWait.status === CampaignStatus.FAILED ||
+            campaignAfterWait.is_deleted) {
+            return false;
+        }
+    }
+
+    // If campaign is deleted, completed, or failed, stop execution
+    if (campaign.is_deleted || campaign.status === CampaignStatus.COMPLETED || campaign.status === CampaignStatus.FAILED) {
+        log.warn('Campaign ended - stopping lead execution', {
+            campaignId,
+            status: campaign.status,
+            is_deleted: campaign.is_deleted
+        });
+        return false;
+    }
+
+    return true;
 }
 
 function getDelayMs(edge: WorkflowEdge): number {
@@ -152,6 +231,26 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                 delayFromEdge: rejectedEdge?.data?.delayData
             });
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                // Check campaign status before each polling attempt
+                const isActive = await checkCampaignStatus(lead.campaign_id);
+                if (!isActive) {
+                    log.warn('Campaign is no longer active during connection polling - stopping', {
+                        campaignId: lead.campaign_id,
+                        attempt,
+                        maxAttempts
+                    });
+                    result = {
+                        success: false,
+                        message: 'Campaign ended during connection polling',
+                        data: {
+                            connected: false,
+                            campaignEnded: true,
+                            status: 'campaign_ended'
+                        }
+                    };
+                    break;
+                }
+
                 // Wait before checking (use configured interval)
                 log.info('Waiting before next status check', {
                     attempt,
@@ -347,7 +446,43 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
             // Apply delay if specified
             const delay = getDelayMs(edge);
             if (delay > 0) {
-                await sleep(delay);
+                // Check campaign status during delay (break delay into smaller chunks)
+                const delayMs = delay;
+                const checkIntervalMs = 5 * 60 * 1000; // Check every 5 minutes
+                let remainingDelay = delayMs;
+
+                while (remainingDelay > 0) {
+                    const sleepDurationMs = Math.min(checkIntervalMs, remainingDelay);
+
+                    // Convert to Temporal sleep format
+                    let sleepDuration: string;
+                    if (sleepDurationMs >= 3600000) {
+                        // Hours
+                        sleepDuration = `${Math.floor(sleepDurationMs / 3600000)} hours`;
+                    } else if (sleepDurationMs >= 60000) {
+                        // Minutes
+                        sleepDuration = `${Math.floor(sleepDurationMs / 60000)} minutes`;
+                    } else {
+                        // Seconds
+                        sleepDuration = `${Math.floor(sleepDurationMs / 1000)} seconds`;
+                    }
+
+                    await sleep(sleepDuration);
+                    remainingDelay -= sleepDurationMs;
+
+                    // Check campaign status during delay (if there's more delay remaining)
+                    if (remainingDelay > 0) {
+                        const isActive = await checkCampaignStatus(campaignId);
+                        if (!isActive) {
+                            log.warn('Campaign ended during delay - stopping lead execution', {
+                                leadId: lead.id,
+                                campaignId: campaignId
+                            });
+                            await updateLead(leadId, { status: "Failed" });
+                            return;
+                        }
+                    }
+                }
             }
 
             // Decrease incoming count and add to queue if ready
