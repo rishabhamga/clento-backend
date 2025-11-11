@@ -5,7 +5,7 @@ import { CampaignStatus } from "../../dto/campaigns.dto";
 // IMPORTANT DO NOT IMPORT ANYTHING ELSE HERE EVERY ACTIVITY IS TO BE DONE VIA ACTIVITIES
 
 // Create activity proxies with timeout configuration
-const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkflowByCampaignId, verifyUnipileAccount, pauseCampaign } = proxyActivities<typeof activities>({
+const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkflowByCampaignId, verifyUnipileAccount, pauseCampaign, isCampaignActive } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
         initialInterval: '1s',
@@ -17,6 +17,40 @@ const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkf
 export interface CampaignInput {
     campaignId: string;
     organizationId: string;
+}
+
+/**
+ * Helper function to wait for campaign to be unpaused
+ * Keeps checking campaign status until it's no longer paused
+ */
+async function waitForCampaignResume(campaignId: string): Promise<void> {
+    while (true) {
+        const campaign = await getCampaignById(campaignId);
+        if (!campaign) {
+            log.error('Campaign not found while waiting for resume', { campaignId });
+            return;
+        }
+
+        // If campaign is deleted, completed, or failed, exit
+        if (campaign.is_deleted || campaign.status === CampaignStatus.COMPLETED || campaign.status === CampaignStatus.FAILED) {
+            log.warn('Campaign is deleted, completed, or failed - stopping wait', {
+                campaignId,
+                status: campaign.status,
+                is_deleted: campaign.is_deleted
+            });
+            return;
+        }
+
+        // If campaign is not paused, resume execution
+        if (campaign.status !== CampaignStatus.PAUSED) {
+            log.info('Campaign is no longer paused - resuming execution', { campaignId, status: campaign.status });
+            return;
+        }
+
+        // Campaign is still paused, wait and check again
+        log.info('Campaign is paused - waiting before checking again', { campaignId });
+        await sleep('5 minutes'); // Check every 5 minutes
+    }
 }
 
 /**
@@ -73,13 +107,16 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
             log.error("No Campaign Found")
             return
         }
-        if (campaign?.status === CampaignStatus.PAUSED) {
-            log.warn('Campaign is paused', { campaignId });
-            await sleep('1 hour');
+
+        // Check if campaign is paused - wait until it's unpaused
+        if (campaignFetch.status === CampaignStatus.PAUSED) {
+            log.warn('Campaign is paused - waiting for resume', { campaignId });
+            await waitForCampaignResume(campaignId);
+            // After resume, continue to next iteration to re-check campaign status
             continue;
         }
 
-        if (campaign?.is_deleted) {
+        if (campaignFetch.is_deleted) {
             log.warn('Campaign is deleted', { campaignId });
             await pauseCampaign(campaignId);
             return;
@@ -146,14 +183,41 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
 
         processedLeads += todaysLeads.length;
 
-        // If there are more leads, schedule the next batch for tomorrow (but don't wait)
+        // If there are more leads, schedule the next batch for tomorrow
         if (processedLeads < leads.length) {
             log.info('Scheduling next batch for tomorrow', {
                 campaignId,
                 nextBatchStartsAt: `Day ${Math.floor(processedLeads / leadsPerDay) + 1}`
             });
-            // Sleep until next day before starting the next batch
-            await sleep('24 hours');
+
+            // Sleep in smaller intervals and check campaign status periodically
+            // This allows the workflow to respond quickly if campaign is paused
+            const sleepInterval = '1 hour';
+            const totalSleepHours = 24;
+            for (let hour = 0; hour < totalSleepHours; hour++) {
+                await sleep(sleepInterval);
+
+                // Check campaign status every hour
+                const campaignCheck = await getCampaignById(campaignId);
+                if (campaignCheck?.status === CampaignStatus.PAUSED) {
+                    log.warn('Campaign paused during daily sleep - waiting for resume', { campaignId });
+                    await waitForCampaignResume(campaignId);
+                    // Break out of sleep loop and continue to next batch
+                    break;
+                }
+
+                // If campaign is deleted, completed, or failed, stop
+                if (campaignCheck?.is_deleted ||
+                    campaignCheck?.status === CampaignStatus.COMPLETED ||
+                    campaignCheck?.status === CampaignStatus.FAILED) {
+                    log.warn('Campaign ended during daily sleep', {
+                        campaignId,
+                        status: campaignCheck.status,
+                        is_deleted: campaignCheck.is_deleted
+                    });
+                    return;
+                }
+            }
         }
     }
 
