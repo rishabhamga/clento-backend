@@ -117,6 +117,7 @@ export async function verifyUnipileAccount(sender_account: string) {
 
 export async function profile_visit(accountId: string, identifier: string, campaignId: string): Promise<ActivityResult> {
     logger.info('profile_visit');
+    console.log('identifier', identifier, 'accountId', accountId, 'campaignId', campaignId);
     const unipileService = new UnipileService();
     try {
         const result: any = await unipileService.visitLinkedInProfile({
