@@ -3,6 +3,7 @@ import { CampaignStatus, CreateCampaignDto, UpdateCampaignDto } from '../../dto/
 import { DisplayError } from '../../errors/AppError';
 import { CampaignService } from '../../services/CampaignService';
 import { StorageService } from '../../services/StorageService';
+import { TemporalService } from '../../services/TemporalService';
 import {
     DelayUnit,
     EAction,
@@ -33,6 +34,7 @@ class CreateCampaignAPI extends ClentoAPI {
 
     private campaignService = new CampaignService();
     private storageService = new StorageService();
+    private temporalService = TemporalService.getInstance();
     private bucketName = 'campaign-flow';
     /**
      * Create new campaign
@@ -49,11 +51,11 @@ class CreateCampaignAPI extends ClentoAPI {
             const description = detail.getParamAsString("description");
             const senderAccount = detail.getParamAsString("senderAccount");
             const prospectList = detail.getParamAsString("prospectList");
-            const startDate = detail.getParamAsString("startDate");
+            const startDate = detail.getParamAsString("startDate", false); // Optional - if not provided, start immediately
             const leadsPerDay = detail.getParamAsNumber("leadsPerDay");
-            const startTime = detail.getParamAsString("startTime");
-            const endTime = detail.getParamAsString("endTime");
-            const timezone = detail.getParamAsString("timezone");
+            const startTime = detail.getParamAsString("startTime", false); // Optional
+            const endTime = detail.getParamAsString("endTime", false); // Optional
+            const timezone = detail.getParamAsString("timezone", false); // Optional
 
             //Flow
             const flow = reqBody.getParamAsNestedBody('flow');
@@ -182,18 +184,22 @@ class CreateCampaignAPI extends ClentoAPI {
                 }
             })
 
+            // Determine campaign status: if start_date is not provided, start immediately
+            const shouldStartImmediately = !startDate;
+            const campaignStatus = shouldStartImmediately ? CampaignStatus.IN_PROGRESS : CampaignStatus.SCHEDULED;
+
             const campaignCreateDto: CreateCampaignDto = {
                 organization_id: organizationId,
                 name,
                 description,
                 sender_account: senderAccount,
                 prospect_list: prospectList,
-                start_date: startDate,
                 leads_per_day: leadsPerDay,
-                start_time: startTime,
-                end_time: endTime,
-                timezone,
-                status: CampaignStatus.IN_PROGRESS
+                status: campaignStatus,
+                ...(startDate && { start_date: startDate }),
+                ...(startTime && { start_time: startTime }),
+                ...(endTime && { end_time: endTime }),
+                ...(timezone && { timezone: timezone })
             }
 
             const campaign = await this.campaignService.createCampaign(campaignCreateDto);
@@ -214,8 +220,27 @@ class CreateCampaignAPI extends ClentoAPI {
 
             await this.campaignService.updateCampaign(campaign.id, campaignUpdateDto);
 
+            // If start_date is not provided, start the campaign immediately
+            if (shouldStartImmediately) {
+                try {
+                    console.log('starting the campaign immediately', campaign.id);
+                    await this.temporalService.startCampaign(campaign.id);
+                } catch (error) {
+                    // Log error but don't fail campaign creation
+                    // Campaign is already created, user can start it manually later
+                    console.error('Failed to start campaign immediately', error);
+                }
+            }
+
             return res.sendOKResponse({
-                message: 'Campaign created successfully',
+                message: shouldStartImmediately
+                    ? 'Campaign created and started successfully'
+                    : 'Campaign created successfully',
+                data: {
+                    campaignId: campaign.id,
+                    status: campaign.status,
+                    started: shouldStartImmediately
+                }
             });
         } catch (error) {
             throw error;
