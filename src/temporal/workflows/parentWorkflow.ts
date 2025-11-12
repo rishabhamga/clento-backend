@@ -89,17 +89,30 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
 
     const dbLeads = await getDBLeads(input.campaignId);
 
+    // Use dbLeads.length instead of leads.length to avoid infinite loop if DB has fewer leads
+    const totalLeadsToProcess = dbLeads.length;
+
     log.info('Campaign initialized', {
         campaignId,
         totalLeads: leads.length,
+        dbLeadsCount: totalLeadsToProcess,
         leadsPerDay: campaign.leads_per_day
     });
+
+    // Safety check: if no leads in database, exit early
+    if (totalLeadsToProcess === 0) {
+        log.warn('No leads found in database - ending workflow', {
+            campaignId,
+            csvLeadsCount: leads.length
+        });
+        return;
+    }
 
     // Start all daily batches concurrently with delays
     const allChildWorkflowHandles: Promise<any>[] = [];
     let processedLeads = 0;
 
-    while (processedLeads < leads.length) {
+    while (processedLeads < totalLeadsToProcess) {
         // Get campaign Everyday To Catch Any Update
         const campaignFetch = await getCampaignById(campaignId);
 
@@ -137,15 +150,42 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
 
         const leadsPerDay = campaignFetch.leads_per_day || 10;
         // Get today's batch of leads (don't exceed remaining leads)
-        const remainingLeads = leads.length - processedLeads;
+        // Use totalLeadsToProcess (dbLeads.length) instead of leads.length to avoid mismatch
+        const remainingLeads = totalLeadsToProcess - processedLeads;
+
+        // Safety check: if no more leads to process, break out of loop
+        if (remainingLeads <= 0) {
+            log.info('All leads have been processed - ending workflow', {
+                campaignId,
+                processedLeads,
+                totalLeadsToProcess
+            });
+            break;
+        }
+
         const batchSize = Math.min(leadsPerDay, remainingLeads);
         const todaysLeads = dbLeads.slice(processedLeads, processedLeads + batchSize);
+
+        // Safety check: if no leads to process in batch, increment processedLeads to avoid infinite loop
+        if (todaysLeads.length === 0) {
+            log.warn('No leads found in batch slice - incrementing processedLeads to prevent infinite loop', {
+                campaignId,
+                processedLeads,
+                totalLeadsToProcess,
+                dbLeadsLength: dbLeads.length,
+                batchSize,
+                remainingLeads
+            });
+            // Increment processedLeads by batchSize to prevent infinite loop
+            processedLeads += batchSize > 0 ? batchSize : remainingLeads;
+            continue;
+        }
 
         log.info('Starting daily batch', {
             campaignId,
             batchSize: todaysLeads.length,
             processedSoFar: processedLeads,
-            totalLeads: leads.length,
+            totalLeadsToProcess,
             dayNumber: Math.floor(processedLeads / leadsPerDay) + 1
         });
 
@@ -184,7 +224,7 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
         processedLeads += todaysLeads.length;
 
         // If there are more leads, schedule the next batch for tomorrow
-        if (processedLeads < leads.length) {
+        if (processedLeads < totalLeadsToProcess) {
             log.info('Scheduling next batch for tomorrow', {
                 campaignId,
                 nextBatchStartsAt: `Day ${Math.floor(processedLeads / leadsPerDay) + 1}`
@@ -224,7 +264,7 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
     log.info('All batches started, waiting for completion', {
         campaignId,
         totalBatches: allChildWorkflowHandles.length,
-        totalLeads: leads.length
+        totalLeadsToProcess
     });
 
     // Wait for ALL child workflows to complete at the end
