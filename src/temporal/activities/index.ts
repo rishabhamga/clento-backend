@@ -124,7 +124,13 @@ export async function profile_visit(accountId: string, identifier: string, campa
             identifier: identifier,
             notify: false
         });
-        return { success: true, message: 'Profile visit completed', data: null, providerId: result?.provider_id };
+        const lead_data = {
+            first_name: result?.first_name as string,
+            last_name: result?.last_name as string,
+            company: result?.work_experience[0]?.company as string,
+        }
+        // @ts-ignore
+        return { success: true, message: 'Profile visit completed', data: null, providerId: result?.provider_id, lead_data };
     } catch (error: any) {
         const errorBody = error as UnipileError;
         if(errorBody?.error?.body?.status === 422){
@@ -258,18 +264,27 @@ export async function comment_post(accountId: string, identifier: string, config
     }
 }
 
-export async function send_followup(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<ActivityResult> {
+export async function send_followup(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string, leadData?: { first_name?: string | null; last_name?: string | null; company?: string | null }): Promise<ActivityResult> {
     logger.info('send_followup');
     const unipileService = new UnipileService();
     const leadAccount = await profile_visit(accountId, identifier, campaignId);
     if (!leadAccount.providerId) { return { success: false, message: 'Lead LinkedIn Urn not found' }; }
+
+    // Prepare template data from lead data - only first_name, last_name, and company
+    const templateData = {
+        first_name: leadData?.first_name || '',
+        last_name: leadData?.last_name || '',
+        company: leadData?.company || ''
+    };
+
     try {
         const result = await unipileService.sendFollowUp({
             accountId: accountId,
             linkedInUrn: leadAccount.providerId,
-            config: config
+            config: config,
+            templateData: templateData
         });
-        return { success: true, message: 'Follow-up message sent' };
+        return { success: true, message: 'Follow-up message sent', data: result};
     } catch (error: any) {
         const errorBody = error as UnipileError;
         if (errorBody?.error?.body?.status === 422) {
