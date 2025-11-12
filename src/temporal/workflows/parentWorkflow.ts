@@ -49,7 +49,7 @@ async function waitForCampaignResume(campaignId: string): Promise<void> {
 
         // Campaign is still paused, wait and check again
         log.info('Campaign is paused - waiting before checking again', { campaignId });
-        await sleep('5 minutes'); // Check every 5 minutes
+        await sleep('1 hour'); // Check every 1 hour
     }
 }
 
