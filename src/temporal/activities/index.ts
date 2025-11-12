@@ -268,7 +268,7 @@ export async function send_followup(accountId: string, identifier: string, confi
     logger.info('send_followup');
     const unipileService = new UnipileService();
     const leadAccount = await profile_visit(accountId, identifier, campaignId);
-    if (!leadAccount.providerId) { return { success: false, message: 'Lead LinkedIn Urn not found' }; }
+    if (!leadAccount.providerId) { return { success: false, message: 'Lead LinkedIn Urn not found', data: leadAccount }; }
 
     // Prepare template data from lead data - only first_name, last_name, and company
     const templateData = {
