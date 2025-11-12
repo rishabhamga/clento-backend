@@ -360,6 +360,11 @@ export class UnipileService {
         accountId: string;
         linkedInUrn: string;
         config: WorkflowNodeConfig;
+        templateData?: {
+            first_name?: string;
+            last_name?: string;
+            company?: string;
+        };
     }): Promise<any> {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
@@ -378,6 +383,19 @@ export class UnipileService {
             message = 'Hey just saw your work great stuff lets connect?';
         }
 
+        // Replace template variables in message if templateData is provided
+        if (params.templateData && message) {
+            const originalMessage = message;
+            message = this.replaceTemplateVariables(message, params.templateData);
+            if (originalMessage !== message) {
+                logger.info('Template variables replaced in message', {
+                    originalMessage,
+                    replacedMessage: message,
+                    templateData: params.templateData
+                });
+            }
+        }
+
         try {
             const response = await this.sendMessage({
                 accountId: params.accountId,
@@ -389,6 +407,49 @@ export class UnipileService {
             logger.error('Error sending follow up via SDK', { error, params });
             throw error;
         }
+    }
+
+    /**
+     * Replace template variables in a message string
+     * Supports: {{first_name}}, {{last_name}}, {{company}}
+     * Case-insensitive replacement
+     */
+    private replaceTemplateVariables(message: string, templateData: {
+        first_name?: string;
+        last_name?: string;
+        company?: string;
+    }): string {
+        let replacedMessage = message;
+
+        // Map of template variables to their values
+        const replacements: Record<string, string> = {};
+
+        // Build replacement map with available data (only use non-empty values)
+        if (templateData.first_name && templateData.first_name.trim()) {
+            replacements['first_name'] = templateData.first_name.trim();
+        }
+        if (templateData.last_name && templateData.last_name.trim()) {
+            replacements['last_name'] = templateData.last_name.trim();
+        }
+        if (templateData.company && templateData.company.trim()) {
+            replacements['company'] = templateData.company.trim();
+        }
+
+        // Replace each template variable (case-insensitive)
+        Object.keys(replacements).forEach(key => {
+            const value = replacements[key];
+            // Replace {{variable}} or {{VARIABLE}} or {{Variable}} (case-insensitive)
+            const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
+            replacedMessage = replacedMessage.replace(regex, value);
+        });
+
+        // Remove any remaining unreplaced template variables
+        replacedMessage = replacedMessage.replace(/\{\{[^}]+\}\}/g, '');
+
+        // Clean up extra spaces that might result from removed templates
+        replacedMessage = replacedMessage.replace(/\s+/g, ' ').trim();
+
+        return replacedMessage;
     }
 
     /**

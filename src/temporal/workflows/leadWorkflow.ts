@@ -9,6 +9,11 @@ export type ActivityResult = {
     message?: string;
     data?: any;
     providerId?: string;
+    lead_data?: {
+        first_name: string;
+        last_name: string;
+        company: string;
+    }
 };
 
 const {
@@ -69,12 +74,12 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
     try {
         const extractedIdentifier = await extractLinkedInPublicIdentifier(lead.linkedin_url!);
         if (!extractedIdentifier) {
-            return {success: false, message: 'Invalid linkedin_url: Could not extract identifier'};
+            return { success: false, message: 'Invalid linkedin_url: Could not extract identifier' };
         }
         identifier = extractedIdentifier as string;
     } catch (error) {
         log.error('Failed to extract public identifier from linkedin_url', { linkedin_url: lead.linkedin_url, error });
-        return {success: false, message: 'Invalid linkedin_url: Failed to extract identifier'};
+        return { success: false, message: 'Invalid linkedin_url: Failed to extract identifier' };
     }
 
     let result: ActivityResult | null = null;
@@ -90,7 +95,11 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
             result = await comment_post(accountId, identifier, config, lead.campaign_id);
             break;
         case EWorkflowNodeType.send_followup:
-            result = await send_followup(accountId, identifier, config, lead.campaign_id);
+            result = await send_followup(accountId, identifier, config, lead.campaign_id, {
+                first_name: lead.first_name,
+                last_name: lead.last_name,
+                company: lead.company
+            });
             break;
         case EWorkflowNodeType.withdraw_request:
             result = await withdraw_request(accountId, identifier, lead.campaign_id);
@@ -349,7 +358,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
 
     // Record step execution in database
     if (result && type) {
-        log.info('Recording step execution', {step: `step-${index}`, nodeId: node.id, type, success: result.success });
+        log.info('Recording step execution', { step: `step-${index}`, nodeId: node.id, type, success: result.success });
 
         await updateCampaignStep(campaignId, type, config, result.success, result.data, index, lead.organization_id, lead.id);
     }
@@ -394,7 +403,7 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
 
     while (queue.length > 0) {
         const unipileAccountId = await verifyUnipileAccount(accountId);
-        if(!unipileAccountId) {
+        if (!unipileAccountId) {
             log.error("Unipile Account not found - cannot continue lead execution", { leadId, accountId });
             await updateLead(leadId, { status: "Failed" });
             return;
