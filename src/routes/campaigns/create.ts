@@ -223,6 +223,7 @@ class CreateCampaignAPI extends ClentoAPI {
             // If start_date is not provided, start the campaign immediately
             if (shouldStartImmediately) {
                 try {
+                    console.log('starting the campaign immediately', campaign.id);
                     await this.temporalService.startCampaign(campaign.id);
                 } catch (error) {
                     // Log error but don't fail campaign creation
