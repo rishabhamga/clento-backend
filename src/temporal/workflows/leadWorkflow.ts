@@ -28,7 +28,8 @@ const {
     updateLead,
     verifyUnipileAccount,
     updateCampaignStep,
-    extractLinkedInPublicIdentifier
+    extractLinkedInPublicIdentifier,
+    checkTimeWindow
 } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
@@ -48,7 +49,10 @@ export interface LeadWorkflowInput {
     workflow: WorkflowJson,
     accountId: string,
     campaignId: string,
-    organizationId: string
+    organizationId: string,
+    startTime?: string | null,
+    endTime?: string | null,
+    timezone?: string | null
 }
 
 function getDelayMs(edge: WorkflowEdge): number {
@@ -66,7 +70,105 @@ function getDelayMs(edge: WorkflowEdge): number {
     return 0;
 }
 
-async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResponseDto, campaignId: string, workflow: WorkflowJson, index: number): Promise<ActivityResult | null> {
+/**
+ * Wait for the time window to be valid before executing a step
+ */
+async function waitForTimeWindow(
+    startTime: string | null | undefined,
+    endTime: string | null | undefined,
+    timezone: string | null | undefined
+): Promise<void> {
+    // If no time restrictions, proceed immediately
+    if (!startTime || !endTime) {
+        return;
+    }
+
+    const timeWindowCheck = await checkTimeWindow(startTime, endTime, timezone);
+
+    if (timeWindowCheck.inWindow) {
+        log.info('Current time is within allowed window', {
+            startTime,
+            endTime,
+            timezone,
+            currentTime: timeWindowCheck.currentTime
+        });
+        return;
+    }
+
+    // Need to wait until the window opens
+    const waitMs = timeWindowCheck.waitMs;
+
+    // Convert wait time to Temporal sleep format
+    let sleepDuration: string;
+    if (waitMs >= 3600000) {
+        // Hours
+        const hours = Math.floor(waitMs / 3600000);
+        const remainingMs = waitMs % 3600000;
+        if (remainingMs >= 60000) {
+            const minutes = Math.floor(remainingMs / 60000);
+            sleepDuration = `${hours} hours ${minutes} minutes`;
+        } else {
+            sleepDuration = `${hours} hours`;
+        }
+    } else if (waitMs >= 60000) {
+        // Minutes
+        const minutes = Math.floor(waitMs / 60000);
+        const remainingMs = waitMs % 60000;
+        if (remainingMs >= 1000) {
+            const seconds = Math.floor(remainingMs / 1000);
+            sleepDuration = `${minutes} minutes ${seconds} seconds`;
+        } else {
+            sleepDuration = `${minutes} minutes`;
+        }
+    } else if (waitMs >= 1000) {
+        // Seconds
+        sleepDuration = `${Math.floor(waitMs / 1000)} seconds`;
+    } else {
+        // Less than 1 second, proceed immediately
+        return;
+    }
+
+    log.info('Waiting for time window to open', {
+        startTime,
+        endTime,
+        timezone,
+        waitMs,
+        sleepDuration,
+        currentTime: timeWindowCheck.currentTime
+    });
+
+    await sleep(sleepDuration);
+
+    // Verify we're now in the window (double-check after sleep)
+    const verifyCheck = await checkTimeWindow(startTime, endTime, timezone);
+    if (!verifyCheck.inWindow) {
+        log.warn('Still not in time window after wait, waiting additional time', {
+            startTime,
+            endTime,
+            timezone,
+            additionalWaitMs: verifyCheck.waitMs
+        });
+        // Wait a bit more if still not in window (shouldn't happen, but safety check)
+        if (verifyCheck.waitMs > 0) {
+            const additionalWaitSeconds = Math.ceil(verifyCheck.waitMs / 1000);
+            await sleep(`${additionalWaitSeconds} seconds`);
+        }
+    }
+}
+
+async function executeNode(
+    node: WorkflowNode,
+    accountId: string,
+    lead: LeadResponseDto,
+    campaignId: string,
+    workflow: WorkflowJson,
+    index: number,
+    startTime?: string | null,
+    endTime?: string | null,
+    timezone?: string | null
+): Promise<ActivityResult | null> {
+    // Check and wait for time window before executing the step
+    await waitForTimeWindow(startTime, endTime, timezone);
     const type = node.data.type;
     const config = node.data.config ?? {};
     let identifier: string;
@@ -367,7 +469,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
 }
 
 export async function leadWorkflow(input: LeadWorkflowInput) {
-    const { leadId, workflow, accountId, campaignId, organizationId } = input
+    const { leadId, workflow, accountId, campaignId, organizationId, startTime, endTime, timezone } = input
     const leadUpdate: LeadUpdateDto = {
         status: "Processing"
     }
@@ -413,7 +515,7 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
         if (!currentNode) continue;
 
         // Execute the current node and store the result
-        const result = await executeNode(currentNode, unipileAccountId, lead, campaignId, workflow, stepIndex);
+        const result = await executeNode(currentNode, unipileAccountId, lead, campaignId, workflow, stepIndex, startTime, endTime, timezone);
 
         // Get outgoing edges from this node
         const outgoingEdges = adjacencyMap[currentId] || [];

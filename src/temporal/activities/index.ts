@@ -648,3 +648,152 @@ export const isNullOrUndefined = (it: any) => it === null || it === undefined;
 export async function extractLinkedInPublicIdentifier(url: string): Promise<string | null> {
     return CsvService.extractLinkedInPublicIdentifier(url);
 }
+
+/**
+ * Check if current time is within the allowed time window
+ * Returns the number of milliseconds to wait until the window opens, or 0 if already in window
+ * Wait time is calculated in UTC milliseconds for use with Temporal sleep
+ */
+export async function checkTimeWindow(
+    startTime: string | null | undefined,
+    endTime: string | null | undefined,
+    timezone: string | null | undefined
+): Promise<{ inWindow: boolean; waitMs: number; currentTime: string }> {
+    // If no time restrictions, always allow
+    if (!startTime || !endTime) {
+        return { inWindow: true, waitMs: 0, currentTime: new Date().toISOString() };
+    }
+
+    const now = new Date();
+    const tz = timezone || 'UTC';
+
+    // Parse start and end times (format: "HH:mm" or "HH:MM:SS")
+    const parseTime = (timeStr: string): { hours: number; minutes: number; seconds: number } => {
+        const parts = timeStr.split(':');
+        return {
+            hours: parseInt(parts[0], 10),
+            minutes: parseInt(parts[1] || '0', 10),
+            seconds: parseInt(parts[2] || '0', 10)
+        };
+    };
+
+    const start = parseTime(startTime);
+    const end = parseTime(endTime);
+
+    // Get current date and time components in the specified timezone
+    const dateFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+        hour12: false
+    });
+
+    const parts = dateFormatter.formatToParts(now);
+    const currentYear = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
+    const currentMonth = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10) - 1; // Month is 0-indexed
+    const currentDay = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+    const currentHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+    const currentMinute = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+
+    // Convert current time to minutes since midnight in timezone
+    const currentMinutes = currentHour * 60 + currentMinute;
+    const startMinutes = start.hours * 60 + start.minutes;
+    const endMinutes = end.hours * 60 + end.minutes;
+
+    // Helper function to get UTC time for a specific local time in the target timezone
+    // Uses a trial-and-error approach with Intl.DateTimeFormat to find the correct UTC time
+    const getUTCTimeForLocalTime = (year: number, month: number, day: number, hour: number, minute: number, second: number): number => {
+        // Strategy: We'll create a candidate UTC time and check if it matches the desired local time
+        // Start with a guess based on current timezone offset
+        const currentTzTime = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+        const currentUTCTime = now.getTime();
+        const currentOffset = currentUTCTime - currentTzTime.getTime();
+
+        // Create a date representing the target local time
+        // We'll treat it as UTC first, then adjust
+        const targetLocalTime = new Date(Date.UTC(year, month, day, hour, minute, second));
+
+        // Adjust by the current offset to get approximate UTC time
+        let candidateUTC = targetLocalTime.getTime() - currentOffset;
+
+        // Refine by checking what local time this UTC time represents
+        // We'll do a few iterations to get closer
+        for (let i = 0; i < 3; i++) {
+            const candidateDate = new Date(candidateUTC);
+            const candidateTzParts = new Intl.DateTimeFormat('en-US', {
+                timeZone: tz,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            }).formatToParts(candidateDate);
+
+            const candidateYear = parseInt(candidateTzParts.find(p => p.type === 'year')?.value || '0', 10);
+            const candidateMonth = parseInt(candidateTzParts.find(p => p.type === 'month')?.value || '0', 10) - 1;
+            const candidateDay = parseInt(candidateTzParts.find(p => p.type === 'day')?.value || '0', 10);
+            const candidateHour = parseInt(candidateTzParts.find(p => p.type === 'hour')?.value || '0', 10);
+            const candidateMinute = parseInt(candidateTzParts.find(p => p.type === 'minute')?.value || '0', 10);
+
+            // If we match, we're done
+            if (candidateYear === year && candidateMonth === month && candidateDay === day &&
+                candidateHour === hour && candidateMinute === minute) {
+                break;
+            }
+
+            // Calculate difference and adjust
+            const hourDiff = hour - candidateHour;
+            const minuteDiff = minute - candidateMinute;
+            const totalDiffMinutes = hourDiff * 60 + minuteDiff;
+            candidateUTC += totalDiffMinutes * 60 * 1000;
+        }
+
+        return candidateUTC;
+    };
+
+    // Get today's start and end times in UTC (as milliseconds)
+    const todayStartUTCMs = getUTCTimeForLocalTime(currentYear, currentMonth, currentDay, start.hours, start.minutes, start.seconds);
+    const todayEndUTCMs = getUTCTimeForLocalTime(currentYear, currentMonth, currentDay, end.hours, end.minutes, end.seconds);
+
+    // Get tomorrow's start time in UTC
+    const tomorrowStartUTCMs = getUTCTimeForLocalTime(currentYear, currentMonth, currentDay + 1, start.hours, start.minutes, start.seconds);
+
+    // Handle case where end time is before start time (spans midnight)
+    if (endMinutes < startMinutes) {
+        // Window spans midnight, so check if we're after start OR before end
+        if (currentMinutes >= startMinutes || currentMinutes <= endMinutes) {
+            return { inWindow: true, waitMs: 0, currentTime: now.toISOString() };
+        } else {
+            // We're between end and start, wait until start time
+            // If we're past end time today, wait until start time tomorrow
+            if (currentMinutes > endMinutes) {
+                // Past end time, wait until start time tomorrow
+                const waitMs = tomorrowStartUTCMs - now.getTime();
+                return { inWindow: false, waitMs: Math.max(0, waitMs), currentTime: now.toISOString() };
+            } else {
+                // Before start time today
+                const waitMs = todayStartUTCMs - now.getTime();
+                return { inWindow: false, waitMs: Math.max(0, waitMs), currentTime: now.toISOString() };
+            }
+        }
+    } else {
+        // Normal case: start < end (same day)
+        if (currentMinutes >= startMinutes && currentMinutes <= endMinutes) {
+            return { inWindow: true, waitMs: 0, currentTime: now.toISOString() };
+        } else if (currentMinutes < startMinutes) {
+            // Before start time today
+            const waitMs = todayStartUTCMs - now.getTime();
+            return { inWindow: false, waitMs: Math.max(0, waitMs), currentTime: now.toISOString() };
+        } else {
+            // After end time, wait until start time tomorrow
+            const waitMs = tomorrowStartUTCMs - now.getTime();
+            return { inWindow: false, waitMs: Math.max(0, waitMs), currentTime: now.toISOString() };
+        }
+    }
+}
