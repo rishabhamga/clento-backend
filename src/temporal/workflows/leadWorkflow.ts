@@ -12,7 +12,7 @@ export type ActivityResult = {
     lead_data?: {
         first_name: string;
         last_name: string;
-        company: string;
+        company?: string;
     }
 };
 

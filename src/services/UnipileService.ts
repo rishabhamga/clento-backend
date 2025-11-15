@@ -522,7 +522,6 @@ export class UnipileService {
             const response = await UnipileService.client.users.getProfile({
                 account_id: params.accountId,
                 identifier: params.identifier,
-                linkedin_sections: 'about',
                 notify: params.notify || true,
             });
 
