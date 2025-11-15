@@ -128,9 +128,8 @@ export async function profile_visit(accountId: string, identifier: string, campa
         const lead_data = {
             first_name: result?.first_name as string,
             last_name: result?.last_name as string,
-            company: result?.work_experience[0]?.company as string,
-        }
-        // @ts-ignore
+            company: result?.work_experience?.[0]?.company ?? undefined
+        };
         return { success: true, message: 'Profile visit completed', data: null, providerId: result?.provider_id, lead_data };
     } catch (error: any) {
         const errorBody = error as UnipileError;
