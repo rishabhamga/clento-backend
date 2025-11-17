@@ -1,4 +1,4 @@
-import { CampaignResponseDto, CampaignStatus, CampaignStepResponseDto, CreateCampaignStepDto } from "../../dto/campaigns.dto";
+import { CampaignResponseDto, CampaignStatus, CampaignStepResponseDto, CreateCampaignStepDto, UpdateCampaignDto } from "../../dto/campaigns.dto";
 import { LeadInsertDto, LeadListResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
 import { CampaignService } from "../../services/CampaignService";
 import { ConnectedAccountService } from "../../services/ConnectedAccountService";
@@ -10,6 +10,7 @@ import { EWorkflowNodeType, WorkflowJson, WorkflowNodeConfig } from "../../types
 import logger from "../../utils/logger";
 import { ActivityResult } from "../workflows/leadWorkflow";
 import { NotFoundError } from "../../errors/AppError";
+import env from "../../config/env";
 
 export async function testActivity(input: { message: string; delay?: number }): Promise<{ success: boolean; data: any; timestamp: string }> {
     logger.info('Test activity started', { input });
@@ -434,6 +435,33 @@ export async function send_connection_request(accountId: string, identifier: str
             providerId
         });
 
+        // Increment connection request counters for the campaign
+        try {
+            const campaignService = new CampaignService();
+            const campaign = await campaignService.getCampaignById(campaignId);
+            if (campaign) {
+                const currentDayCount = (campaign.requests_sent_this_day ?? 0) + 1;
+                const currentWeekCount = (campaign.requests_sent_this_week ?? 0) + 1;
+
+                await campaignService.updateCampaign(campaignId, {
+                    requests_sent_this_day: currentDayCount,
+                    requests_sent_this_week: currentWeekCount
+                } as UpdateCampaignDto);
+
+                logger.info('Campaign connection request counters incremented', {
+                    campaignId,
+                    dailyCount: currentDayCount,
+                    weeklyCount: currentWeekCount
+                });
+            }
+        } catch (error) {
+            logger.error('Failed to increment campaign connection request counters', {
+                error,
+                campaignId
+            });
+            // Don't fail the request if counter update fails
+        }
+
         return {
             success: true,
             message: 'Connection request sent',
@@ -484,7 +512,7 @@ export async function pauseCampaign(campaignId: string): Promise<void> {
     }
     await campaignService.updateCampaign(campaignId, {
         status: CampaignStatus.PAUSED
-    })
+    } as UpdateCampaignDto)
     logger.info('Campaign paused successfully', { campaignId });
 }
 
@@ -495,6 +523,222 @@ export async function isCampaignActive(campaignId: string): Promise<boolean> {
         return false;
     }
     return campaign.status !== 'PAUSED' && campaign.status !== 'COMPLETED' && campaign.status !== 'FAILED';
+}
+
+/**
+ * Check if connection request limits have been exceeded for a campaign
+ * Also handles resetting daily/weekly counters if needed
+ * @param campaignId - The campaign ID to check limits for
+ * @returns Object with canProceed boolean and details about limits, including wait time until next reset
+ */
+export async function checkConnectionRequestLimits(campaignId: string): Promise<{
+    canProceed: boolean;
+    reason?: string;
+    dailyCount?: number;
+    weeklyCount?: number;
+    dailyLimit?: number;
+    weeklyLimit?: number;
+    waitUntilMs?: number;
+    nextResetTime?: string;
+}> {
+    logger.info('Checking connection request limits', { campaignId });
+
+    const campaignService = new CampaignService();
+    const campaign = await campaignService.getCampaignById(campaignId);
+
+    if (!campaign) {
+        logger.error('Campaign not found for limit check', { campaignId });
+        return {
+            canProceed: false,
+            reason: 'Campaign not found'
+        };
+    }
+
+    const now = new Date();
+    const dailyLimit = env.REQUESTS_PER_DAY;
+    const weeklyLimit = env.REQUESTS_PER_WEEK;
+
+    let requestsSentThisDay = campaign.requests_sent_this_day ?? 0;
+    let requestsSentThisWeek = campaign.requests_sent_this_week ?? 0;
+    let lastDailyReset = campaign.last_daily_requests_reset ? new Date(campaign.last_daily_requests_reset) : null;
+    let lastWeeklyReset = campaign.last_weekly_requests_reset ? new Date(campaign.last_weekly_requests_reset) : null;
+
+    let needsUpdate = false;
+    const updateData: any = {};
+
+    // Check if daily counter needs to be reset
+    if (!lastDailyReset || isNewDay(lastDailyReset, now)) {
+        logger.info('Resetting daily connection request counter', {
+            campaignId,
+            previousCount: requestsSentThisDay,
+            lastReset: lastDailyReset?.toISOString()
+        });
+        requestsSentThisDay = 0;
+        updateData.requests_sent_this_day = 0;
+        updateData.last_daily_requests_reset = now.toISOString();
+        needsUpdate = true;
+    }
+
+    // Check if weekly counter needs to be reset
+    if (!lastWeeklyReset || isNewWeek(lastWeeklyReset, now)) {
+        logger.info('Resetting weekly connection request counter', {
+            campaignId,
+            previousCount: requestsSentThisWeek,
+            lastReset: lastWeeklyReset?.toISOString()
+        });
+        requestsSentThisWeek = 0;
+        updateData.requests_sent_this_week = 0;
+        updateData.last_weekly_requests_reset = now.toISOString();
+        needsUpdate = true;
+    }
+
+    // Update campaign if counters were reset
+    if (needsUpdate) {
+        try {
+            await campaignService.updateCampaign(campaignId, updateData as UpdateCampaignDto);
+            logger.info('Campaign limits reset successfully', { campaignId, updateData });
+        } catch (error) {
+            logger.error('Failed to update campaign limits', { error, campaignId, updateData });
+            // Continue with check even if update fails
+        }
+    }
+
+    // Check if limits are exceeded
+    const dailyExceeded = requestsSentThisDay >= dailyLimit;
+    const weeklyExceeded = requestsSentThisWeek >= weeklyLimit;
+
+    if (dailyExceeded || weeklyExceeded) {
+        // Calculate wait time until next reset
+        // If both are exceeded, wait for whichever is longer
+        const nextDailyReset = getNextDayReset(now);
+        const nextWeeklyReset = getNextWeekReset(now);
+        const waitUntilDaily = nextDailyReset.getTime() - now.getTime();
+        const waitUntilWeekly = nextWeeklyReset.getTime() - now.getTime();
+
+        // Wait for the longer of the two if both are exceeded, otherwise wait for the one that's exceeded
+        let waitUntilMs: number;
+        let nextResetTime: Date;
+        let reason: string;
+
+        if (dailyExceeded && weeklyExceeded) {
+            // Both exceeded - wait for whichever is longer
+            if (waitUntilWeekly > waitUntilDaily) {
+                waitUntilMs = waitUntilWeekly;
+                nextResetTime = nextWeeklyReset;
+                reason = `Both daily (${requestsSentThisDay}/${dailyLimit}) and weekly (${requestsSentThisWeek}/${weeklyLimit}) limits exceeded. Waiting for weekly reset.`;
+            } else {
+                waitUntilMs = waitUntilDaily;
+                nextResetTime = nextDailyReset;
+                reason = `Both daily (${requestsSentThisDay}/${dailyLimit}) and weekly (${requestsSentThisWeek}/${weeklyLimit}) limits exceeded. Waiting for daily reset.`;
+            }
+        } else if (dailyExceeded) {
+            waitUntilMs = waitUntilDaily;
+            nextResetTime = nextDailyReset;
+            reason = `Daily limit exceeded: ${requestsSentThisDay}/${dailyLimit}`;
+        } else {
+            // weeklyExceeded
+            waitUntilMs = waitUntilWeekly;
+            nextResetTime = nextWeeklyReset;
+            reason = `Weekly limit exceeded: ${requestsSentThisWeek}/${weeklyLimit}`;
+        }
+
+        logger.warn('Connection request limit exceeded, calculating wait time', {
+            campaignId,
+            dailyCount: requestsSentThisDay,
+            weeklyCount: requestsSentThisWeek,
+            dailyLimit,
+            weeklyLimit,
+            dailyExceeded,
+            weeklyExceeded,
+            waitUntilMs,
+            waitUntilHours: waitUntilMs / (1000 * 60 * 60),
+            nextResetTime: nextResetTime.toISOString()
+        });
+
+        return {
+            canProceed: false,
+            reason,
+            dailyCount: requestsSentThisDay,
+            weeklyCount: requestsSentThisWeek,
+            dailyLimit,
+            weeklyLimit,
+            waitUntilMs,
+            nextResetTime: nextResetTime.toISOString()
+        };
+    }
+
+    logger.info('Connection request limits check passed', {
+        campaignId,
+        dailyCount: requestsSentThisDay,
+        weeklyCount: requestsSentThisWeek,
+        dailyLimit,
+        weeklyLimit,
+        dailyRemaining: dailyLimit - requestsSentThisDay,
+        weeklyRemaining: weeklyLimit - requestsSentThisWeek
+    });
+
+    return {
+        canProceed: true,
+        dailyCount: requestsSentThisDay,
+        weeklyCount: requestsSentThisWeek,
+        dailyLimit,
+        weeklyLimit
+    };
+}
+
+/**
+ * Check if a new day has started since the last reset
+ */
+function isNewDay(lastReset: Date, now: Date): boolean {
+    const lastResetDate = new Date(lastReset.getFullYear(), lastReset.getMonth(), lastReset.getDate());
+    const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return nowDate > lastResetDate;
+}
+
+/**
+ * Check if a new week has started since the last reset
+ * Week starts on Monday (ISO week)
+ */
+function isNewWeek(lastReset: Date, now: Date): boolean {
+    const lastResetWeek = getWeekNumber(lastReset);
+    const nowWeek = getWeekNumber(now);
+    const lastResetYear = lastReset.getFullYear();
+    const nowYear = now.getFullYear();
+
+    return nowYear > lastResetYear || (nowYear === lastResetYear && nowWeek > lastResetWeek);
+}
+
+/**
+ * Get ISO week number for a date
+ */
+function getWeekNumber(date: Date): number {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+/**
+ * Get the next day reset time (start of next day)
+ */
+function getNextDayReset(now: Date): Date {
+    const nextDay = new Date(now);
+    nextDay.setDate(nextDay.getDate() + 1);
+    nextDay.setHours(0, 0, 0, 0);
+    return nextDay;
+}
+
+/**
+ * Get the next week reset time (start of next Monday)
+ */
+function getNextWeekReset(now: Date): Date {
+    const nextMonday = new Date(now);
+    const dayOfWeek = now.getDay();
+    const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+    nextMonday.setDate(now.getDate() + daysUntilMonday);
+    nextMonday.setHours(0, 0, 0, 0);
+    return nextMonday;
 }
 
 export async function check_connection_status(accountId: string, identifier: string, providerId: string, campaignId: string): Promise<ActivityResult> {
