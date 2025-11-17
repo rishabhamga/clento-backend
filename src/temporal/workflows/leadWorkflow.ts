@@ -213,118 +213,34 @@ async function executeNode(
         case EWorkflowNodeType.send_connection_request: {
             log.info('Executing send_connection_request node', { accountId, identifier });
 
-            // Check if connection request limits have been exceeded
+            // Check limits and wait if exceeded
             let limitsCheck = await checkConnectionRequestLimits(campaignId);
-
-            // If limits are exceeded, wait until the next reset time
             if (!limitsCheck.canProceed && limitsCheck.waitUntilMs) {
-                const waitUntilMs = limitsCheck.waitUntilMs;
+                const waitMs = limitsCheck.waitUntilMs;
+                const hours = Math.floor(waitMs / 3600000);
+                const minutes = Math.floor((waitMs % 3600000) / 60000);
+                const seconds = Math.floor((waitMs % 60000) / 1000);
 
-                // Convert wait time to Temporal sleep format
-                let sleepDuration: string;
-                if (waitUntilMs >= 3600000) {
-                    // Hours
-                    const hours = Math.floor(waitUntilMs / 3600000);
-                    const remainingMs = waitUntilMs % 3600000;
-                    if (remainingMs >= 60000) {
-                        const minutes = Math.floor(remainingMs / 60000);
-                        sleepDuration = `${hours} hours ${minutes} minutes`;
-                    } else {
-                        sleepDuration = `${hours} hours`;
-                    }
-                } else if (waitUntilMs >= 60000) {
-                    // Minutes
-                    const minutes = Math.floor(waitUntilMs / 60000);
-                    const remainingMs = waitUntilMs % 60000;
-                    if (remainingMs >= 1000) {
-                        const seconds = Math.floor(remainingMs / 1000);
-                        sleepDuration = `${minutes} minutes ${seconds} seconds`;
-                    } else {
-                        sleepDuration = `${minutes} minutes`;
-                    }
-                } else if (waitUntilMs >= 1000) {
-                    // Seconds
-                    sleepDuration = `${Math.floor(waitUntilMs / 1000)} seconds`;
-                } else {
-                    // Less than 1 second, proceed immediately
-                    sleepDuration = '0 seconds';
-                }
+                const sleepParts: string[] = [];
+                if (hours > 0) sleepParts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
+                if (minutes > 0) sleepParts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
+                if (seconds > 0 && hours === 0) sleepParts.push(`${seconds} second${seconds > 1 ? 's' : ''}`);
+
+                const sleepDuration = sleepParts.length > 0 ? sleepParts.join(' ') : '1 second';
 
                 log.info('Connection request limit exceeded, waiting until reset', {
                     campaignId,
-                    reason: limitsCheck.reason,
-                    dailyCount: limitsCheck.dailyCount,
-                    weeklyCount: limitsCheck.weeklyCount,
-                    dailyLimit: limitsCheck.dailyLimit,
-                    weeklyLimit: limitsCheck.weeklyLimit,
-                    waitUntilMs,
-                    waitUntilHours: waitUntilMs / (1000 * 60 * 60),
-                    nextResetTime: limitsCheck.nextResetTime,
+                    waitMs,
                     sleepDuration
                 });
 
-                // Sleep until the reset time
-                if (waitUntilMs > 0) {
-                    await sleep(sleepDuration);
-                }
-
-                // Re-check limits after waiting (counters should be reset now)
-                log.info('Re-checking connection request limits after wait', { campaignId });
+                await sleep(sleepDuration);
                 limitsCheck = await checkConnectionRequestLimits(campaignId);
+            }
 
-                // If still can't proceed (shouldn't happen, but safety check)
-                if (!limitsCheck.canProceed) {
-                    log.warn('Connection request limit still exceeded after wait, skipping request', {
-                        campaignId,
-                        reason: limitsCheck.reason
-                    });
-                    result = {
-                        success: false,
-                        message: limitsCheck.reason || 'Connection request limit exceeded',
-                        data: {
-                            limitExceeded: true,
-                            dailyCount: limitsCheck.dailyCount,
-                            weeklyCount: limitsCheck.weeklyCount,
-                            dailyLimit: limitsCheck.dailyLimit,
-                            weeklyLimit: limitsCheck.weeklyLimit
-                        }
-                    };
-                    break;
-                }
-
-                log.info('Connection request limits check passed after wait, proceeding with request', {
-                    campaignId,
-                    dailyCount: limitsCheck.dailyCount,
-                    weeklyCount: limitsCheck.weeklyCount,
-                    dailyLimit: limitsCheck.dailyLimit,
-                    weeklyLimit: limitsCheck.weeklyLimit
-                });
-            } else if (!limitsCheck.canProceed) {
-                // Limits exceeded but no wait time provided (shouldn't happen, but handle gracefully)
-                log.warn('Connection request limit exceeded but no wait time provided, skipping request', {
-                    campaignId,
-                    reason: limitsCheck.reason
-                });
-                result = {
-                    success: false,
-                    message: limitsCheck.reason || 'Connection request limit exceeded',
-                    data: {
-                        limitExceeded: true,
-                        dailyCount: limitsCheck.dailyCount,
-                        weeklyCount: limitsCheck.weeklyCount,
-                        dailyLimit: limitsCheck.dailyLimit,
-                        weeklyLimit: limitsCheck.weeklyLimit
-                    }
-                };
+            if (!limitsCheck.canProceed) {
+                result = { success: false, message: 'Connection request limit exceeded' };
                 break;
-            } else {
-                log.info('Connection request limits check passed, proceeding with request', {
-                    campaignId,
-                    dailyCount: limitsCheck.dailyCount,
-                    weeklyCount: limitsCheck.weeklyCount,
-                    dailyLimit: limitsCheck.dailyLimit,
-                    weeklyLimit: limitsCheck.weeklyLimit
-                });
             }
 
             const sendResult = await send_connection_request(accountId, identifier, config || {}, lead.campaign_id);
