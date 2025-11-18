@@ -37,8 +37,8 @@ const envSchema = z.object({
     // Temporal Worker Configuration
     ENABLE_TEMPORAL_WORKER: z.string().transform(val => val === 'true').default('true'),
     TEMPORAL_WORKER_COUNT: z.string().transform(val => parseInt(val, 10)).default('1'),
-    REQUESTS_PER_DAY: z.number().default(60),
-    REQUESTS_PER_WEEK: z.number().default(200)
+    REQUESTS_PER_DAY: z.coerce.number().default(60),
+    REQUESTS_PER_WEEK: z.coerce.number().default(200)
 });
 
 // Parse and validate environment variables

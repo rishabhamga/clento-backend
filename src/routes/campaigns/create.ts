@@ -196,6 +196,8 @@ class CreateCampaignAPI extends ClentoAPI {
                 prospect_list: prospectList,
                 leads_per_day: leadsPerDay,
                 status: campaignStatus,
+                requests_sent_this_day: 0,
+                requests_sent_this_week: 0,
                 ...(startDate && { start_date: startDate }),
                 ...(startTime && { start_time: startTime }),
                 ...(endTime && { end_time: endTime }),
@@ -215,7 +217,9 @@ class CreateCampaignAPI extends ClentoAPI {
 
             const campaignUpdateDto: UpdateCampaignDto = {
                 file_name: `${campaign.id}.json`,
-                bucket: this.bucketName
+                bucket: this.bucketName,
+                requests_sent_this_day: 0,
+                requests_sent_this_week: 0
             }
 
             await this.campaignService.updateCampaign(campaign.id, campaignUpdateDto);

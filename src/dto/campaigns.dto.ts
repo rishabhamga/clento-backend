@@ -82,8 +82,8 @@ export const CreateCampaignDto = z.object({
   steps: z.object({
     steps: z.array(CampaignStepDto).default([]).optional().nullable()
   }).optional().nullable(),
-  requests_sent_this_day: z.number().nullable().optional().default(0),
-  requests_sent_this_week: z.number().nullable().optional().default(0),
+  requests_sent_this_day: z.number().nullable().default(0).optional(),
+  requests_sent_this_week: z.number().nullable().default(0).optional(),
   last_daily_requests_reset: z.string().datetime().nullable().optional(),
   last_weekly_requests_reset: z.string().datetime().nullable().optional(),
 });
@@ -105,8 +105,8 @@ export const UpdateCampaignDto = z.object({
   steps: z.object({
     steps: z.array(CampaignStepDto).default([]).optional().nullable()
   }).optional().nullable(),
-  requests_sent_this_day: z.number().nullable().optional().default(0),
-  requests_sent_this_week: z.number().nullable().optional().default(0),
+  requests_sent_this_day: z.number().nullable().default(0).optional(),
+  requests_sent_this_week: z.number().nullable().default(0).optional(),
   last_daily_requests_reset: z.string().datetime().nullable().optional(),
   last_weekly_requests_reset: z.string().datetime().nullable().optional(),
 });
