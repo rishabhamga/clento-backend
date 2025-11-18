@@ -211,10 +211,39 @@ async function executeNode(
             result = await send_inmail();
             break;
         case EWorkflowNodeType.send_connection_request: {
-            log.info('Executing send_connection_request node', { accountId, identifier });
+            log.info('Executing send_connection_request node', {
+                accountId,
+                identifier,
+                campaignId: lead.campaign_id,
+                leadId: lead.id
+            });
 
             // Check limits and wait if exceeded
-            let limitsCheck = await checkConnectionRequestLimits(campaignId);
+            let limitsCheck;
+            try {
+                limitsCheck = await checkConnectionRequestLimits(campaignId);
+            } catch (error: any) {
+                log.error('Failed to check connection request limits', {
+                    accountId,
+                    identifier,
+                    campaignId,
+                    leadId: lead.id,
+                    error: error.message,
+                    errorStack: error.stack
+                });
+                result = {
+                    success: false,
+                    message: 'Failed to check connection request limits',
+                    data: {
+                        error: {
+                            type: 'limits_check_failed',
+                            message: error.message || 'Failed to check connection request limits'
+                        }
+                    }
+                };
+                break;
+            }
+
             if (!limitsCheck.canProceed && limitsCheck.waitUntilMs) {
                 const waitMs = limitsCheck.waitUntilMs;
                 const hours = Math.floor(waitMs / 3600000);
@@ -230,26 +259,176 @@ async function executeNode(
 
                 log.info('Connection request limit exceeded, waiting until reset', {
                     campaignId,
+                    leadId: lead.id,
                     waitMs,
-                    sleepDuration
+                    sleepDuration,
+                    accountId,
+                    identifier
                 });
 
-                await sleep(sleepDuration);
-                limitsCheck = await checkConnectionRequestLimits(campaignId);
+                try {
+                    await sleep(sleepDuration);
+                    limitsCheck = await checkConnectionRequestLimits(campaignId);
+                } catch (error: any) {
+                    log.error('Error while waiting for connection request limit reset', {
+                        accountId,
+                        identifier,
+                        campaignId,
+                        leadId: lead.id,
+                        error: error.message,
+                        errorStack: error.stack
+                    });
+                }
             }
 
             if (!limitsCheck.canProceed) {
-                result = { success: false, message: 'Connection request limit exceeded' };
+                log.error('Connection request limit exceeded after waiting', {
+                    accountId,
+                    identifier,
+                    campaignId,
+                    leadId: lead.id
+                });
+                result = {
+                    success: false,
+                    message: 'Connection request limit exceeded',
+                    data: {
+                        error: {
+                            type: 'connection_request_limit_exceeded',
+                            message: 'Daily or weekly connection request limit has been exceeded'
+                        }
+                    }
+                };
                 break;
             }
 
-            const sendResult = await send_connection_request(accountId, identifier, config || {}, lead.campaign_id);
+            let sendResult: ActivityResult;
+            try {
+                sendResult = await send_connection_request(accountId, identifier, config || {}, lead.campaign_id);
+            } catch (error: any) {
+                log.error('Exception thrown while sending connection request', {
+                    accountId,
+                    identifier,
+                    campaignId,
+                    leadId: lead.id,
+                    error: error.message,
+                    errorStack: error.stack,
+                    errorType: error.constructor?.name,
+                    errorName: error.name
+                });
+                result = {
+                    success: false,
+                    message: 'Exception occurred while sending connection request',
+                    data: {
+                        error: {
+                            type: 'connection_request_exception',
+                            message: error.message || 'Unexpected error occurred',
+                            errorType: error.constructor?.name,
+                            errorName: error.name
+                        }
+                    }
+                };
+                break;
+            }
 
             // If request failed to send or user already connected, return immediately
             if (!sendResult.success) {
-                log.error('Failed to send connection request', { result: sendResult });
-                result = sendResult;
-                break;
+                // Check if this is a provider limit error that requires 24-hour wait
+                const errorType = sendResult.data?.error?.type;
+                const shouldRetry = sendResult.data?.error?.shouldRetry;
+                const retryAfterHours = sendResult.data?.error?.retryAfterHours || 24;
+
+                if (errorType === 'provider_limit_reached' && shouldRetry) {
+                    log.warn('LinkedIn provider limit reached - waiting 24 hours before retry', {
+                        accountId,
+                        identifier,
+                        campaignId,
+                        leadId: lead.id,
+                        retryAfterHours,
+                        errorMessage: sendResult.message,
+                        errorDetails: sendResult.data?.error
+                    });
+
+                    try {
+                        // Sleep for 24 hours (24 * 60 * 60 = 86400 seconds)
+                        const sleepDuration = `${retryAfterHours} hours`;
+                        log.info('Sleeping before retry', {
+                            accountId,
+                            identifier,
+                            campaignId,
+                            leadId: lead.id,
+                            sleepDuration,
+                            retryAfterHours
+                        });
+                        await sleep(sleepDuration);
+
+                        // Retry sending the connection request after waiting
+                        log.info('Retrying connection request after 24-hour wait', {
+                            accountId,
+                            identifier,
+                            campaignId,
+                            leadId: lead.id
+                        });
+                        sendResult = await send_connection_request(accountId, identifier, config || {}, lead.campaign_id);
+
+                        // If retry also failed, return the result
+                        if (!sendResult.success) {
+                            log.error('Connection request failed after 24-hour retry', {
+                                accountId,
+                                identifier,
+                                campaignId,
+                                leadId: lead.id,
+                                result: sendResult,
+                                errorType: sendResult.data?.error?.type,
+                                errorMessage: sendResult.message
+                            });
+                            result = sendResult;
+                            break;
+                        }
+
+                        // If retry succeeded, continue with normal flow
+                        log.info('Connection request succeeded after 24-hour retry', {
+                            accountId,
+                            identifier,
+                            campaignId,
+                            leadId: lead.id
+                        });
+                    } catch (retryError: any) {
+                        log.error('Error during 24-hour retry wait or retry attempt', {
+                            accountId,
+                            identifier,
+                            campaignId,
+                            leadId: lead.id,
+                            error: retryError.message,
+                            errorStack: retryError.stack
+                        });
+                        result = {
+                            success: false,
+                            message: 'Failed to retry connection request after waiting',
+                            data: {
+                                error: {
+                                    type: 'retry_failed',
+                                    message: retryError.message || 'Error during retry attempt',
+                                    originalError: sendResult.data?.error
+                                }
+                            }
+                        };
+                        break;
+                    }
+                } else {
+                    // For other errors, return immediately without retry
+                    log.error('Failed to send connection request', {
+                        accountId,
+                        identifier,
+                        campaignId,
+                        leadId: lead.id,
+                        result: sendResult,
+                        errorType: sendResult.data?.error?.type,
+                        errorMessage: sendResult.message,
+                        errorDetails: sendResult.data?.error
+                    });
+                    result = sendResult;
+                    break;
+                }
             }
 
             // If already connected, return success
@@ -262,8 +441,27 @@ async function executeNode(
             // Get providerId from the send result
             const providerId = sendResult.data?.providerId;
             if (!providerId) {
-                log.error('No providerId in send result', { sendResult });
-                result = { success: false, message: 'Provider ID not found in send result' };
+                log.error('No providerId in send result', {
+                    accountId,
+                    identifier,
+                    campaignId,
+                    leadId: lead.id,
+                    sendResult,
+                    sendResultData: sendResult.data,
+                    sendResultSuccess: sendResult.success,
+                    sendResultMessage: sendResult.message
+                });
+                result = {
+                    success: false,
+                    message: 'Provider ID not found in send result',
+                    data: {
+                        error: {
+                            type: 'provider_id_missing',
+                            message: 'Connection request was sent but provider ID was not returned',
+                            sendResult: sendResult
+                        }
+                    }
+                };
                 break;
             }
 
@@ -381,7 +579,47 @@ async function executeNode(
                 });
 
                 // Call activity to check status
-                const statusResult = await check_connection_status(accountId, identifier, providerId, lead.campaign_id);
+                let statusResult: ActivityResult;
+                try {
+                    statusResult = await check_connection_status(accountId, identifier, providerId, lead.campaign_id);
+                } catch (error: any) {
+                    log.error('Exception thrown while checking connection status', {
+                        accountId,
+                        identifier,
+                        providerId,
+                        campaignId,
+                        leadId: lead.id,
+                        attempt,
+                        maxAttempts,
+                        elapsedTimeMs,
+                        error: error.message,
+                        errorStack: error.stack,
+                        errorType: error.constructor?.name,
+                        errorName: error.name
+                    });
+                    // Continue polling on error - don't break the loop
+                    continue;
+                }
+
+                // Check if status check failed
+                if (!statusResult.success) {
+                    log.error('Connection status check failed', {
+                        accountId,
+                        identifier,
+                        providerId,
+                        campaignId,
+                        leadId: lead.id,
+                        attempt,
+                        maxAttempts,
+                        elapsedTimeMs,
+                        statusResult,
+                        errorType: statusResult.data?.error?.type,
+                        errorMessage: statusResult.message,
+                        errorDetails: statusResult.data?.error
+                    });
+                    // Continue polling on status check failure - don't break the loop
+                    continue;
+                }
 
                 // Check if accepted
                 if (statusResult.success && statusResult.data?.status === 'accepted') {
@@ -390,6 +628,9 @@ async function executeNode(
                     log.info('Connection request ACCEPTED!', {
                         accountId,
                         identifier,
+                        providerId,
+                        campaignId,
+                        leadId: lead.id,
                         attemptNumber: attempt,
                         elapsedTimeMs,
                         elapsedHours,
@@ -415,6 +656,9 @@ async function executeNode(
                     log.warn('Connection request REJECTED!', {
                         accountId,
                         identifier,
+                        providerId,
+                        campaignId,
+                        leadId: lead.id,
                         attemptNumber: attempt,
                         elapsedTimeMs,
                         elapsedHours,

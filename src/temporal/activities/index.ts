@@ -398,20 +398,99 @@ export async function isConnected(accountId: string, identifier: string, campaig
 }
 
 export async function send_connection_request(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<ActivityResult> {
-    logger.info('send_connection_request - Starting');
+    logger.info('send_connection_request - Starting', { accountId, identifier, campaignId });
     const unipileService = new UnipileService();
 
     // Get provider ID from profile visit
-    const { providerId } = await profile_visit(accountId, identifier, campaignId);
-    if (!providerId) {
-        return { success: false, message: 'Provider ID not found' };
+    let providerId: string | undefined;
+    try {
+        const profileVisitResult = await profile_visit(accountId, identifier, campaignId);
+        providerId = profileVisitResult.providerId;
+
+        if (!providerId) {
+            logger.error('Provider ID not found after profile visit', {
+                accountId,
+                identifier,
+                campaignId,
+                profileVisitResult
+            });
+            return {
+                success: false,
+                message: 'Provider ID not found',
+                data: {
+                    error: {
+                        type: 'provider_id_not_found',
+                        message: 'Failed to extract provider ID from LinkedIn profile',
+                        accountId,
+                        identifier
+                    }
+                }
+            };
+        }
+
+        logger.info('Profile visit successful, provider ID extracted', {
+            accountId,
+            identifier,
+            providerId
+        });
+    } catch (error: any) {
+        const errorBody = error as UnipileError;
+        logger.error('Failed to visit profile before sending connection request', {
+            accountId,
+            identifier,
+            campaignId,
+            error: error.message,
+            errorStack: error.stack,
+            errorBody: errorBody?.error?.body,
+            errorStatus: errorBody?.error?.body?.status,
+            errorType: errorBody?.error?.body?.type,
+            errorDetail: errorBody?.error?.body?.detail
+        });
+        return {
+            success: false,
+            message: 'Failed to visit profile before sending connection request',
+            data: {
+                error: {
+                    type: 'profile_visit_failed',
+                    message: error.message || 'Failed to visit LinkedIn profile',
+                    details: errorBody?.error?.body || {}
+                }
+            }
+        };
     }
 
     try {
         // Check if already connected
-        const alreadyConnected = await unipileService.isConnected({ accountId, identifier });
+        let alreadyConnected = false;
+        try {
+            alreadyConnected = await unipileService.isConnected({ accountId, identifier });
+            logger.info('Connection status checked', {
+                accountId,
+                identifier,
+                providerId,
+                alreadyConnected
+            });
+        } catch (error: any) {
+            const errorBody = error as UnipileError;
+            logger.error('Failed to check if user is already connected', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                error: error.message,
+                errorStack: error.stack,
+                errorBody: errorBody?.error?.body,
+                errorStatus: errorBody?.error?.body?.status
+            });
+            // Continue with sending request even if connection check fails
+        }
+
         if (alreadyConnected) {
-            logger.info('User already connected', { accountId, identifier });
+            logger.info('User already connected, skipping connection request', {
+                accountId,
+                identifier,
+                providerId
+            });
             return {
                 success: true,
                 message: 'User is already connected',
@@ -420,20 +499,49 @@ export async function send_connection_request(accountId: string, identifier: str
         }
 
         // Send connection request
-        logger.info('Sending connection request', { accountId, identifier, providerId });
-        const invitationResult = await unipileService.sendLinkedInInvitation({
-            accountId: accountId,
-            providerId: providerId,
-            config: config
-        });
-
-        console.log(invitationResult);
-
-        logger.info('Connection request sent successfully', {
+        logger.info('Sending connection request', {
             accountId,
             identifier,
-            providerId
+            providerId,
+            campaignId,
+            config: {
+                useAI: config?.useAI,
+                customMessage: config?.customMessage ? '***custom message provided***' : undefined
+            }
         });
+
+        let invitationResult: any;
+        try {
+            invitationResult = await unipileService.sendLinkedInInvitation({
+                accountId: accountId,
+                providerId: providerId,
+                config: config
+            });
+
+            logger.info('Connection request sent successfully', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                invitationResult: invitationResult ? 'received' : 'null'
+            });
+        } catch (invitationError: any) {
+            const invitationErrorBody = invitationError as UnipileError;
+            logger.error('Failed to send LinkedIn invitation', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                error: invitationError.message,
+                errorStack: invitationError.stack,
+                errorBody: invitationErrorBody?.error?.body,
+                errorStatus: invitationErrorBody?.error?.body?.status,
+                errorType: invitationErrorBody?.error?.body?.type,
+                errorDetail: invitationErrorBody?.error?.body?.detail,
+                fullError: invitationError
+            });
+            throw invitationError; // Re-throw to be caught by outer catch
+        }
 
         // Increment connection request counters for the campaign
         try {
@@ -451,13 +559,24 @@ export async function send_connection_request(accountId: string, identifier: str
                 logger.info('Campaign connection request counters incremented', {
                     campaignId,
                     dailyCount: currentDayCount,
-                    weeklyCount: currentWeekCount
+                    weeklyCount: currentWeekCount,
+                    previousDailyCount: campaign.requests_sent_this_day,
+                    previousWeeklyCount: campaign.requests_sent_this_week
+                });
+            } else {
+                logger.warn('Campaign not found when updating connection request counters', {
+                    campaignId
                 });
             }
-        } catch (error) {
+        } catch (counterError: any) {
             logger.error('Failed to increment campaign connection request counters', {
-                error,
-                campaignId
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                error: counterError.message,
+                errorStack: counterError.stack,
+                errorType: counterError.constructor?.name
             });
             // Don't fail the request if counter update fails
         }
@@ -469,22 +588,130 @@ export async function send_connection_request(accountId: string, identifier: str
         };
     } catch (error: any) {
         const errorBody = error as UnipileError;
-        if (errorBody?.error?.body?.status === 422) {
-            logger.error('Cannot send connection request - profile issue or already pending, skipping', errorBody);
+        // Handle different error structures - SDK might throw error.body directly or nested
+        const errorStatus = errorBody?.error?.body?.status || error?.body?.status || error?.status;
+        const errorType = errorBody?.error?.body?.type || error?.body?.type || error?.type;
+        const errorDetail = errorBody?.error?.body?.detail || error?.body?.detail || error?.detail;
+
+        if (errorStatus === 422) {
+            // Check for specific "cannot_resend_yet" error that requires 24-hour wait
+            // Handle both "errors/cannot_resend_yet" and "cannot_resend_yet" formats
+            if (errorType === 'errors/cannot_resend_yet' || errorType === 'cannot_resend_yet') {
+                logger.warn('LinkedIn provider limit reached - need to wait 24 hours before retry', {
+                    accountId,
+                    identifier,
+                    providerId,
+                    campaignId,
+                    errorStatus,
+                    errorType,
+                    errorDetail,
+                    errorMessage: error.message,
+                    errorBody: errorBody?.error?.body
+                });
+                return {
+                    success: false,
+                    message: 'Temporary provider limit reached - will retry after 24 hours',
+                    data: {
+                        error: {
+                            type: 'provider_limit_reached',
+                            message: errorDetail || 'You have reached a temporary provider limit. Please try again later.',
+                            statusCode: 422,
+                            errorType: errorType,
+                            retryAfterHours: 24,
+                            shouldRetry: true
+                        }
+                    }
+                };
+            }
+
+            logger.error('Cannot send connection request - validation error (422)', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                errorStatus,
+                errorType,
+                errorDetail,
+                errorMessage: error.message,
+                errorBody: errorBody?.error?.body,
+                fullError: error
+            });
             return {
                 success: false,
                 message: 'Cannot send connection request - profile issue or already pending',
                 data: {
                     error: {
                         type: 'connection_request_rejected',
-                        message: errorBody?.error?.body?.detail || 'Cannot send connection request at this time',
+                        message: errorDetail || 'Cannot send connection request at this time',
                         statusCode: 422,
-                        errorType: errorBody?.error?.body?.type || 'unknown'
+                        errorType: errorType || 'unknown'
+                    }
+                }
+            };
+        } else if (errorStatus === 429) {
+            logger.error('Cannot send connection request - rate limit exceeded (429)', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                errorStatus,
+                errorType,
+                errorDetail,
+                errorMessage: error.message,
+                errorBody: errorBody?.error?.body
+            });
+            await pauseCampaign(campaignId);
+            return {
+                success: false,
+                message: 'Rate limit exceeded for connection requests',
+                data: {
+                    campaignPaused: true,
+                    error: {
+                        type: 'rate_limit_exceeded',
+                        message: errorDetail || 'Too many connection requests sent',
+                        statusCode: 429
+                    }
+                }
+            };
+        } else if (errorStatus === 401 || errorStatus === 403) {
+            logger.error('Cannot send connection request - authentication/authorization error', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                errorStatus,
+                errorType,
+                errorDetail,
+                errorMessage: error.message,
+                errorBody: errorBody?.error?.body
+            });
+            await pauseCampaign(campaignId);
+            return {
+                success: false,
+                message: 'Authentication failed for connection request',
+                data: {
+                    campaignPaused: true,
+                    error: {
+                        type: 'authentication_failed',
+                        message: errorDetail || 'Account authentication failed',
+                        statusCode: errorStatus
                     }
                 }
             };
         } else {
-            logger.error('Error sending connection request', { error });
+            logger.error('Error sending connection request - unexpected error', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                errorStatus,
+                errorType,
+                errorDetail,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                errorBody: errorBody?.error?.body,
+                fullError: error
+            });
             await pauseCampaign(campaignId);
             return {
                 success: false,
@@ -494,6 +721,8 @@ export async function send_connection_request(accountId: string, identifier: str
                     error: {
                         type: 'send_connection_request_failed',
                         message: error.message || 'Failed to send connection request',
+                        statusCode: errorStatus,
+                        errorType: errorType,
                         details: errorBody?.error?.body || {}
                     }
                 }
@@ -624,14 +853,49 @@ function getNextWeekReset(now: Date): Date {
 }
 
 export async function check_connection_status(accountId: string, identifier: string, providerId: string, campaignId: string): Promise<ActivityResult> {
-    logger.info('check_connection_status', { accountId, identifier, providerId });
+    logger.info('check_connection_status - Starting', {
+        accountId,
+        identifier,
+        providerId,
+        campaignId
+    });
+
     try {
         const unipileService = new UnipileService();
 
         // Check if connected (accepted)
-        const connected = await unipileService.isConnected({ accountId, identifier });
+        let connected = false;
+        try {
+            connected = await unipileService.isConnected({ accountId, identifier });
+            logger.info('Connection status checked (isConnected)', {
+                accountId,
+                identifier,
+                providerId,
+                connected
+            });
+        } catch (error: any) {
+            const errorBody = error as UnipileError;
+            logger.error('Failed to check if user is connected', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                error: error.message,
+                errorStack: error.stack,
+                errorBody: errorBody?.error?.body,
+                errorStatus: errorBody?.error?.body?.status,
+                errorType: errorBody?.error?.body?.type
+            });
+            // Continue to check invitation status even if connection check fails
+        }
+
         if (connected) {
-            logger.info('User is CONNECTED (request accepted)', { accountId, identifier });
+            logger.info('User is CONNECTED (request accepted)', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId
+            });
             return {
                 success: true,
                 message: 'User is connected',
@@ -640,13 +904,43 @@ export async function check_connection_status(accountId: string, identifier: str
         }
 
         // Check if invitation still pending or was rejected
-        const invitationStillExists = await unipileService.isInvitationPending({
-            accountId,
-            providerId
-        });
+        let invitationStillExists = false;
+        try {
+            invitationStillExists = await unipileService.isInvitationPending({
+                accountId,
+                providerId
+            });
+            logger.info('Invitation status checked (isInvitationPending)', {
+                accountId,
+                identifier,
+                providerId,
+                invitationStillExists
+            });
+        } catch (error: any) {
+            const errorBody = error as UnipileError;
+            logger.error('Failed to check if invitation is pending', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                error: error.message,
+                errorStack: error.stack,
+                errorBody: errorBody?.error?.body,
+                errorStatus: errorBody?.error?.body?.status,
+                errorType: errorBody?.error?.body?.type
+            });
+            // If we can't check invitation status, assume it's still pending
+            // This allows polling to continue
+            invitationStillExists = true;
+        }
 
         if (!invitationStillExists) {
-            logger.warn('Invitation not found (request rejected)', { accountId, identifier, providerId });
+            logger.warn('Invitation not found (request rejected)', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId
+            });
             return {
                 success: false,
                 message: 'Connection request was rejected',
@@ -655,7 +949,12 @@ export async function check_connection_status(accountId: string, identifier: str
         }
 
         // Still pending
-        logger.info('Connection request still pending', { accountId, identifier });
+        logger.info('Connection request still pending', {
+            accountId,
+            identifier,
+            providerId,
+            campaignId
+        });
         return {
             success: false,
             message: 'Connection request still pending',
@@ -663,8 +962,23 @@ export async function check_connection_status(accountId: string, identifier: str
         };
     } catch (error: any) {
         const errorBody = error as UnipileError;
-        if (errorBody?.error?.body?.status === 422) {
-            logger.error('Profile not found while checking connection, skipping', errorBody);
+        const errorStatus = errorBody?.error?.body?.status;
+        const errorType = errorBody?.error?.body?.type;
+        const errorDetail = errorBody?.error?.body?.detail;
+
+        if (errorStatus === 422) {
+            logger.error('Profile not found while checking connection status (422)', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                errorStatus,
+                errorType,
+                errorDetail,
+                errorMessage: error.message,
+                errorBody: errorBody?.error?.body,
+                fullError: error
+            });
             return {
                 success: false,
                 message: 'Profile not found',
@@ -674,12 +988,52 @@ export async function check_connection_status(accountId: string, identifier: str
                     error: {
                         type: 'profile_not_found',
                         message: 'Profile not found during connection status check',
-                        statusCode: 422
+                        statusCode: 422,
+                        errorType: errorType,
+                        errorDetail: errorDetail
+                    }
+                }
+            };
+        } else if (errorStatus === 429) {
+            logger.error('Rate limit exceeded while checking connection status (429)', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                errorStatus,
+                errorType,
+                errorDetail,
+                errorMessage: error.message,
+                errorBody: errorBody?.error?.body
+            });
+            // Don't pause campaign for rate limits during status checks - just return error
+            return {
+                success: false,
+                message: 'Rate limit exceeded while checking connection status',
+                data: {
+                    connected: false,
+                    status: 'error',
+                    error: {
+                        type: 'rate_limit_exceeded',
+                        message: 'Too many status check requests',
+                        statusCode: 429
                     }
                 }
             };
         } else {
-            logger.error('Error checking connection status', { error: error.message, accountId, identifier });
+            logger.error('Error checking connection status - unexpected error', {
+                accountId,
+                identifier,
+                providerId,
+                campaignId,
+                errorStatus,
+                errorType,
+                errorDetail,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                errorBody: errorBody?.error?.body,
+                fullError: error
+            });
             await pauseCampaign(campaignId);
             return {
                 success: false,
@@ -689,6 +1043,8 @@ export async function check_connection_status(accountId: string, identifier: str
                     error: {
                         type: 'check_connection_status_failed',
                         message: error.message || 'Failed to check connection status',
+                        statusCode: errorStatus,
+                        errorType: errorType,
                         details: errorBody?.error?.body || {}
                     }
                 }
