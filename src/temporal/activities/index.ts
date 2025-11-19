@@ -1,16 +1,16 @@
-import { CampaignResponseDto, CampaignStatus, CampaignStepResponseDto, CreateCampaignStepDto, UpdateCampaignDto } from "../../dto/campaigns.dto";
-import { LeadInsertDto, LeadListResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
-import { CampaignService } from "../../services/CampaignService";
-import { ConnectedAccountService } from "../../services/ConnectedAccountService";
-import { CsvLead, CsvParseResult, CsvService } from "../../services/CsvService";
-import { LeadListService } from "../../services/LeadListService";
-import { LeadService } from "../../services/LeadService";
-import { UnipileError, UnipileService } from "../../services/UnipileService";
-import { EWorkflowNodeType, WorkflowJson, WorkflowNodeConfig } from "../../types/workflow.types";
-import logger from "../../utils/logger";
-import { ActivityResult } from "../workflows/leadWorkflow";
-import { NotFoundError } from "../../errors/AppError";
-import env from "../../config/env";
+import { CampaignResponseDto, CampaignStatus, CampaignStepResponseDto, CreateCampaignStepDto, UpdateCampaignDto } from '../../dto/campaigns.dto';
+import { LeadInsertDto, LeadListResponseDto, LeadUpdateDto } from '../../dto/leads.dto';
+import { CampaignService } from '../../services/CampaignService';
+import { ConnectedAccountService } from '../../services/ConnectedAccountService';
+import { CsvLead, CsvParseResult, CsvService } from '../../services/CsvService';
+import { LeadListService } from '../../services/LeadListService';
+import { LeadService } from '../../services/LeadService';
+import { UnipileError, UnipileService } from '../../services/UnipileService';
+import { EWorkflowNodeType, WorkflowJson, WorkflowNodeConfig } from '../../types/workflow.types';
+import logger from '../../utils/logger';
+import { ActivityResult } from '../workflows/leadWorkflow';
+import { NotFoundError } from '../../errors/AppError';
+import env from '../../config/env';
 
 export async function testActivity(input: { message: string; delay?: number }): Promise<{ success: boolean; data: any; timestamp: string }> {
     logger.info('Test activity started', { input });
@@ -27,9 +27,9 @@ export async function testActivity(input: { message: string; delay?: number }): 
             message: input.message,
             processedAt: new Date().toISOString(),
             workerId: process.env.TEMPORAL_WORKER_ID || 'unknown',
-            environment: process.env.NODE_ENV || 'development'
+            environment: process.env.NODE_ENV || 'development',
         },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
     };
 
     logger.info('Test activity completed', { result });
@@ -49,7 +49,7 @@ export async function getCampaignById(campaignId: string) {
     return campaign;
 }
 
-export async function getLeadListData(leadListId: string, organizationId: string): Promise<{ csvData: CsvParseResult, leadList: LeadListResponseDto }> {
+export async function getLeadListData(leadListId: string, organizationId: string): Promise<{ csvData: CsvParseResult; leadList: LeadListResponseDto }> {
     logger.info('Getting lead list data', { leadListId, organizationId });
     const leadListService = new LeadListService();
     const leadList = await leadListService.getLeadListDataById(leadListId, organizationId);
@@ -65,36 +65,35 @@ export async function entryLeadsIntoDb(leads: CsvLead[], organization_id: string
             const leadDto: LeadInsertDto = {
                 first_name: lead.first_name,
                 last_name: lead.last_name,
-                full_name: lead.first_name + " " + lead.last_name,
+                full_name: lead.first_name + ' ' + lead.last_name,
                 organization_id: organization_id,
                 campaign_id: campaign_id,
                 source: 'CSV',
                 linkedin_url: lead.linkedin_url,
                 company: lead.company,
                 title: lead.title,
-                phone: lead.phone
-            }
+                phone: lead.phone,
+            };
             await leadService.createLead(leadDto);
-        }
-        )
-    })
+        });
+    });
 }
 
 export async function getDBLeads(campaign_id: string) {
     const leadService = new LeadService();
     const leads = await leadService.getAllByCampaignId(campaign_id);
-    return leads
+    return leads;
 }
 export async function updateLead(leadId: string, data: LeadUpdateDto) {
     const leadService = new LeadService();
     const leads = await leadService.updateLead(leadId, data);
-    return leads
+    return leads;
 }
 
 export async function getWorkflowByCampaignId(campaign: CampaignResponseDto): Promise<WorkflowJson> {
     const campaignService = new CampaignService();
     const { workflowData } = await campaignService.getWorkflow(campaign);
-    return workflowData
+    return workflowData;
 }
 
 export async function verifyUnipileAccount(sender_account: string) {
@@ -124,18 +123,18 @@ export async function profile_visit(accountId: string, identifier: string, campa
         const result: any = await unipileService.visitLinkedInProfile({
             accountId: accountId,
             identifier: identifier,
-            notify: false
+            notify: false,
         });
         const lead_data = {
             first_name: result?.first_name as string,
             last_name: result?.last_name as string,
-            company: result?.work_experience?.[0]?.company ?? undefined
+            company: result?.work_experience?.[0]?.company ?? undefined,
         };
         return { success: true, message: 'Profile visit completed', data: null, providerId: result?.provider_id, lead_data };
     } catch (error: any) {
         const errorBody = error as UnipileError;
-        if(errorBody?.error?.body?.status === 422){
-            logger.error('The Profile doesnt exist skipping', errorBody)
+        if (errorBody?.error?.body?.status === 422) {
+            logger.error('The Profile doesnt exist skipping', errorBody);
             return {
                 success: false,
                 message: 'Profile does not exist',
@@ -143,13 +142,13 @@ export async function profile_visit(accountId: string, identifier: string, campa
                     error: {
                         type: 'profile_not_found',
                         message: 'The LinkedIn profile does not exist or is inaccessible',
-                        statusCode: 422
-                    }
-                }
+                        statusCode: 422,
+                    },
+                },
             };
         } else {
-            logger.info('Unipile account not found', { accountId, identifier, campaignId })
-            await pauseCampaign(campaignId)
+            logger.info('Unipile account not found', { accountId, identifier, campaignId });
+            await pauseCampaign(campaignId);
             return {
                 success: false,
                 message: 'Unipile account not found',
@@ -158,13 +157,12 @@ export async function profile_visit(accountId: string, identifier: string, campa
                     error: {
                         type: 'account_verification_failed',
                         message: error.message || 'Failed to verify Unipile account',
-                        details: errorBody?.error?.body || {}
-                    }
-                }
+                        details: errorBody?.error?.body || {},
+                    },
+                },
             };
         }
     }
-
 }
 
 export async function like_post(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<ActivityResult> {
@@ -173,7 +171,7 @@ export async function like_post(accountId: string, identifier: string, config: W
 
     const leadAccount = await profile_visit(accountId, identifier, campaignId);
 
-    console.log(leadAccount.providerId)
+    console.log(leadAccount.providerId);
     if (!leadAccount.providerId) {
         return { success: false, message: 'Lead LinkedIn Urn not found' };
     }
@@ -182,12 +180,12 @@ export async function like_post(accountId: string, identifier: string, config: W
             accountId: accountId,
             linkedInUrn: leadAccount.providerId,
             lastDays: config?.recentPostDays || 7,
-            reactionType: 'like'
+            reactionType: 'like',
         });
     } catch (error: any) {
         const errorBody = error as UnipileError;
-        if(errorBody?.error?.body?.status === 422){
-            logger.error('The Profile doesnt exist skipping | Posts are unreachable', errorBody)
+        if (errorBody?.error?.body?.status === 422) {
+            logger.error('The Profile doesnt exist skipping | Posts are unreachable', errorBody);
             return {
                 success: false,
                 message: 'Posts are unreachable',
@@ -195,9 +193,9 @@ export async function like_post(accountId: string, identifier: string, config: W
                     error: {
                         type: 'posts_unreachable',
                         message: 'Unable to access or like posts on this profile',
-                        statusCode: 422
-                    }
-                }
+                        statusCode: 422,
+                    },
+                },
             };
         } else {
             logger.error('Error liking LinkedIn post', { error });
@@ -210,9 +208,9 @@ export async function like_post(accountId: string, identifier: string, config: W
                     error: {
                         type: 'like_post_failed',
                         message: error.message || 'Failed to like LinkedIn post',
-                        details: errorBody?.error?.body || {}
-                    }
-                }
+                        details: errorBody?.error?.body || {},
+                    },
+                },
             };
         }
     }
@@ -223,12 +221,14 @@ export async function comment_post(accountId: string, identifier: string, config
     logger.info('comment_post');
     const unipileService = new UnipileService();
     const leadAccount = await profile_visit(accountId, identifier, campaignId);
-    if (!leadAccount.providerId) { return { success: false, message: 'Lead LinkedIn Urn not found' }; }
+    if (!leadAccount.providerId) {
+        return { success: false, message: 'Lead LinkedIn Urn not found' };
+    }
     try {
         const result = await unipileService.commentLinkedInPost({
             accountId: accountId,
             linkedInUrn: leadAccount.providerId,
-            config: config
+            config: config,
         });
         return { success: true, message: 'Comment posted successfully' };
     } catch (error: any) {
@@ -242,9 +242,9 @@ export async function comment_post(accountId: string, identifier: string, config
                     error: {
                         type: 'comment_post_unreachable',
                         message: 'Unable to access or comment on posts for this profile',
-                        statusCode: 422
-                    }
-                }
+                        statusCode: 422,
+                    },
+                },
             };
         } else {
             logger.error('Error commenting on LinkedIn post', { error });
@@ -257,9 +257,9 @@ export async function comment_post(accountId: string, identifier: string, config
                     error: {
                         type: 'comment_post_failed',
                         message: error.message || 'Failed to comment on LinkedIn post',
-                        details: errorBody?.error?.body || {}
-                    }
-                }
+                        details: errorBody?.error?.body || {},
+                    },
+                },
             };
         }
     }
@@ -269,13 +269,15 @@ export async function send_followup(accountId: string, identifier: string, confi
     logger.info('send_followup');
     const unipileService = new UnipileService();
     const leadAccount = await profile_visit(accountId, identifier, campaignId);
-    if (!leadAccount.providerId) { return { success: false, message: 'Lead LinkedIn Urn not found', data: leadAccount }; }
+    if (!leadAccount.providerId) {
+        return { success: false, message: 'Lead LinkedIn Urn not found', data: leadAccount };
+    }
 
     // Prepare template data from lead data - only first_name, last_name, and company
     const templateData = {
         first_name: leadData?.first_name || '',
         last_name: leadData?.last_name || '',
-        company: leadData?.company || ''
+        company: leadData?.company || '',
     };
 
     try {
@@ -283,9 +285,9 @@ export async function send_followup(accountId: string, identifier: string, confi
             accountId: accountId,
             linkedInUrn: leadAccount.providerId,
             config: config,
-            templateData: templateData
+            templateData: templateData,
         });
-        return { success: true, message: 'Follow-up message sent', data: result};
+        return { success: true, message: 'Follow-up message sent', data: result };
     } catch (error: any) {
         const errorBody = error as UnipileError;
         if (errorBody?.error?.body?.status === 422) {
@@ -297,9 +299,9 @@ export async function send_followup(accountId: string, identifier: string, confi
                     error: {
                         type: 'comment_post_unreachable',
                         message: 'Unable to access or comment on posts for this profile',
-                        statusCode: 422
-                    }
-                }
+                        statusCode: 422,
+                    },
+                },
             };
         }
     }
@@ -334,9 +336,9 @@ export async function withdraw_request(accountId: string, identifier: string, ca
                     error: {
                         type: 'invitation_not_found',
                         message: 'The invitation request does not exist or was already withdrawn',
-                        statusCode: 422
-                    }
-                }
+                        statusCode: 422,
+                    },
+                },
             };
         } else {
             logger.error('Error withdrawing request', { error, accountId, identifier });
@@ -349,9 +351,9 @@ export async function withdraw_request(accountId: string, identifier: string, ca
                     error: {
                         type: 'withdraw_request_failed',
                         message: error.message || 'Failed to withdraw connection request',
-                        details: errorBody?.error?.body || {}
-                    }
-                }
+                        details: errorBody?.error?.body || {},
+                    },
+                },
             };
         }
     }
@@ -374,9 +376,9 @@ export async function isConnected(accountId: string, identifier: string, campaig
                     error: {
                         type: 'profile_not_found',
                         message: 'Profile not found while checking connection status',
-                        statusCode: 422
-                    }
-                }
+                        statusCode: 422,
+                    },
+                },
             };
         } else {
             logger.error('Error checking connection status', { error });
@@ -389,9 +391,9 @@ export async function isConnected(accountId: string, identifier: string, campaig
                     error: {
                         type: 'connection_check_failed',
                         message: error.message || 'Failed to check connection status',
-                        details: errorBody?.error?.body || {}
-                    }
-                }
+                        details: errorBody?.error?.body || {},
+                    },
+                },
             };
         }
     }
@@ -412,7 +414,7 @@ export async function send_connection_request(accountId: string, identifier: str
                 accountId,
                 identifier,
                 campaignId,
-                profileVisitResult
+                profileVisitResult,
             });
             return {
                 success: false,
@@ -422,16 +424,16 @@ export async function send_connection_request(accountId: string, identifier: str
                         type: 'provider_id_not_found',
                         message: 'Failed to extract provider ID from LinkedIn profile',
                         accountId,
-                        identifier
-                    }
-                }
+                        identifier,
+                    },
+                },
             };
         }
 
         logger.info('Profile visit successful, provider ID extracted', {
             accountId,
             identifier,
-            providerId
+            providerId,
         });
     } catch (error: any) {
         const errorBody = error as UnipileError;
@@ -444,7 +446,7 @@ export async function send_connection_request(accountId: string, identifier: str
             errorBody: errorBody?.error?.body,
             errorStatus: errorBody?.error?.body?.status,
             errorType: errorBody?.error?.body?.type,
-            errorDetail: errorBody?.error?.body?.detail
+            errorDetail: errorBody?.error?.body?.detail,
         });
         return {
             success: false,
@@ -453,9 +455,9 @@ export async function send_connection_request(accountId: string, identifier: str
                 error: {
                     type: 'profile_visit_failed',
                     message: error.message || 'Failed to visit LinkedIn profile',
-                    details: errorBody?.error?.body || {}
-                }
-            }
+                    details: errorBody?.error?.body || {},
+                },
+            },
         };
     }
 
@@ -468,7 +470,7 @@ export async function send_connection_request(accountId: string, identifier: str
                 accountId,
                 identifier,
                 providerId,
-                alreadyConnected
+                alreadyConnected,
             });
         } catch (error: any) {
             const errorBody = error as UnipileError;
@@ -480,7 +482,7 @@ export async function send_connection_request(accountId: string, identifier: str
                 error: error.message,
                 errorStack: error.stack,
                 errorBody: errorBody?.error?.body,
-                errorStatus: errorBody?.error?.body?.status
+                errorStatus: errorBody?.error?.body?.status,
             });
             // Continue with sending request even if connection check fails
         }
@@ -489,12 +491,12 @@ export async function send_connection_request(accountId: string, identifier: str
             logger.info('User already connected, skipping connection request', {
                 accountId,
                 identifier,
-                providerId
+                providerId,
             });
             return {
                 success: true,
                 message: 'User is already connected',
-                data: { connected: true, alreadyConnected: true, providerId }
+                data: { connected: true, alreadyConnected: true, providerId },
             };
         }
 
@@ -506,8 +508,8 @@ export async function send_connection_request(accountId: string, identifier: str
             campaignId,
             config: {
                 useAI: config?.useAI,
-                customMessage: config?.customMessage ? '***custom message provided***' : undefined
-            }
+                customMessage: config?.customMessage ? '***custom message provided***' : undefined,
+            },
         });
 
         let invitationResult: any;
@@ -515,7 +517,7 @@ export async function send_connection_request(accountId: string, identifier: str
             invitationResult = await unipileService.sendLinkedInInvitation({
                 accountId: accountId,
                 providerId: providerId,
-                config: config
+                config: config,
             });
 
             logger.info('Connection request sent successfully', {
@@ -523,7 +525,7 @@ export async function send_connection_request(accountId: string, identifier: str
                 identifier,
                 providerId,
                 campaignId,
-                invitationResult: invitationResult ? 'received' : 'null'
+                invitationResult: invitationResult ? 'received' : 'null',
             });
         } catch (invitationError: any) {
             const invitationErrorBody = invitationError as UnipileError;
@@ -538,7 +540,7 @@ export async function send_connection_request(accountId: string, identifier: str
                 errorStatus: invitationErrorBody?.error?.body?.status,
                 errorType: invitationErrorBody?.error?.body?.type,
                 errorDetail: invitationErrorBody?.error?.body?.detail,
-                fullError: invitationError
+                fullError: invitationError,
             });
             throw invitationError; // Re-throw to be caught by outer catch
         }
@@ -553,7 +555,7 @@ export async function send_connection_request(accountId: string, identifier: str
 
                 await campaignService.updateCampaign(campaignId, {
                     requests_sent_this_day: currentDayCount,
-                    requests_sent_this_week: currentWeekCount
+                    requests_sent_this_week: currentWeekCount,
                 } as UpdateCampaignDto);
 
                 logger.info('Campaign connection request counters incremented', {
@@ -561,11 +563,11 @@ export async function send_connection_request(accountId: string, identifier: str
                     dailyCount: currentDayCount,
                     weeklyCount: currentWeekCount,
                     previousDailyCount: campaign.requests_sent_this_day,
-                    previousWeeklyCount: campaign.requests_sent_this_week
+                    previousWeeklyCount: campaign.requests_sent_this_week,
                 });
             } else {
                 logger.warn('Campaign not found when updating connection request counters', {
-                    campaignId
+                    campaignId,
                 });
             }
         } catch (counterError: any) {
@@ -576,7 +578,7 @@ export async function send_connection_request(accountId: string, identifier: str
                 campaignId,
                 error: counterError.message,
                 errorStack: counterError.stack,
-                errorType: counterError.constructor?.name
+                errorType: counterError.constructor?.name,
             });
             // Don't fail the request if counter update fails
         }
@@ -584,7 +586,7 @@ export async function send_connection_request(accountId: string, identifier: str
         return {
             success: true,
             message: 'Connection request sent',
-            data: { providerId, invitationSent: true }
+            data: { providerId, invitationSent: true },
         };
     } catch (error: any) {
         const errorBody = error as UnipileError;
@@ -606,7 +608,7 @@ export async function send_connection_request(accountId: string, identifier: str
                     errorType,
                     errorDetail,
                     errorMessage: error.message,
-                    errorBody: errorBody?.error?.body
+                    errorBody: errorBody?.error?.body,
                 });
                 return {
                     success: false,
@@ -618,9 +620,9 @@ export async function send_connection_request(accountId: string, identifier: str
                             statusCode: 422,
                             errorType: errorType,
                             retryAfterHours: 24,
-                            shouldRetry: true
-                        }
-                    }
+                            shouldRetry: true,
+                        },
+                    },
                 };
             }
 
@@ -634,7 +636,7 @@ export async function send_connection_request(accountId: string, identifier: str
                 errorDetail,
                 errorMessage: error.message,
                 errorBody: errorBody?.error?.body,
-                fullError: error
+                fullError: error,
             });
             return {
                 success: false,
@@ -644,9 +646,9 @@ export async function send_connection_request(accountId: string, identifier: str
                         type: 'connection_request_rejected',
                         message: errorDetail || 'Cannot send connection request at this time',
                         statusCode: 422,
-                        errorType: errorType || 'unknown'
-                    }
-                }
+                        errorType: errorType || 'unknown',
+                    },
+                },
             };
         } else if (errorStatus === 429) {
             logger.error('Cannot send connection request - rate limit exceeded (429)', {
@@ -658,7 +660,7 @@ export async function send_connection_request(accountId: string, identifier: str
                 errorType,
                 errorDetail,
                 errorMessage: error.message,
-                errorBody: errorBody?.error?.body
+                errorBody: errorBody?.error?.body,
             });
             await pauseCampaign(campaignId);
             return {
@@ -669,9 +671,9 @@ export async function send_connection_request(accountId: string, identifier: str
                     error: {
                         type: 'rate_limit_exceeded',
                         message: errorDetail || 'Too many connection requests sent',
-                        statusCode: 429
-                    }
-                }
+                        statusCode: 429,
+                    },
+                },
             };
         } else if (errorStatus === 401 || errorStatus === 403) {
             logger.error('Cannot send connection request - authentication/authorization error', {
@@ -683,7 +685,7 @@ export async function send_connection_request(accountId: string, identifier: str
                 errorType,
                 errorDetail,
                 errorMessage: error.message,
-                errorBody: errorBody?.error?.body
+                errorBody: errorBody?.error?.body,
             });
             await pauseCampaign(campaignId);
             return {
@@ -694,9 +696,9 @@ export async function send_connection_request(accountId: string, identifier: str
                     error: {
                         type: 'authentication_failed',
                         message: errorDetail || 'Account authentication failed',
-                        statusCode: errorStatus
-                    }
-                }
+                        statusCode: errorStatus,
+                    },
+                },
             };
         } else {
             logger.error('Error sending connection request - unexpected error', {
@@ -710,7 +712,7 @@ export async function send_connection_request(accountId: string, identifier: str
                 errorMessage: error.message,
                 errorStack: error.stack,
                 errorBody: errorBody?.error?.body,
-                fullError: error
+                fullError: error,
             });
             await pauseCampaign(campaignId);
             return {
@@ -723,9 +725,9 @@ export async function send_connection_request(accountId: string, identifier: str
                         message: error.message || 'Failed to send connection request',
                         statusCode: errorStatus,
                         errorType: errorType,
-                        details: errorBody?.error?.body || {}
-                    }
-                }
+                        details: errorBody?.error?.body || {},
+                    },
+                },
             };
         }
     }
@@ -740,8 +742,8 @@ export async function pauseCampaign(campaignId: string): Promise<void> {
         return;
     }
     await campaignService.updateCampaign(campaignId, {
-        status: CampaignStatus.PAUSED
-    } as UpdateCampaignDto)
+        status: CampaignStatus.PAUSED,
+    } as UpdateCampaignDto);
     logger.info('Campaign paused successfully', { campaignId });
 }
 
@@ -809,9 +811,7 @@ export async function checkConnectionRequestLimits(campaignId: string): Promise<
         const waitUntilWeekly = nextWeeklyReset.getTime() - now.getTime();
 
         // Wait for the longer duration if both exceeded, otherwise wait for the one that's exceeded
-        const waitUntilMs = (dailyExceeded && weeklyExceeded)
-            ? Math.max(waitUntilDaily, waitUntilWeekly)
-            : (dailyExceeded ? waitUntilDaily : waitUntilWeekly);
+        const waitUntilMs = dailyExceeded && weeklyExceeded ? Math.max(waitUntilDaily, waitUntilWeekly) : dailyExceeded ? waitUntilDaily : waitUntilWeekly;
 
         return { canProceed: false, waitUntilMs };
     }
@@ -834,7 +834,7 @@ function getWeekNumber(date: Date): number {
     const dayNum = d.getUTCDay() || 7;
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
 function getNextDayReset(now: Date): Date {
@@ -857,7 +857,7 @@ export async function check_connection_status(accountId: string, identifier: str
         accountId,
         identifier,
         providerId,
-        campaignId
+        campaignId,
     });
 
     try {
@@ -871,7 +871,7 @@ export async function check_connection_status(accountId: string, identifier: str
                 accountId,
                 identifier,
                 providerId,
-                connected
+                connected,
             });
         } catch (error: any) {
             const errorBody = error as UnipileError;
@@ -884,7 +884,7 @@ export async function check_connection_status(accountId: string, identifier: str
                 errorStack: error.stack,
                 errorBody: errorBody?.error?.body,
                 errorStatus: errorBody?.error?.body?.status,
-                errorType: errorBody?.error?.body?.type
+                errorType: errorBody?.error?.body?.type,
             });
             // Continue to check invitation status even if connection check fails
         }
@@ -894,12 +894,12 @@ export async function check_connection_status(accountId: string, identifier: str
                 accountId,
                 identifier,
                 providerId,
-                campaignId
+                campaignId,
             });
             return {
                 success: true,
                 message: 'User is connected',
-                data: { connected: true, status: 'accepted' }
+                data: { connected: true, status: 'accepted' },
             };
         }
 
@@ -908,13 +908,13 @@ export async function check_connection_status(accountId: string, identifier: str
         try {
             invitationStillExists = await unipileService.isInvitationPending({
                 accountId,
-                providerId
+                providerId,
             });
             logger.info('Invitation status checked (isInvitationPending)', {
                 accountId,
                 identifier,
                 providerId,
-                invitationStillExists
+                invitationStillExists,
             });
         } catch (error: any) {
             const errorBody = error as UnipileError;
@@ -927,7 +927,7 @@ export async function check_connection_status(accountId: string, identifier: str
                 errorStack: error.stack,
                 errorBody: errorBody?.error?.body,
                 errorStatus: errorBody?.error?.body?.status,
-                errorType: errorBody?.error?.body?.type
+                errorType: errorBody?.error?.body?.type,
             });
             // If we can't check invitation status, assume it's still pending
             // This allows polling to continue
@@ -939,12 +939,12 @@ export async function check_connection_status(accountId: string, identifier: str
                 accountId,
                 identifier,
                 providerId,
-                campaignId
+                campaignId,
             });
             return {
                 success: false,
                 message: 'Connection request was rejected',
-                data: { connected: false, status: 'rejected' }
+                data: { connected: false, status: 'rejected' },
             };
         }
 
@@ -953,12 +953,12 @@ export async function check_connection_status(accountId: string, identifier: str
             accountId,
             identifier,
             providerId,
-            campaignId
+            campaignId,
         });
         return {
             success: false,
             message: 'Connection request still pending',
-            data: { connected: false, status: 'pending' }
+            data: { connected: false, status: 'pending' },
         };
     } catch (error: any) {
         const errorBody = error as UnipileError;
@@ -977,7 +977,7 @@ export async function check_connection_status(accountId: string, identifier: str
                 errorDetail,
                 errorMessage: error.message,
                 errorBody: errorBody?.error?.body,
-                fullError: error
+                fullError: error,
             });
             return {
                 success: false,
@@ -990,9 +990,9 @@ export async function check_connection_status(accountId: string, identifier: str
                         message: 'Profile not found during connection status check',
                         statusCode: 422,
                         errorType: errorType,
-                        errorDetail: errorDetail
-                    }
-                }
+                        errorDetail: errorDetail,
+                    },
+                },
             };
         } else if (errorStatus === 429) {
             logger.error('Rate limit exceeded while checking connection status (429)', {
@@ -1004,7 +1004,7 @@ export async function check_connection_status(accountId: string, identifier: str
                 errorType,
                 errorDetail,
                 errorMessage: error.message,
-                errorBody: errorBody?.error?.body
+                errorBody: errorBody?.error?.body,
             });
             // Don't pause campaign for rate limits during status checks - just return error
             return {
@@ -1016,9 +1016,9 @@ export async function check_connection_status(accountId: string, identifier: str
                     error: {
                         type: 'rate_limit_exceeded',
                         message: 'Too many status check requests',
-                        statusCode: 429
-                    }
-                }
+                        statusCode: 429,
+                    },
+                },
             };
         } else {
             logger.error('Error checking connection status - unexpected error', {
@@ -1032,7 +1032,7 @@ export async function check_connection_status(accountId: string, identifier: str
                 errorMessage: error.message,
                 errorStack: error.stack,
                 errorBody: errorBody?.error?.body,
-                fullError: error
+                fullError: error,
             });
             await pauseCampaign(campaignId);
             return {
@@ -1045,24 +1045,15 @@ export async function check_connection_status(accountId: string, identifier: str
                         message: error.message || 'Failed to check connection status',
                         statusCode: errorStatus,
                         errorType: errorType,
-                        details: errorBody?.error?.body || {}
-                    }
-                }
+                        details: errorBody?.error?.body || {},
+                    },
+                },
             };
         }
     }
 }
 
-export async function updateCampaignStep(
-    campaignId: string,
-    stepType: EWorkflowNodeType,
-    config: WorkflowNodeConfig,
-    success: boolean,
-    results: Record<string, any>,
-    stepIndex: number,
-    organizationId: string,
-    leadId: string
-): Promise<ActivityResult> {
+export async function updateCampaignStep(campaignId: string, stepType: EWorkflowNodeType, config: WorkflowNodeConfig, success: boolean, results: Record<string, any>, stepIndex: number, organizationId: string, leadId: string): Promise<ActivityResult> {
     logger.info('updateCampaignStep', { campaignId, stepType, success, stepIndex });
 
     try {
@@ -1090,7 +1081,7 @@ export async function updateCampaignStep(
             success: success,
             step_index: stepIndex,
             organization_id: organizationId,
-            campaign_id: campaignId
+            campaign_id: campaignId,
         };
 
         await campaignService.createCampaignStep(newStep);
@@ -1098,30 +1089,30 @@ export async function updateCampaignStep(
             campaignId,
             stepType,
             success,
-            stepIndex
+            stepIndex,
         });
 
         return {
             success: true,
             message: 'Campaign step updated successfully',
-            data: { stepIndex }
+            data: { stepIndex },
         };
     } catch (error: any) {
         logger.error('Error updating campaign step', {
             error: error.message,
             campaignId,
             stepIndex,
-            stepType
+            stepType,
         });
         return {
             success: false,
-            message: `Failed to update campaign step: ${error.message}`
+            message: `Failed to update campaign step: ${error.message}`,
         };
     }
 }
 
 export function CheckNever(value: never): never {
-    throw new Error(`Unhandled case: ${value}`)
+    throw new Error(`Unhandled case: ${value}`);
 }
 
 export const isNullOrUndefined = (it: any) => it === null || it === undefined;
@@ -1135,11 +1126,7 @@ export async function extractLinkedInPublicIdentifier(url: string): Promise<stri
  * Returns the number of milliseconds to wait until the window opens, or 0 if already in window
  * Wait time is calculated in UTC milliseconds for use with Temporal sleep
  */
-export async function checkTimeWindow(
-    startTime: string | null | undefined,
-    endTime: string | null | undefined,
-    timezone: string | null | undefined
-): Promise<{ inWindow: boolean; waitMs: number; currentTime: string }> {
+export async function checkTimeWindow(startTime: string | null | undefined, endTime: string | null | undefined, timezone: string | null | undefined): Promise<{ inWindow: boolean; waitMs: number; currentTime: string }> {
     // If no time restrictions, always allow
     if (!startTime || !endTime) {
         return { inWindow: true, waitMs: 0, currentTime: new Date().toISOString() };
@@ -1154,7 +1141,7 @@ export async function checkTimeWindow(
         return {
             hours: parseInt(parts[0], 10),
             minutes: parseInt(parts[1] || '0', 10),
-            seconds: parseInt(parts[2] || '0', 10)
+            seconds: parseInt(parts[2] || '0', 10),
         };
     };
 
@@ -1170,7 +1157,7 @@ export async function checkTimeWindow(
         hour: 'numeric',
         minute: 'numeric',
         second: 'numeric',
-        hour12: false
+        hour12: false,
     });
 
     const parts = dateFormatter.formatToParts(now);
@@ -1213,7 +1200,7 @@ export async function checkTimeWindow(
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
-                hour12: false
+                hour12: false,
             }).formatToParts(candidateDate);
 
             const candidateYear = parseInt(candidateTzParts.find(p => p.type === 'year')?.value || '0', 10);
@@ -1223,8 +1210,7 @@ export async function checkTimeWindow(
             const candidateMinute = parseInt(candidateTzParts.find(p => p.type === 'minute')?.value || '0', 10);
 
             // If we match, we're done
-            if (candidateYear === year && candidateMonth === month && candidateDay === day &&
-                candidateHour === hour && candidateMinute === minute) {
+            if (candidateYear === year && candidateMonth === month && candidateDay === day && candidateHour === hour && candidateMinute === minute) {
                 break;
             }
 

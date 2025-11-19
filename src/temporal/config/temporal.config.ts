@@ -1,5 +1,5 @@
-import { ConnectionOptions, TLSConfig } from "@temporalio/client";
-import logger from "../../utils/logger";
+import { ConnectionOptions, TLSConfig } from '@temporalio/client';
+import logger from '../../utils/logger';
 
 export interface TemporalConfig {
     address: string;
@@ -66,7 +66,7 @@ export function getTemporalConnectionOptions(): ConnectionOptions {
     const connectionOptions: ConnectionOptions = {
         address: config.address,
         tls: true,
-        apiKey: config.apiKey
+        apiKey: config.apiKey,
     };
 
     // Only add TLS if it's configured

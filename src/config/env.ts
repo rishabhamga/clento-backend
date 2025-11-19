@@ -8,7 +8,10 @@ dotenv.config();
 const envSchema = z.object({
     // Server
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-    PORT: z.string().transform(val => parseInt(val, 10)).default('3004'),
+    PORT: z
+        .string()
+        .transform(val => parseInt(val, 10))
+        .default('3004'),
 
     // Supabase (optional for development)
     SUPABASE_URL: z.string().optional(),
@@ -33,12 +36,21 @@ const envSchema = z.object({
 
     // Logging
     LOG_LEVEL: z.enum(['error', 'warn', 'info', 'http', 'debug']).default('info'),
-    DEBUG_LOGS: z.string().transform(val => val === 'true').default('false'),
+    DEBUG_LOGS: z
+        .string()
+        .transform(val => val === 'true')
+        .default('false'),
     // Temporal Worker Configuration
-    ENABLE_TEMPORAL_WORKER: z.string().transform(val => val === 'true').default('true'),
-    TEMPORAL_WORKER_COUNT: z.string().transform(val => parseInt(val, 10)).default('1'),
+    ENABLE_TEMPORAL_WORKER: z
+        .string()
+        .transform(val => val === 'true')
+        .default('true'),
+    TEMPORAL_WORKER_COUNT: z
+        .string()
+        .transform(val => parseInt(val, 10))
+        .default('1'),
     REQUESTS_PER_DAY: z.coerce.number().default(60),
-    REQUESTS_PER_WEEK: z.coerce.number().default(200)
+    REQUESTS_PER_WEEK: z.coerce.number().default(200),
 });
 
 // Parse and validate environment variables

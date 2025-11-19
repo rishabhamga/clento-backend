@@ -16,25 +16,27 @@ Object.defineProperty(Array.prototype, 'chunked', {
             result.push(chunk);
         }
         return result;
-    }
+    },
 });
 Object.defineProperty(Array.prototype, 'forEachAsyncOneByOne', {
     value: async function (fn: any) {
         let i = 0;
-        for (const t of this) { await fn(t, i++); }
-    }
+        for (const t of this) {
+            await fn(t, i++);
+        }
+    },
 });
 
 Object.defineProperty(Array.prototype, 'forEachAsyncParallel', {
     value: async function (fn: any) {
         await Promise.all(this.map(fn));
-    }
+    },
 });
 
 Object.defineProperty(Array.prototype, 'getRandom', {
     value: function () {
         return this[Math.floor(Math.random() * this.length)];
-    }
+    },
 });
 
 Object.defineProperty(Array.prototype, 'mapAsyncOneByOne', {
@@ -45,13 +47,13 @@ Object.defineProperty(Array.prototype, 'mapAsyncOneByOne', {
             resultSet.push(await fn(t, i++));
         }
         return resultSet;
-    }
+    },
 });
 
 Object.defineProperty(Array.prototype, 'mapAsyncParallel', {
     value: async function (fn: any) {
         return await Promise.all(this.map(fn));
-    }
+    },
 });
 
 export default {};

@@ -33,7 +33,7 @@ class LeadListCsvUploadAPI extends ClentoAPI {
 
         // Convert buffer to string
         const csvData = fileBuffer.toString('utf8');
-        const account = await this.connectedAccountService.getAccountById(accountId)
+        const account = await this.connectedAccountService.getAccountById(accountId);
 
         // Preview CSV
         const result = await this.leadListService.previewCsv({ csv_data: csvData }, account.provider_account_id);

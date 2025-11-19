@@ -9,44 +9,40 @@ import '../../utils/expressExtensions';
  * Account Pending API - Pending accounts endpoint
  */
 class AccountPendingAPI extends ClentoAPI {
-  public path = '/api/accounts/pending';
-  public authType: 'DASHBOARD' = 'DASHBOARD';
+    public path = '/api/accounts/pending';
+    public authType: 'DASHBOARD' = 'DASHBOARD';
 
-  private connectedAccountService = new ConnectedAccountService();
+    private connectedAccountService = new ConnectedAccountService();
 
-  /**
-   * Get user's pending accounts (for debugging)
-   */
-  public GET = async (req: Request, res: Response): Promise<Response> => {
-    try {
-      const userId = req.userId;
-      const organizationId = req.organizationId;
+    /**
+     * Get user's pending accounts (for debugging)
+     */
+    public GET = async (req: Request, res: Response): Promise<Response> => {
+        try {
+            const userId = req.userId;
+            const organizationId = req.organizationId;
 
-      // Using express extensions for parameter validation
-      const query = req.getQuery();
-      const provider = query.getParamAsString('provider', false);
+            // Using express extensions for parameter validation
+            const query = req.getQuery();
+            const provider = query.getParamAsString('provider', false);
 
-      logger.info('Getting pending accounts', { userId, organizationId, provider });
+            logger.info('Getting pending accounts', { userId, organizationId, provider });
 
-      // Get pending accounts from the service
-      const accounts = await this.connectedAccountService.getPendingAccounts(
-        userId,
-        organizationId,
-        provider || undefined
-      );
+            // Get pending accounts from the service
+            const accounts = await this.connectedAccountService.getPendingAccounts(userId, organizationId, provider || undefined);
 
-      return res.sendOKResponse({
-        data: accounts,
-        meta: {
-          total: accounts.length,
-        },
-        message: 'Pending accounts retrieved successfully'
-      });
-    } catch (error) {
-      logger.error('Error in getPendingAccounts controller', { error, userId: req.userId });
-      throw error;
-    }
-  };
+            return res.sendOKResponse({
+                data: accounts,
+                meta: {
+                    total: accounts.length,
+                },
+                message: 'Pending accounts retrieved successfully',
+            });
+        } catch (error) {
+            logger.error('Error in getPendingAccounts controller', { error, userId: req.userId });
+            throw error;
+        }
+    };
 }
 
 export default new AccountPendingAPI();

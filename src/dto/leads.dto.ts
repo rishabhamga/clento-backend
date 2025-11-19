@@ -17,14 +17,9 @@ import { z } from 'zod';
  * Used for uploading CSV files via multipart form data
  */
 export const UploadCsvDto = z.object({
-    name: z.string()
-        .min(1, 'Lead list name is required')
-        .max(255, 'Lead list name must be less than 255 characters'),
-    description: z.string()
-        .max(1000, 'Description must be less than 1000 characters')
-        .optional(),
-    connected_account_id: z.string()
-        .uuid('Connected account ID must be a valid UUID'),
+    name: z.string().min(1, 'Lead list name is required').max(255, 'Lead list name must be less than 255 characters'),
+    description: z.string().max(1000, 'Description must be less than 1000 characters').optional(),
+    connected_account_id: z.string().uuid('Connected account ID must be a valid UUID'),
     csv_file: z.any(), // File will be handled by multer middleware
 });
 
@@ -33,12 +28,11 @@ export const UploadCsvDto = z.object({
  * Used for previewing CSV data before import
  */
 export const PreviewCsvDto = z.object({
-    csv_data: z.string()
+    csv_data: z
+        .string()
         .min(1, 'CSV data is required')
         .max(10 * 1024 * 1024, 'CSV data size cannot exceed 10MB'), // 10MB limit
-    mapping: z.record(z.string())
-        .optional()
-        .describe('Field mapping configuration'),
+    mapping: z.record(z.string()).optional().describe('Field mapping configuration'),
 });
 
 /**
@@ -46,20 +40,14 @@ export const PreviewCsvDto = z.object({
  * Used for importing leads from CSV data
  */
 export const ImportLeadsDto = z.object({
-    lead_list_id: z.string()
-        .uuid('Lead list ID must be a valid UUID'),
-    csv_data: z.string()
+    lead_list_id: z.string().uuid('Lead list ID must be a valid UUID'),
+    csv_data: z
+        .string()
         .min(1, 'CSV data is required')
         .max(10 * 1024 * 1024, 'CSV data size cannot exceed 10MB'),
-    mapping: z.record(z.string())
-        .optional()
-        .describe('Field mapping configuration'),
-    skip_duplicates: z.boolean()
-        .default(true)
-        .describe('Whether to skip duplicate leads'),
-    update_existing: z.boolean()
-        .default(false)
-        .describe('Whether to update existing leads'),
+    mapping: z.record(z.string()).optional().describe('Field mapping configuration'),
+    skip_duplicates: z.boolean().default(true).describe('Whether to skip duplicate leads'),
+    update_existing: z.boolean().default(false).describe('Whether to update existing leads'),
 });
 
 /**
@@ -67,20 +55,14 @@ export const ImportLeadsDto = z.object({
  * Used for publishing a lead list from CSV data
  */
 export const PublishLeadListDto = z.object({
-    name: z.string()
-        .min(1, 'Lead list name is required')
-        .max(255, 'Lead list name must be less than 255 characters'),
-    description: z.string()
-        .max(1000, 'Description must be less than 1000 characters')
-        .optional(),
-    connected_account_id: z.string()
-        .uuid('Connected account ID must be a valid UUID'),
-    csv_data: z.string()
+    name: z.string().min(1, 'Lead list name is required').max(255, 'Lead list name must be less than 255 characters'),
+    description: z.string().max(1000, 'Description must be less than 1000 characters').optional(),
+    connected_account_id: z.string().uuid('Connected account ID must be a valid UUID'),
+    csv_data: z
+        .string()
         .min(1, 'CSV data is required')
         .max(10 * 1024 * 1024, 'CSV data size cannot exceed 10MB'),
-    mapping: z.record(z.string())
-        .optional()
-        .describe('Field mapping configuration'),
+    mapping: z.record(z.string()).optional().describe('Field mapping configuration'),
 });
 
 // Lead Search DTO
@@ -123,32 +105,15 @@ export const BulkUpdateLeadsDto = z.object({
 // RESPONSE STRUCTURES
 // ============================================================================
 
-
 export const LeadListQueryDto = z.object({
-    page: z.coerce.number()
-        .min(1, 'Page must be at least 1')
-        .default(1),
-    limit: z.coerce.number()
-        .min(1, 'Limit must be at least 1')
-        .max(100, 'Limit cannot exceed 100')
-        .default(20),
-    search: z.string()
-        .max(255, 'Search term must be less than 255 characters')
-        .optional(),
-    source: z.string()
-        .max(50, 'Source must be less than 50 characters')
-        .optional(),
-    status: z.enum(['draft', 'processing', 'completed', 'failed', 'archived'])
-        .optional(),
-    tags: z.string()
-        .max(500, 'Tags string must be less than 500 characters')
-        .optional(), // Comma-separated tags
-    creator_id: z.string()
-        .uuid('Creator ID must be a valid UUID')
-        .optional(),
-    organization_id: z.string()
-        .uuid('Organization ID must be a valid UUID')
-        .optional(),
+    page: z.coerce.number().min(1, 'Page must be at least 1').default(1),
+    limit: z.coerce.number().min(1, 'Limit must be at least 1').max(100, 'Limit cannot exceed 100').default(20),
+    search: z.string().max(255, 'Search term must be less than 255 characters').optional(),
+    source: z.string().max(50, 'Source must be less than 50 characters').optional(),
+    status: z.enum(['draft', 'processing', 'completed', 'failed', 'archived']).optional(),
+    tags: z.string().max(500, 'Tags string must be less than 500 characters').optional(), // Comma-separated tags
+    creator_id: z.string().uuid('Creator ID must be a valid UUID').optional(),
+    organization_id: z.string().uuid('Organization ID must be a valid UUID').optional(),
 });
 
 /**
@@ -156,7 +121,6 @@ export const LeadListQueryDto = z.object({
  * Used for returning lead list data in API responses
  * Matches the comprehensive database schema with all necessary fields
  */
-
 
 export const LeadListResponseDto = z.object({
     id: z.string().uuid(),
@@ -228,76 +192,76 @@ export const PublishLeadListResponseDto = z.object({
  * DTO for lead response (matches database Row type)
  */
 export const LeadResponseDto = z.object({
-  id: z.string().uuid(),
-  organization_id: z.string().uuid(),
-  campaign_id: z.string().uuid(),
-  lead_list_id: z.string().uuid().nullable(),
-  full_name: z.string(),
-  first_name: z.string().nullable(),
-  last_name: z.string().nullable(),
-  email: z.string().nullable(),
-  phone: z.string().nullable(),
-  title: z.string().nullable(),
-  company: z.string().nullable(),
-  industry: z.string().nullable(),
-  location: z.string().nullable(),
-  linkedin_url: z.string().nullable(),
-  linkedin_id: z.string().nullable(),
-  status: z.string().nullable(),
-  source: z.string(),
-  enrichment_data: z.record(z.any()),
-  created_at: z.string().datetime().nullable(),
-  updated_at: z.string().datetime().nullable(),
+    id: z.string().uuid(),
+    organization_id: z.string().uuid(),
+    campaign_id: z.string().uuid(),
+    lead_list_id: z.string().uuid().nullable(),
+    full_name: z.string(),
+    first_name: z.string().nullable(),
+    last_name: z.string().nullable(),
+    email: z.string().nullable(),
+    phone: z.string().nullable(),
+    title: z.string().nullable(),
+    company: z.string().nullable(),
+    industry: z.string().nullable(),
+    location: z.string().nullable(),
+    linkedin_url: z.string().nullable(),
+    linkedin_id: z.string().nullable(),
+    status: z.string().nullable(),
+    source: z.string(),
+    enrichment_data: z.record(z.any()),
+    created_at: z.string().datetime().nullable(),
+    updated_at: z.string().datetime().nullable(),
 });
 
 /**
  * DTO for lead insert (matches database Insert type)
  */
 export const LeadInsertDto = z.object({
-  id: z.string().uuid().optional(),
-  organization_id: z.string().uuid(),
-  campaign_id: z.string().uuid(),
-  lead_list_id: z.string().uuid().nullable().optional(),
-  full_name: z.string(),
-  first_name: z.string().nullable().optional(),
-  last_name: z.string().nullable().optional(),
-  email: z.string().nullable().optional(),
-  phone: z.string().nullable().optional(),
-  title: z.string().nullable().optional(),
-  company: z.string().nullable().optional(),
-  industry: z.string().nullable().optional(),
-  location: z.string().nullable().optional(),
-  linkedin_url: z.string().nullable().optional(),
-  linkedin_id: z.string().nullable().optional(),
-  status: z.string().max(50).default('new').optional(),
-  source: z.string().max(50),
-  enrichment_data: z.record(z.any()).default({}).optional(),
-  created_at: z.string().datetime().nullable().optional(),
-  updated_at: z.string().datetime().nullable().optional(),
+    id: z.string().uuid().optional(),
+    organization_id: z.string().uuid(),
+    campaign_id: z.string().uuid(),
+    lead_list_id: z.string().uuid().nullable().optional(),
+    full_name: z.string(),
+    first_name: z.string().nullable().optional(),
+    last_name: z.string().nullable().optional(),
+    email: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(),
+    title: z.string().nullable().optional(),
+    company: z.string().nullable().optional(),
+    industry: z.string().nullable().optional(),
+    location: z.string().nullable().optional(),
+    linkedin_url: z.string().nullable().optional(),
+    linkedin_id: z.string().nullable().optional(),
+    status: z.string().max(50).default('new').optional(),
+    source: z.string().max(50),
+    enrichment_data: z.record(z.any()).default({}).optional(),
+    created_at: z.string().datetime().nullable().optional(),
+    updated_at: z.string().datetime().nullable().optional(),
 });
 
 /**
  * DTO for lead update (matches database Update type)
  */
 export const LeadUpdateDto = z.object({
-  id: z.string().uuid().optional(),
-  lead_list_id: z.string().uuid().nullable().optional(),
-  full_name: z.string().optional(),
-  first_name: z.string().nullable().optional(),
-  last_name: z.string().nullable().optional(),
-  email: z.string().nullable().optional(),
-  phone: z.string().nullable().optional(),
-  title: z.string().nullable().optional(),
-  company: z.string().nullable().optional(),
-  industry: z.string().nullable().optional(),
-  location: z.string().nullable().optional(),
-  linkedin_url: z.string().nullable().optional(),
-  linkedin_id: z.string().nullable().optional(),
-  status: z.string().max(50).optional(),
-  source: z.string().max(50).optional(),
-  enrichment_data: z.record(z.any()).optional(),
-  created_at: z.string().datetime().nullable().optional(),
-  updated_at: z.string().datetime().nullable().optional(),
+    id: z.string().uuid().optional(),
+    lead_list_id: z.string().uuid().nullable().optional(),
+    full_name: z.string().optional(),
+    first_name: z.string().nullable().optional(),
+    last_name: z.string().nullable().optional(),
+    email: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(),
+    title: z.string().nullable().optional(),
+    company: z.string().nullable().optional(),
+    industry: z.string().nullable().optional(),
+    location: z.string().nullable().optional(),
+    linkedin_url: z.string().nullable().optional(),
+    linkedin_id: z.string().nullable().optional(),
+    status: z.string().max(50).optional(),
+    source: z.string().max(50).optional(),
+    enrichment_data: z.record(z.any()).optional(),
+    created_at: z.string().datetime().nullable().optional(),
+    updated_at: z.string().datetime().nullable().optional(),
 });
 
 /**

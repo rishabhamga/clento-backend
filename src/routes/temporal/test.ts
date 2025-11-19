@@ -76,25 +76,20 @@ class TemporalTestAPI extends ClentoAPI {
             const result = await this.temporalService.runTestWorkflow({
                 message,
                 delay: delay || undefined,
-                iterations: iterations || 1
+                iterations: iterations || 1,
             });
 
             return res.sendOKResponse({
                 data: result,
-                message: 'Test workflow executed successfully'
+                message: 'Test workflow executed successfully',
             });
-
         } catch (error) {
             logger.error('Temporal test API error', {
                 error: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined
+                stack: error instanceof Error ? error.stack : undefined,
             });
 
-            return res.sendErrorResponse(
-                500,
-                'Failed to execute test workflow',
-                { error: error instanceof Error ? error.message : String(error) }
-            );
+            return res.sendErrorResponse(500, 'Failed to execute test workflow', { error: error instanceof Error ? error.message : String(error) });
         }
     };
 }

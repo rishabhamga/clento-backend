@@ -8,86 +8,86 @@ import '../../utils/expressExtensions';
  * Lead List Detail API - Individual lead list management endpoints
  */
 class LeadListDetailAPI extends ClentoAPI {
-  public path = '/api/lead-lists/detail';
-  public authType: 'DASHBOARD' = 'DASHBOARD';
+    public path = '/api/lead-lists/detail';
+    public authType: 'DASHBOARD' = 'DASHBOARD';
 
-  private leadListService = new LeadListService();
+    private leadListService = new LeadListService();
 
-  /**
-   * Get lead list by ID
-   */
-  public GET = async (req: Request, res: Response): Promise<Response> => {
-    try {
-      const query = req.getQuery();
-      const id = query.getParamAsString('id', true);
-      const organizationId = req.organizationId;
+    /**
+     * Get lead list by ID
+     */
+    public GET = async (req: Request, res: Response): Promise<Response> => {
+        try {
+            const query = req.getQuery();
+            const id = query.getParamAsString('id', true);
+            const organizationId = req.organizationId;
 
-      if (!organizationId) {
-        throw new NotFoundError('Organization not found');
-      }
+            if (!organizationId) {
+                throw new NotFoundError('Organization not found');
+            }
 
-      const leadList = await this.leadListService.getLeadListDataById(id, organizationId);
+            const leadList = await this.leadListService.getLeadListDataById(id, organizationId);
 
-      return res.sendOKResponse({
-        success: true,
-        data: leadList,
-        message: 'Lead list retrieved successfully',
-      });
-    } catch (error) {
-      throw error;
-    }
-  };
+            return res.sendOKResponse({
+                success: true,
+                data: leadList,
+                message: 'Lead list retrieved successfully',
+            });
+        } catch (error) {
+            throw error;
+        }
+    };
 
-  /**
-   * Update lead list
-   */
-  public PUT = async (req: Request, res: Response): Promise<Response> => {
-    try {
-      const query = req.getQuery();
-      const id = query.getParamAsString('id', true);
-      const organizationId = req.organizationId;
+    /**
+     * Update lead list
+     */
+    public PUT = async (req: Request, res: Response): Promise<Response> => {
+        try {
+            const query = req.getQuery();
+            const id = query.getParamAsString('id', true);
+            const organizationId = req.organizationId;
 
-      if (!organizationId) {
-        throw new NotFoundError('Organization not found');
-      }
+            if (!organizationId) {
+                throw new NotFoundError('Organization not found');
+            }
 
-      const body = req.getBody();
-      const leadList = await this.leadListService.updateLeadList(id, body.rawJSON(), organizationId);
+            const body = req.getBody();
+            const leadList = await this.leadListService.updateLeadList(id, body.rawJSON(), organizationId);
 
-      return res.sendOKResponse({
-        success: true,
-        data: leadList,
-        message: 'Lead list updated successfully',
-      });
-    } catch (error) {
-      throw error;
-    }
-  };
+            return res.sendOKResponse({
+                success: true,
+                data: leadList,
+                message: 'Lead list updated successfully',
+            });
+        } catch (error) {
+            throw error;
+        }
+    };
 
-  /**
-   * Delete lead list
-   */
-  public DELETE = async (req: Request, res: Response): Promise<Response> => {
-    try {
-      const query = req.getQuery();
-      const id = query.getParamAsString('id', true);
-      const organizationId = req.organizationId;
+    /**
+     * Delete lead list
+     */
+    public DELETE = async (req: Request, res: Response): Promise<Response> => {
+        try {
+            const query = req.getQuery();
+            const id = query.getParamAsString('id', true);
+            const organizationId = req.organizationId;
 
-      if (!organizationId) {
-        throw new NotFoundError('Organization not found');
-      }
+            if (!organizationId) {
+                throw new NotFoundError('Organization not found');
+            }
 
-      await this.leadListService.deleteLeadList(id, organizationId);
+            await this.leadListService.deleteLeadList(id, organizationId);
 
-      return res.sendOKResponse({
-        success: true,
-        data: null,
-        message: 'Lead list deleted successfully',
-      });
-    } catch (error) {
-      throw error;
-    }
-  };
+            return res.sendOKResponse({
+                success: true,
+                data: null,
+                message: 'Lead list deleted successfully',
+            });
+        } catch (error) {
+            throw error;
+        }
+    };
 }
 
 export default new LeadListDetailAPI();

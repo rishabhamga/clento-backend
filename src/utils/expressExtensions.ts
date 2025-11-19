@@ -58,7 +58,9 @@ declare module 'express-serve-static-core' {
     }
 }
 
-interface RequestBody { [key: string]: any; }
+interface RequestBody {
+    [key: string]: any;
+}
 
 interface GenericEnum<T> {
     [id: string]: T | string;
@@ -79,7 +81,7 @@ export class ClentoRequestBody {
 
     public rawJSON = () => {
         return this.rawBody;
-    }
+    };
 
     public getParamAsNestedBody(parameterName: string): ClentoRequestBody;
     public getParamAsNestedBody(parameterName: string, required: true): ClentoRequestBody;
@@ -108,7 +110,7 @@ export class ClentoRequestBody {
     public getParamAsString(parameterName: string, required: false): string | null;
     public getParamAsString(parameterName: string, required = true): string | null {
         const result = this.getParamOfType(parameterName, 'string', required);
-        if(result === null) {
+        if (result === null) {
             return null;
         }
         return result.trim();
@@ -125,10 +127,10 @@ export class ClentoRequestBody {
         return result.map(it => it.trim());
     }
 
-    public getParamAsEnumValue <T>(enumm: GenericEnum<T>, parameterName: string): T
-    public getParamAsEnumValue <T>(enumm: GenericEnum<T>, parameterName: string, required : true): T
-    public getParamAsEnumValue <T>(enumm: GenericEnum<T>, parameterName: string, required :false): T | null
-    public getParamAsEnumValue <T>(enumm: GenericEnum<T>, parameterName: string, required = true): T | null {
+    public getParamAsEnumValue<T>(enumm: GenericEnum<T>, parameterName: string): T;
+    public getParamAsEnumValue<T>(enumm: GenericEnum<T>, parameterName: string, required: true): T;
+    public getParamAsEnumValue<T>(enumm: GenericEnum<T>, parameterName: string, required: false): T | null;
+    public getParamAsEnumValue<T>(enumm: GenericEnum<T>, parameterName: string, required = true): T | null {
         const paramAsString = this.getParamOfType(parameterName, 'string', required);
         if (!required && paramAsString === null) {
             return null;
@@ -138,12 +140,12 @@ export class ClentoRequestBody {
         } else {
             throw new DisplayError(`${parameterName} is not a valid enum value in ${this.bodyName}`);
         }
-    };
+    }
 
-    public getParamAsType <T>(type: string, parameterName: string, required :true): T
-    public getParamAsType <T>(type: string, parameterName: string, required: false): T | null
-    public getParamAsType <T>(type: string, parameterName: string, required = true): T | null{
-        const paramAsString =  this.getParamOfType(parameterName, type, required) as T;
+    public getParamAsType<T>(type: string, parameterName: string, required: true): T;
+    public getParamAsType<T>(type: string, parameterName: string, required: false): T | null;
+    public getParamAsType<T>(type: string, parameterName: string, required = true): T | null {
+        const paramAsString = this.getParamOfType(parameterName, type, required) as T;
         if (!required && paramAsString === null) {
             return null;
         }
@@ -181,9 +183,7 @@ export class ClentoRequestBody {
     public getParamAsUUID(parameterName: string, required: true): string;
     public getParamAsUUID(parameterName: string, required: false): string | null;
     public getParamAsUUID(parameterName: string, required = true): string | null {
-        const uuid = required ?
-            this.getParamAsString(parameterName, true) :
-            this.getParamAsString(parameterName, false);
+        const uuid = required ? this.getParamAsString(parameterName, true) : this.getParamAsString(parameterName, false);
         if (uuid === null) {
             return null;
         }
@@ -198,9 +198,7 @@ export class ClentoRequestBody {
     public getParamAsEmail(parameterName: string, required: true): string;
     public getParamAsEmail(parameterName: string, required: false): string | null;
     public getParamAsEmail(parameterName: string, required = true): string | null {
-        const email = required ?
-            this.getParamAsString(parameterName, true) :
-            this.getParamAsString(parameterName, false);
+        const email = required ? this.getParamAsString(parameterName, true) : this.getParamAsString(parameterName, false);
         if (email === null) {
             return null;
         }
@@ -231,12 +229,12 @@ export class ClentoRequestBody {
         }
     };
 
-    public getFileAsCSV (FormFieldName: string): UploadedFile
-    public getFileAsCSV (FormFieldName: string, required: true): UploadedFile
-    public getFileAsCSV (FormFieldName: string, required: false): UploadedFile | null
-    public getFileAsCSV (FormFieldName: string, required = true): UploadedFile | null {
+    public getFileAsCSV(FormFieldName: string): UploadedFile;
+    public getFileAsCSV(FormFieldName: string, required: true): UploadedFile;
+    public getFileAsCSV(FormFieldName: string, required: false): UploadedFile | null;
+    public getFileAsCSV(FormFieldName: string, required = true): UploadedFile | null {
         return this.getFileAsMimeType(FormFieldName, 'text/csv', required);
-    };
+    }
 
     public getFile(FormFieldName: string) {
         const files = this.rawBody as UploadedFile[];
@@ -259,11 +257,15 @@ export class ClentoRequestBody {
             return null;
         }
         if (type === 'boolean') {
-            if (result === 'true') { result = true; }
-            if (result === 'false') { result = false; }
+            if (result === 'true') {
+                result = true;
+            }
+            if (result === 'false') {
+                result = false;
+            }
         }
         if (type === 'number') {
-            if (typeof (result) === 'string') {
+            if (typeof result === 'string') {
                 const resultParsedAsInt = parseInt(result, 10);
                 if (!isNaN(resultParsedAsInt)) {
                     result = resultParsedAsInt;
@@ -271,16 +273,17 @@ export class ClentoRequestBody {
             }
         }
         if (type === 'string[]') {
-            if (typeof (result) === 'string' && result) { // We dont get array if the length is 1, we get the value as string
+            if (typeof result === 'string' && result) {
+                // We dont get array if the length is 1, we get the value as string
                 return [result];
             }
-            if (typeof (result) === 'object' && result && result.length !== undefined && result.length !== null) {
+            if (typeof result === 'object' && result && result.length !== undefined && result.length !== null) {
                 const arr: any[] = result;
                 arr.forEach(ele => {
                     if (typeof ele !== 'string') {
                         throw new DisplayError(`${parameterName} in ${this.bodyName} is not a ${type}`);
                     }
-                })
+                });
                 return arr as string[];
             }
         }
@@ -289,7 +292,7 @@ export class ClentoRequestBody {
                 throw new DisplayError(`${parameterName} in ${this.bodyName} is not a ${type}`);
             }
             return result.map((it, idx) => {
-                if (typeof (it) !== 'object') {
+                if (typeof it !== 'object') {
                     throw new DisplayError(`${parameterName}[${idx}] in ${this.bodyName} is not an object`);
                 }
                 if (Array.isArray(it)) {
@@ -301,11 +304,11 @@ export class ClentoRequestBody {
         if (type === 'string' && typeof result === 'number') {
             result = result.toString();
         }
-        if (typeof (result) !== type) {
+        if (typeof result !== type) {
             throw new DisplayError(`${parameterName} in ${this.bodyName} is not a ${type}`);
         }
         if (type === 'object') {
-            if (typeof (result) !== type) {
+            if (typeof result !== type) {
                 throw new DisplayError(`${parameterName} in ${this.bodyName} is not a ${type}`);
             }
             if (Array.isArray(result)) {
@@ -323,21 +326,21 @@ export class ClentoRequestBody {
             if (!required) {
                 return null;
             }
-            throw new DisplayError(
-                `MimeType for ${FormFieldName} is ${result.mimetype} and not ${mimetype}`);
+            throw new DisplayError(`MimeType for ${FormFieldName} is ${result.mimetype} and not ${mimetype}`);
         }
     }
 
     public getParamAsEnumArray = <T>(enumm: GenericEnum<T>, parameterName: string, required = true): T[] | null => {
         const arr: string[] = this.getParamOfType(parameterName, 'string[]', required);
-        if (arr === null) { // null tbhi aayega jabb required false hoga, and pass bhi ni kia body mei
-            return null
+        if (arr === null) {
+            // null tbhi aayega jabb required false hoga, and pass bhi ni kia body mei
+            return null;
         }
         arr.forEach(ele => {
             if (!Object.values(enumm).includes(ele)) {
                 throw new DisplayError(`${parameterName} is not a valid enum array - ${ele} failed`);
             }
-        })
+        });
         return arr as any as T[];
     };
 }
@@ -351,28 +354,28 @@ export const extendExpressPrototypes = () => {
         value: function () {
             return new ClentoRequestBody(this, this.body, 'request body');
         },
-        configurable: true
+        configurable: true,
     });
 
     Object.defineProperty(express.request, 'getQuery', {
         value: function () {
             return new ClentoRequestBody(this, this.query, 'queryParams');
         },
-        configurable: true
+        configurable: true,
     });
 
     Object.defineProperty(express.request, 'getPathParams', {
         value: function () {
             return new ClentoRequestBody(this, this.params, 'pathParams');
         },
-        configurable: true
+        configurable: true,
     });
 
     Object.defineProperty(express.request, 'getFiles', {
         value: function () {
             return new ClentoRequestBody(this, this.files || {}, 'files');
         },
-        configurable: true
+        configurable: true,
     });
 
     Object.defineProperty(express.request, 'getIPAddress', {
@@ -386,7 +389,8 @@ export const extendExpressPrototypes = () => {
                 }
             } else if (this?.socket?.remoteAddress?.length > 0) {
                 const ipAddress: string = this.socket.remoteAddress;
-                if (ipAddress.startsWith('::ffff:')) { // ipv4 has this prefix
+                if (ipAddress.startsWith('::ffff:')) {
+                    // ipv4 has this prefix
                     return ipAddress.substring(7);
                 } else {
                     return ipAddress;
@@ -395,7 +399,7 @@ export const extendExpressPrototypes = () => {
                 return null;
             }
         },
-        configurable: true
+        configurable: true,
     });
 
     // Response extensions
@@ -411,7 +415,7 @@ export const extendExpressPrototypes = () => {
                 data: json,
             });
         },
-        configurable: true
+        configurable: true,
     });
 
     Object.defineProperty(express.response, 'sendCreatedResponse', {
@@ -422,14 +426,14 @@ export const extendExpressPrototypes = () => {
                 message: 'Resource created successfully',
             });
         },
-        configurable: true
+        configurable: true,
     });
 
     Object.defineProperty(express.response, 'sendNoContentResponse', {
         value: function () {
             return this.status(204).send();
         },
-        configurable: true
+        configurable: true,
     });
 
     Object.defineProperty(express.response, 'sendErrorResponse', {
@@ -440,14 +444,14 @@ export const extendExpressPrototypes = () => {
                 data: json,
             });
         },
-        configurable: true
+        configurable: true,
     });
 
     Object.defineProperty(express.response, 'sendDisplayError', {
         value: function (errorMessage: string) {
             return this.sendErrorResponse(422, errorMessage);
         },
-        configurable: true
+        configurable: true,
     });
 };
 

@@ -19,26 +19,25 @@ import registerAllRoutes from './utils/registerRoutes';
 // Create Express application
 const app = express();
 
-app.use(morgan("dev"));
+app.use(morgan('dev'));
 
 // Apply middleware
 app.use(helmet());
 
 // Configure CORS based on environment
 const corsOptions = {
-  origin: env.NODE_ENV === 'development'
-    ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-        // Allow all localhost origins and app.clento.ai in development
-        if (!origin ||
-            origin.match(/^http:\/\/localhost:\d+$/) ||
-            origin === 'https://app.clento.ai') {
-          callback(null, true);
-        } else {
-          callback(new Error('Not allowed by CORS'));
-        }
-      }
-    : env.CORS_ORIGIN,
-  credentials: true,
+    origin:
+        env.NODE_ENV === 'development'
+            ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+                  // Allow all localhost origins and app.clento.ai in development
+                  if (!origin || origin.match(/^http:\/\/localhost:\d+$/) || origin === 'https://app.clento.ai') {
+                      callback(null, true);
+                  } else {
+                      callback(new Error('Not allowed by CORS'));
+                  }
+              }
+            : env.CORS_ORIGIN,
+    credentials: true,
 };
 
 app.use(cors(corsOptions));
@@ -58,7 +57,7 @@ const upload = multer({
         } else {
             cb(new Error('Only CSV files are allowed'));
         }
-    }
+    },
 });
 
 // Apply multer middleware globally
@@ -69,11 +68,11 @@ setupSwagger(app);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    environment: env.NODE_ENV,
-  });
+    res.status(200).json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        environment: env.NODE_ENV,
+    });
 });
 
 // Auto-register all API routes
@@ -85,101 +84,101 @@ app.use(errorHandler);
 
 // Initialize database and start server
 const startServer = async () => {
-  try {
-    // Initialize Supabase connection
-    await supabase.initSupabase();
-
-    // Initialize Temporal service
-    let workerManager: WorkerManager | null = null;
     try {
-      const temporalService = TemporalService.getInstance();
-      await temporalService.initialize();
-      logger.info('Temporal service initialized successfully');
+        // Initialize Supabase connection
+        await supabase.initSupabase();
 
-      // Start Temporal worker if enabled
-      if (env.ENABLE_TEMPORAL_WORKER) {
-        workerManager = WorkerManager.getInstance();
-        const workerCount = env.TEMPORAL_WORKER_COUNT || 1;
+        // Initialize Temporal service
+        let workerManager: WorkerManager | null = null;
+        try {
+            const temporalService = TemporalService.getInstance();
+            await temporalService.initialize();
+            logger.info('Temporal service initialized successfully');
 
-        if (workerCount > 1) {
-          await workerManager.startMultipleWorkers(workerCount);
-        } else {
-          await workerManager.startWorker();
+            // Start Temporal worker if enabled
+            if (env.ENABLE_TEMPORAL_WORKER) {
+                workerManager = WorkerManager.getInstance();
+                const workerCount = env.TEMPORAL_WORKER_COUNT || 1;
+
+                if (workerCount > 1) {
+                    await workerManager.startMultipleWorkers(workerCount);
+                } else {
+                    await workerManager.startWorker();
+                }
+
+                logger.info('✅ Temporal worker(s) started successfully', {
+                    workerCount,
+                    maxConcurrentCampaigns: 50 * workerCount, // Based on worker config
+                });
+            } else {
+                logger.info('Temporal workers disabled by configuration');
+            }
+
+            // Log active campaigns for monitoring
+            const stats = await temporalService.getCampaignStats();
+            logger.info('Campaign statistics', stats);
+        } catch (temporalError) {
+            logger.error('Failed to initialize Temporal service', {
+                error: temporalError instanceof Error ? temporalError.message : String(temporalError),
+                stack: temporalError instanceof Error ? temporalError.stack : undefined,
+                name: temporalError instanceof Error ? temporalError.name : undefined,
+                cause: temporalError instanceof Error ? temporalError.cause : undefined,
+                fullError: temporalError,
+            });
+            logger.info('Server will continue without Temporal functionality');
         }
 
-        logger.info('✅ Temporal worker(s) started successfully', {
-          workerCount,
-          maxConcurrentCampaigns: 50 * workerCount, // Based on worker config
-        });
-      } else {
-        logger.info('Temporal workers disabled by configuration');
-      }
+        // Start server
+        const server = app.listen(env.PORT, () => {
+            logger.info(`🚀 Server running on port ${env.PORT} in ${env.NODE_ENV} mode`);
+            logger.info(`📚 API documentation available at http://localhost:${env.PORT}/api-docs`);
 
-      // Log active campaigns for monitoring
-      const stats = await temporalService.getCampaignStats();
-      logger.info('Campaign statistics', stats);
-    } catch (temporalError) {
-      logger.error('Failed to initialize Temporal service', {
-        error: temporalError instanceof Error ? temporalError.message : String(temporalError),
-        stack: temporalError instanceof Error ? temporalError.stack : undefined,
-        name: temporalError instanceof Error ? temporalError.name : undefined,
-        cause: temporalError instanceof Error ? temporalError.cause : undefined,
-        fullError: temporalError
-      });
-      logger.info('Server will continue without Temporal functionality');
-    }
-
-    // Start server
-    const server = app.listen(env.PORT, () => {
-      logger.info(`🚀 Server running on port ${env.PORT} in ${env.NODE_ENV} mode`);
-      logger.info(`📚 API documentation available at http://localhost:${env.PORT}/api-docs`);
-
-      if (workerManager?.isWorkerRunning()) {
-        logger.info('⚡ Temporal workers are running and processing campaigns');
-      }
-    });
-
-    // Graceful shutdown handler
-    const gracefulShutdown = async (signal: string) => {
-      logger.info(`${signal} received, starting graceful shutdown...`);
-
-      try {
-        // Stop accepting new connections
-        server.close(() => {
-          logger.info('HTTP server closed');
+            if (workerManager?.isWorkerRunning()) {
+                logger.info('⚡ Temporal workers are running and processing campaigns');
+            }
         });
 
-        // Shutdown Temporal workers gracefully
-        if (workerManager) {
-          await workerManager.shutdown();
-        }
+        // Graceful shutdown handler
+        const gracefulShutdown = async (signal: string) => {
+            logger.info(`${signal} received, starting graceful shutdown...`);
 
-        logger.info('✅ Graceful shutdown completed');
-        process.exit(0);
-      } catch (error) {
-        logger.error('Error during graceful shutdown', { error });
+            try {
+                // Stop accepting new connections
+                server.close(() => {
+                    logger.info('HTTP server closed');
+                });
+
+                // Shutdown Temporal workers gracefully
+                if (workerManager) {
+                    await workerManager.shutdown();
+                }
+
+                logger.info('✅ Graceful shutdown completed');
+                process.exit(0);
+            } catch (error) {
+                logger.error('Error during graceful shutdown', { error });
+                process.exit(1);
+            }
+        };
+
+        // Handle shutdown signals
+        process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+        process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+        // Handle unhandled promise rejections
+        process.on('unhandledRejection', (err: Error) => {
+            logger.error('Unhandled Rejection:', err);
+            gracefulShutdown('UNHANDLED_REJECTION');
+        });
+    } catch (error) {
+        logger.error('Failed to start server:', error);
         process.exit(1);
-      }
-    };
-
-    // Handle shutdown signals
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-    // Handle unhandled promise rejections
-    process.on('unhandledRejection', (err: Error) => {
-      logger.error('Unhandled Rejection:', err);
-      gracefulShutdown('UNHANDLED_REJECTION');
-    });
-  } catch (error) {
-    logger.error('Failed to start server:', error);
-    process.exit(1);
-  }
+    }
 };
 
 // Start server when run directly
 if (require.main === module) {
-  startServer();
+    startServer();
 }
 
 export default app;

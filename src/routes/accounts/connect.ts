@@ -37,7 +37,7 @@ class AccountConnectAPI extends ClentoAPI {
             provider: provider || '',
             successRedirectUrl: successRedirectUrl,
             failureRedirectUrl: failureRedirectUrl,
-            notifyUrl: notifyUrl
+            notifyUrl: notifyUrl,
         });
 
         try {
@@ -47,7 +47,7 @@ class AccountConnectAPI extends ClentoAPI {
                 provider: provider || '',
                 successRedirectUrl: successRedirectUrl || undefined,
                 failureRedirectUrl: failureRedirectUrl || undefined,
-                notifyUrl: notifyUrl || undefined
+                notifyUrl: notifyUrl || undefined,
             });
 
             logger.info('=== Backend Controller: createHostedAuthLink END ===', { result });
@@ -60,9 +60,9 @@ class AccountConnectAPI extends ClentoAPI {
             });
         } catch (error) {
             logger.error('Error in createHostedAuthLink controller', { error, userId: req.userId });
-            throw new DisplayError("An Error Occurred");
+            throw new DisplayError('An Error Occurred');
         }
-    }
-};
+    };
+}
 
 export default new AccountConnectAPI();

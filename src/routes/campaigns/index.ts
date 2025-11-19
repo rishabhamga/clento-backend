@@ -37,16 +37,16 @@ class CampaignsAPI extends ClentoAPI {
                 ...it,
                 list_data: {
                     total: list?.total_leads,
-                    name: list?.name
+                    name: list?.name,
                 },
                 senderData: {
                     name: sender?.display_name,
                     profile_picture_url: sender?.profile_picture_url,
                     status: sender?.status,
-                    provider: sender?.provider
-                }
-            }
-        })
+                    provider: sender?.provider,
+                },
+            };
+        });
 
         return res.sendOKResponse({ campaigns: campaignData });
     };
@@ -64,17 +64,17 @@ class CampaignsAPI extends ClentoAPI {
                 throw new NotFoundError('Campaign not found');
             }
 
-            const { workflowData, file } = await this.campaignService.getWorkflow(campaign)
+            const { workflowData, file } = await this.campaignService.getWorkflow(campaign);
 
             return res.sendOKResponse({
                 campaign,
                 workflow: workflowData,
-                fileMetadata: file.metadata
+                fileMetadata: file.metadata,
             });
         } catch (error) {
             throw error;
         }
-    }
+    };
 }
 
 export default new CampaignsAPI();

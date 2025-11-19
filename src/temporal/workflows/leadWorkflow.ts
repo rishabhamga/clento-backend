@@ -1,7 +1,7 @@
-import { log, proxyActivities, sleep } from "@temporalio/workflow";
-import { LeadResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
-import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from "../../types/workflow.types";
-import type * as activities from "../activities";
+import { log, proxyActivities, sleep } from '@temporalio/workflow';
+import { LeadResponseDto, LeadUpdateDto } from '../../dto/leads.dto';
+import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from '../../types/workflow.types';
+import type * as activities from '../activities';
 
 // Import ActivityResult type
 export type ActivityResult = {
@@ -13,25 +13,10 @@ export type ActivityResult = {
         first_name: string;
         last_name: string;
         company?: string;
-    }
+    };
 };
 
-const {
-    profile_visit,
-    like_post,
-    comment_post,
-    send_followup,
-    withdraw_request,
-    send_inmail,
-    send_connection_request,
-    check_connection_status,
-    updateLead,
-    verifyUnipileAccount,
-    updateCampaignStep,
-    extractLinkedInPublicIdentifier,
-    checkTimeWindow,
-    checkConnectionRequestLimits
-} = proxyActivities<typeof activities>({
+const { profile_visit, like_post, comment_post, send_followup, withdraw_request, send_inmail, send_connection_request, check_connection_status, updateLead, verifyUnipileAccount, updateCampaignStep, extractLinkedInPublicIdentifier, checkTimeWindow, checkConnectionRequestLimits } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
         initialInterval: '1s',
@@ -42,30 +27,36 @@ const {
 
 // Utility functions for workflow use
 const CheckNever = (value: never): never => {
-    throw new Error(`Unhandled case: ${value}`)
+    throw new Error(`Unhandled case: ${value}`);
 };
 
 export interface LeadWorkflowInput {
-    leadId: string,
-    workflow: WorkflowJson,
-    accountId: string,
-    campaignId: string,
-    organizationId: string,
-    startTime?: string | null,
-    endTime?: string | null,
-    timezone?: string | null
+    leadId: string;
+    workflow: WorkflowJson;
+    accountId: string;
+    campaignId: string;
+    organizationId: string;
+    startTime?: string | null;
+    endTime?: string | null;
+    timezone?: string | null;
 }
 
 function getDelayMs(edge: WorkflowEdge): number {
     if (edge.data?.delayData?.delay && edge.data?.delayData?.unit) {
         const delay = parseInt(edge.data.delayData.delay ?? '0', 10);
         switch (edge.data.delayData.unit) {
-            case 's': return delay * 1000;
-            case 'm': return delay * 60_000;
-            case 'h': return delay * 3_600_000;
-            case 'd': return delay * 86_400_000;
-            case 'w': return delay * 604_800_000;
-            default: CheckNever(edge.data.delayData.unit);
+            case 's':
+                return delay * 1000;
+            case 'm':
+                return delay * 60_000;
+            case 'h':
+                return delay * 3_600_000;
+            case 'd':
+                return delay * 86_400_000;
+            case 'w':
+                return delay * 604_800_000;
+            default:
+                CheckNever(edge.data.delayData.unit);
         }
     }
     return 0;
@@ -74,11 +65,7 @@ function getDelayMs(edge: WorkflowEdge): number {
 /**
  * Wait for the time window to be valid before executing a step
  */
-async function waitForTimeWindow(
-    startTime: string | null | undefined,
-    endTime: string | null | undefined,
-    timezone: string | null | undefined
-): Promise<void> {
+async function waitForTimeWindow(startTime: string | null | undefined, endTime: string | null | undefined, timezone: string | null | undefined): Promise<void> {
     // If no time restrictions, proceed immediately
     if (!startTime || !endTime) {
         return;
@@ -91,7 +78,7 @@ async function waitForTimeWindow(
             startTime,
             endTime,
             timezone,
-            currentTime: timeWindowCheck.currentTime
+            currentTime: timeWindowCheck.currentTime,
         });
         return;
     }
@@ -135,7 +122,7 @@ async function waitForTimeWindow(
         timezone,
         waitMs,
         sleepDuration,
-        currentTime: timeWindowCheck.currentTime
+        currentTime: timeWindowCheck.currentTime,
     });
 
     await sleep(sleepDuration);
@@ -147,7 +134,7 @@ async function waitForTimeWindow(
             startTime,
             endTime,
             timezone,
-            additionalWaitMs: verifyCheck.waitMs
+            additionalWaitMs: verifyCheck.waitMs,
         });
         // Wait a bit more if still not in window (shouldn't happen, but safety check)
         if (verifyCheck.waitMs > 0) {
@@ -157,17 +144,7 @@ async function waitForTimeWindow(
     }
 }
 
-async function executeNode(
-    node: WorkflowNode,
-    accountId: string,
-    lead: LeadResponseDto,
-    campaignId: string,
-    workflow: WorkflowJson,
-    index: number,
-    startTime?: string | null,
-    endTime?: string | null,
-    timezone?: string | null
-): Promise<ActivityResult | null> {
+async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResponseDto, campaignId: string, workflow: WorkflowJson, index: number, startTime?: string | null, endTime?: string | null, timezone?: string | null): Promise<ActivityResult | null> {
     // Check and wait for time window before executing the step
     await waitForTimeWindow(startTime, endTime, timezone);
     const type = node.data.type;
@@ -201,7 +178,7 @@ async function executeNode(
             result = await send_followup(accountId, identifier, config, lead.campaign_id, {
                 first_name: lead.first_name,
                 last_name: lead.last_name,
-                company: lead.company
+                company: lead.company,
             });
             break;
         case EWorkflowNodeType.withdraw_request:
@@ -215,7 +192,7 @@ async function executeNode(
                 accountId,
                 identifier,
                 campaignId: lead.campaign_id,
-                leadId: lead.id
+                leadId: lead.id,
             });
 
             // Check limits and wait if exceeded
@@ -229,7 +206,7 @@ async function executeNode(
                     campaignId,
                     leadId: lead.id,
                     error: error.message,
-                    errorStack: error.stack
+                    errorStack: error.stack,
                 });
                 result = {
                     success: false,
@@ -237,9 +214,9 @@ async function executeNode(
                     data: {
                         error: {
                             type: 'limits_check_failed',
-                            message: error.message || 'Failed to check connection request limits'
-                        }
-                    }
+                            message: error.message || 'Failed to check connection request limits',
+                        },
+                    },
                 };
                 break;
             }
@@ -263,7 +240,7 @@ async function executeNode(
                     waitMs,
                     sleepDuration,
                     accountId,
-                    identifier
+                    identifier,
                 });
 
                 try {
@@ -276,7 +253,7 @@ async function executeNode(
                         campaignId,
                         leadId: lead.id,
                         error: error.message,
-                        errorStack: error.stack
+                        errorStack: error.stack,
                     });
                 }
             }
@@ -286,7 +263,7 @@ async function executeNode(
                     accountId,
                     identifier,
                     campaignId,
-                    leadId: lead.id
+                    leadId: lead.id,
                 });
                 result = {
                     success: false,
@@ -294,9 +271,9 @@ async function executeNode(
                     data: {
                         error: {
                             type: 'connection_request_limit_exceeded',
-                            message: 'Daily or weekly connection request limit has been exceeded'
-                        }
-                    }
+                            message: 'Daily or weekly connection request limit has been exceeded',
+                        },
+                    },
                 };
                 break;
             }
@@ -313,7 +290,7 @@ async function executeNode(
                     error: error.message,
                     errorStack: error.stack,
                     errorType: error.constructor?.name,
-                    errorName: error.name
+                    errorName: error.name,
                 });
                 result = {
                     success: false,
@@ -323,9 +300,9 @@ async function executeNode(
                             type: 'connection_request_exception',
                             message: error.message || 'Unexpected error occurred',
                             errorType: error.constructor?.name,
-                            errorName: error.name
-                        }
-                    }
+                            errorName: error.name,
+                        },
+                    },
                 };
                 break;
             }
@@ -345,7 +322,7 @@ async function executeNode(
                         leadId: lead.id,
                         retryAfterHours,
                         errorMessage: sendResult.message,
-                        errorDetails: sendResult.data?.error
+                        errorDetails: sendResult.data?.error,
                     });
 
                     try {
@@ -357,7 +334,7 @@ async function executeNode(
                             campaignId,
                             leadId: lead.id,
                             sleepDuration,
-                            retryAfterHours
+                            retryAfterHours,
                         });
                         await sleep(sleepDuration);
 
@@ -366,7 +343,7 @@ async function executeNode(
                             accountId,
                             identifier,
                             campaignId,
-                            leadId: lead.id
+                            leadId: lead.id,
                         });
                         sendResult = await send_connection_request(accountId, identifier, config || {}, lead.campaign_id);
 
@@ -379,7 +356,7 @@ async function executeNode(
                                 leadId: lead.id,
                                 result: sendResult,
                                 errorType: sendResult.data?.error?.type,
-                                errorMessage: sendResult.message
+                                errorMessage: sendResult.message,
                             });
                             result = sendResult;
                             break;
@@ -390,7 +367,7 @@ async function executeNode(
                             accountId,
                             identifier,
                             campaignId,
-                            leadId: lead.id
+                            leadId: lead.id,
                         });
                     } catch (retryError: any) {
                         log.error('Error during 24-hour retry wait or retry attempt', {
@@ -399,7 +376,7 @@ async function executeNode(
                             campaignId,
                             leadId: lead.id,
                             error: retryError.message,
-                            errorStack: retryError.stack
+                            errorStack: retryError.stack,
                         });
                         result = {
                             success: false,
@@ -408,9 +385,9 @@ async function executeNode(
                                 error: {
                                     type: 'retry_failed',
                                     message: retryError.message || 'Error during retry attempt',
-                                    originalError: sendResult.data?.error
-                                }
-                            }
+                                    originalError: sendResult.data?.error,
+                                },
+                            },
                         };
                         break;
                     }
@@ -424,7 +401,7 @@ async function executeNode(
                         result: sendResult,
                         errorType: sendResult.data?.error?.type,
                         errorMessage: sendResult.message,
-                        errorDetails: sendResult.data?.error
+                        errorDetails: sendResult.data?.error,
                     });
                     result = sendResult;
                     break;
@@ -449,7 +426,7 @@ async function executeNode(
                     sendResult,
                     sendResultData: sendResult.data,
                     sendResultSuccess: sendResult.success,
-                    sendResultMessage: sendResult.message
+                    sendResultMessage: sendResult.message,
                 });
                 result = {
                     success: false,
@@ -458,9 +435,9 @@ async function executeNode(
                         error: {
                             type: 'provider_id_missing',
                             message: 'Connection request was sent but provider ID was not returned',
-                            sendResult: sendResult
-                        }
-                    }
+                            sendResult: sendResult,
+                        },
+                    },
                 };
                 break;
             }
@@ -511,7 +488,7 @@ async function executeNode(
                 pollIntervalMs,
                 pollInterval,
                 maxAttempts,
-                delayFromEdge: rejectedEdge?.data?.delayData
+                delayFromEdge: rejectedEdge?.data?.delayData,
             });
 
             // Wait and poll for connection status
@@ -549,7 +526,7 @@ async function executeNode(
                         elapsedTimeMs,
                         elapsedDays: elapsedTimeMs / (24 * 60 * 60 * 1000),
                         remainingTimeMs,
-                        remainingDays: remainingTimeMs / (24 * 60 * 60 * 1000)
+                        remainingDays: remainingTimeMs / (24 * 60 * 60 * 1000),
                     });
                     await sleep(sleepDuration);
                     elapsedTimeMs += waitTimeMs;
@@ -562,7 +539,7 @@ async function executeNode(
                         identifier,
                         totalWaitDurationMs,
                         totalWaitDays: totalDays,
-                        elapsedTimeMs
+                        elapsedTimeMs,
                     });
                 }
 
@@ -575,7 +552,7 @@ async function executeNode(
                     elapsedTimeMs,
                     elapsedDays: elapsedTimeMs / (24 * 60 * 60 * 1000),
                     remainingTimeMs: totalWaitDurationMs - elapsedTimeMs,
-                    remainingDays: (totalWaitDurationMs - elapsedTimeMs) / (24 * 60 * 60 * 1000)
+                    remainingDays: (totalWaitDurationMs - elapsedTimeMs) / (24 * 60 * 60 * 1000),
                 });
 
                 // Call activity to check status
@@ -595,7 +572,7 @@ async function executeNode(
                         error: error.message,
                         errorStack: error.stack,
                         errorType: error.constructor?.name,
-                        errorName: error.name
+                        errorName: error.name,
                     });
                     // Continue polling on error - don't break the loop
                     continue;
@@ -615,7 +592,7 @@ async function executeNode(
                         statusResult,
                         errorType: statusResult.data?.error?.type,
                         errorMessage: statusResult.message,
-                        errorDetails: statusResult.data?.error
+                        errorDetails: statusResult.data?.error,
                     });
                     // Continue polling on status check failure - don't break the loop
                     continue;
@@ -634,7 +611,7 @@ async function executeNode(
                         attemptNumber: attempt,
                         elapsedTimeMs,
                         elapsedHours,
-                        elapsedDays
+                        elapsedDays,
                     });
                     result = {
                         success: true,
@@ -643,8 +620,8 @@ async function executeNode(
                             connected: true,
                             hoursWaited: elapsedHours,
                             daysWaited: elapsedDays,
-                            status: 'accepted'
-                        }
+                            status: 'accepted',
+                        },
                     };
                     break;
                 }
@@ -662,7 +639,7 @@ async function executeNode(
                         attemptNumber: attempt,
                         elapsedTimeMs,
                         elapsedHours,
-                        elapsedDays
+                        elapsedDays,
                     });
                     result = {
                         success: false,
@@ -671,8 +648,8 @@ async function executeNode(
                             connected: false,
                             hoursWaited: elapsedHours,
                             daysWaited: elapsedDays,
-                            status: 'rejected'
-                        }
+                            status: 'rejected',
+                        },
                     };
                     break;
                 }
@@ -684,7 +661,7 @@ async function executeNode(
                         identifier,
                         totalWaitDurationMs,
                         totalWaitDays: totalDays,
-                        elapsedTimeMs
+                        elapsedTimeMs,
                     });
                     break;
                 }
@@ -697,7 +674,7 @@ async function executeNode(
                     elapsedTimeMs,
                     elapsedDays: elapsedTimeMs / (24 * 60 * 60 * 1000),
                     remainingTimeMs: totalWaitDurationMs - elapsedTimeMs,
-                    remainingDays: (totalWaitDurationMs - elapsedTimeMs) / (24 * 60 * 60 * 1000)
+                    remainingDays: (totalWaitDurationMs - elapsedTimeMs) / (24 * 60 * 60 * 1000),
                 });
             }
 
@@ -709,7 +686,7 @@ async function executeNode(
                     totalWaitDurationMs,
                     totalWaitDays: totalDays,
                     totalAttempts: attempt,
-                    elapsedTimeMs
+                    elapsedTimeMs,
                 });
                 result = {
                     success: false,
@@ -719,8 +696,8 @@ async function executeNode(
                         timeoutReached: true,
                         status: 'timeout',
                         daysWaited: totalDays,
-                        hoursWaited: totalDays * 24
-                    }
+                        hoursWaited: totalDays * 24,
+                    },
                 };
             }
             break;
@@ -745,10 +722,10 @@ async function executeNode(
 }
 
 export async function leadWorkflow(input: LeadWorkflowInput) {
-    const { leadId, workflow, accountId, campaignId, organizationId, startTime, endTime, timezone } = input
+    const { leadId, workflow, accountId, campaignId, organizationId, startTime, endTime, timezone } = input;
     const leadUpdate: LeadUpdateDto = {
-        status: "Processing"
-    }
+        status: 'Processing',
+    };
 
     const lead = await updateLead(leadId, leadUpdate);
 
@@ -759,9 +736,7 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
     const validNodeIds = new Set(nodes.map(n => n.id));
 
     // Filter edges to only include those connecting valid nodes (exclude edges to/from "add step" nodes)
-    const edges = workflow.edges.filter(edge =>
-        validNodeIds.has(edge.source) && validNodeIds.has(edge.target)
-    );
+    const edges = workflow.edges.filter(edge => validNodeIds.has(edge.source) && validNodeIds.has(edge.target));
 
     // Build adjacency map with full edge information for conditional handling
     const adjacencyMap: Record<string, WorkflowEdge[]> = {};
@@ -782,8 +757,8 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
     while (queue.length > 0) {
         const unipileAccountId = await verifyUnipileAccount(accountId);
         if (!unipileAccountId) {
-            log.error("Unipile Account not found - cannot continue lead execution", { leadId, accountId });
-            await updateLead(leadId, { status: "Failed" });
+            log.error('Unipile Account not found - cannot continue lead execution', { leadId, accountId });
+            await updateLead(leadId, { status: 'Failed' });
             return;
         }
         const currentId = queue.shift()!;
@@ -839,7 +814,7 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
                 log.info('Waiting before next step', {
                     leadId: lead.id,
                     delayMs: delay,
-                    sleepDuration
+                    sleepDuration,
                 });
 
                 await sleep(sleepDuration);

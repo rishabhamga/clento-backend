@@ -32,7 +32,7 @@ export function getWorkerConfig(): WorkerConfig {
         return {
             taskQueue: getTemporalConfig().taskQueue,
             maxConcurrentActivityTaskExecutions: 100, // Handle many LinkedIn API calls
-            maxConcurrentWorkflowTaskExecutions: 50,  // Manage workflow decisions
+            maxConcurrentWorkflowTaskExecutions: 50, // Manage workflow decisions
             maxConcurrentActivityTaskPolls: 10,
             maxConcurrentWorkflowTaskPolls: 5,
             maxActivitiesPerSecond: 200, // Rate limit activities

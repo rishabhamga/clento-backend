@@ -79,7 +79,6 @@ export class WorkerManager {
             this.isRunning = true;
 
             logger.info('✅ Temporal worker started and running');
-
         } catch (error) {
             logger.error('Failed to start worker', {
                 error: error instanceof Error ? error.message : String(error),
@@ -94,16 +93,19 @@ export class WorkerManager {
      */
     private runWorkerInBackground(worker: Worker): void {
         // Run worker without awaiting - it will run indefinitely
-        worker.run().then(() => {
-            logger.info('Worker stopped gracefully');
-            this.isRunning = false;
-        }).catch((error) => {
-            logger.error('Worker encountered an error', {
-                error: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined,
+        worker
+            .run()
+            .then(() => {
+                logger.info('Worker stopped gracefully');
+                this.isRunning = false;
+            })
+            .catch(error => {
+                logger.error('Worker encountered an error', {
+                    error: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined,
+                });
+                this.isRunning = false;
             });
-            this.isRunning = false;
-        });
     }
 
     /**
@@ -149,7 +151,7 @@ export class WorkerManager {
                     } catch (error) {
                         logger.error(`Error shutting down worker ${index + 1}`, { error });
                     }
-                })
+                }),
             );
 
             // Close all connections
@@ -161,7 +163,7 @@ export class WorkerManager {
                     } catch (error) {
                         logger.error(`Error closing connection ${index + 1}`, { error });
                     }
-                })
+                }),
             );
 
             this.workers = [];

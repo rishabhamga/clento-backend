@@ -12,14 +12,13 @@ export interface CampaignOrchestratorInput {
     leadProcessingDelay?: number;
 }
 
-
 export class TemporalClientService {
     private static instance: TemporalClientService;
     private client: Client | null = null;
     private connection: Connection | null = null;
     private config = getTemporalConfig();
 
-    private constructor() { }
+    private constructor() {}
 
     public static getInstance(): TemporalClientService {
         if (!TemporalClientService.instance) {
@@ -59,7 +58,7 @@ export class TemporalClientService {
                 stack: error instanceof Error ? error.stack : undefined,
                 name: error instanceof Error ? error.name : undefined,
                 cause: error instanceof Error ? error.cause : undefined,
-                fullError: error
+                fullError: error,
             });
             throw error;
         }
@@ -92,7 +91,7 @@ export class TemporalClientService {
 
             logger.info('Workflow campaign started', {
                 workflowId: handle?.workflowId,
-                runId: handle?.firstExecutionRunId
+                runId: handle?.firstExecutionRunId,
             });
 
             return handle;

@@ -6,24 +6,20 @@ import logger from '../utils/logger';
 const hasSupabaseCredentials = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.SUPABASE_ANON_KEY;
 
 if (!hasSupabaseCredentials) {
-  logger.warn('Supabase credentials not provided - running in mock mode');
+    logger.warn('Supabase credentials not provided - running in mock mode');
 }
 
 /**
  * Supabase client with service role (admin access)
  * Use this for server-side operations that require full database access
  */
-export const supabaseAdmin = hasSupabaseCredentials
-  ? createClient(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!)
-  : null;
+export const supabaseAdmin = hasSupabaseCredentials ? createClient(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!) : null;
 
 /**
  * Supabase client with anonymous key (limited access)
  * Use this for operations that should respect RLS policies
  */
-export const supabaseAnon = hasSupabaseCredentials
-  ? createClient(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!)
-  : null;
+export const supabaseAnon = hasSupabaseCredentials ? createClient(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!) : null;
 
 /**
  * Create a Supabase client with a user's JWT token
@@ -31,46 +27,46 @@ export const supabaseAnon = hasSupabaseCredentials
  * and respect RLS policies
  */
 export const createAuthClient = (jwt: string) => {
-  if (!hasSupabaseCredentials) {
-    return null;
-  }
-  return createClient(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${jwt}`,
-      },
-    },
-  });
+    if (!hasSupabaseCredentials) {
+        return null;
+    }
+    return createClient(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!, {
+        global: {
+            headers: {
+                Authorization: `Bearer ${jwt}`,
+            },
+        },
+    });
 };
 
 /**
  * Initialize Supabase connection
  */
 export const initSupabase = async (): Promise<void> => {
-  if (!hasSupabaseCredentials) {
-    logger.info('Skipping Supabase initialization - no credentials provided');
-    return;
-  }
-
-  try {
-    // Test connection with a simple query
-    const { data, error } = await supabaseAdmin!.from('users').select('id').limit(1);
-
-    if (error) {
-      // If users table doesn't exist, that's ok for development
-      logger.warn('Supabase connection test failed (table may not exist)', error.message);
-    } else {
-      logger.info('Supabase connection established');
+    if (!hasSupabaseCredentials) {
+        logger.info('Skipping Supabase initialization - no credentials provided');
+        return;
     }
-  } catch (error) {
-    logger.warn('Supabase connection test failed', error);
-    // Don't throw error in development mode
-  }
+
+    try {
+        // Test connection with a simple query
+        const { data, error } = await supabaseAdmin!.from('users').select('id').limit(1);
+
+        if (error) {
+            // If users table doesn't exist, that's ok for development
+            logger.warn('Supabase connection test failed (table may not exist)', error.message);
+        } else {
+            logger.info('Supabase connection established');
+        }
+    } catch (error) {
+        logger.warn('Supabase connection test failed', error);
+        // Don't throw error in development mode
+    }
 };
 
 export default {
-  supabaseAdmin,
-  supabaseAnon,
-  createAuthClient,
-  initSupabase,
+    supabaseAdmin,
+    supabaseAnon,
+    createAuthClient,
+    initSupabase,
 };

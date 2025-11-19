@@ -3,7 +3,6 @@ import { promisify } from 'util';
 import { BadRequestError, AppError } from '../errors/AppError';
 import { defaultAuth } from '../middleware/auth';
 
-
 export interface ExpressRequestParams {
     bodyParams: Record<string, any>;
     queryParams: Record<string, any>;
@@ -13,22 +12,21 @@ export interface ExpressRequestParams {
 
 // Extend Express Request type to include additional properties
 declare global {
-  namespace Express {
-    interface Request {
-      clentoAPIClass?: ClentoAPI;
-      requestParams?: ExpressRequestParams;
+    namespace Express {
+        interface Request {
+            clentoAPIClass?: ClentoAPI;
+            requestParams?: ExpressRequestParams;
+        }
     }
-  }
 }
 
 export const isNullOrUndefined = (it: any) => it === null || it === undefined;
 
 export const CheckNever = (value: never): never => {
-    throw new Error(`Unhandled case: ${value}`)
-}
+    throw new Error(`Unhandled case: ${value}`);
+};
 
 export default abstract class ClentoAPI {
-
     public abstract path: string;
 
     public authType: 'NONE' | 'API' | 'DASHBOARD';
@@ -45,7 +43,7 @@ export default abstract class ClentoAPI {
         DELETE: ExpressRequestParams;
     };
 
-    constructor () {
+    constructor() {
         this.authType = 'DASHBOARD';
         this.requestParams = this.getDefaultClentoAPIRequestParams();
         this.forceJSON = false;
@@ -57,7 +55,7 @@ export default abstract class ClentoAPI {
         throw new AppError(`getLockString method is not implemented for ${this.path}`, 500);
     };
 
-    public getDefaultClentoAPIRequestParams () {
+    public getDefaultClentoAPIRequestParams() {
         return {
             GET: this.getDefaultExpressRequestParams(),
             POST: this.getDefaultExpressRequestParams(),
@@ -66,7 +64,7 @@ export default abstract class ClentoAPI {
         };
     }
 
-    public getDefaultExpressRequestParams (): ExpressRequestParams {
+    public getDefaultExpressRequestParams(): ExpressRequestParams {
         return {
             bodyParams: {},
             queryParams: {},
@@ -183,16 +181,13 @@ export default abstract class ClentoAPI {
     };
 
     private setCommonHeaders = (res: Response) => {
-        res.setHeader('Content-Security-Policy', 'frame-ancestors \'self\'');
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
     };
 
     /**
      * Helper method to create a router with automatic route setup
      */
-    public static createRouter<T extends ClentoAPI>(
-        apiClass: new () => T,
-        routes: { [method: string]: string }
-    ) {
+    public static createRouter<T extends ClentoAPI>(apiClass: new () => T, routes: { [method: string]: string }) {
         const { Router } = require('express');
         const router = Router();
         const apiInstance = new apiClass();

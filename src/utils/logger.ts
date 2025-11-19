@@ -3,35 +3,31 @@ import env from '../config/env';
 
 // Define log format
 const logFormat = winston.format.combine(
-  winston.format.timestamp(),
-  winston.format.errors({ stack: true }),
-  // Filter out ALL logs when DEBUG_LOGS is false
-  winston.format((info) => {
-    if (!env.DEBUG_LOGS) {
-      return false; // Don't log ANY messages when DEBUG_LOGS is false
-    }
-    return info;
-  })(),
-  env.NODE_ENV === 'development'
-    ? winston.format.colorize()
-    : winston.format.uncolorize(),
-  winston.format.printf(({ timestamp, level, message, ...meta }) => {
-    const metaString = Object.keys(meta).length
-      ? `\n${JSON.stringify(meta, null, 2)}`
-      : '';
-    return `${timestamp} [${level}]: ${message}${metaString}`;
-  })
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    // Filter out ALL logs when DEBUG_LOGS is false
+    winston.format(info => {
+        if (!env.DEBUG_LOGS) {
+            return false; // Don't log ANY messages when DEBUG_LOGS is false
+        }
+        return info;
+    })(),
+    env.NODE_ENV === 'development' ? winston.format.colorize() : winston.format.uncolorize(),
+    winston.format.printf(({ timestamp, level, message, ...meta }) => {
+        const metaString = Object.keys(meta).length ? `\n${JSON.stringify(meta, null, 2)}` : '';
+        return `${timestamp} [${level}]: ${message}${metaString}`;
+    }),
 );
 
 // Create logger instance
 const logger = winston.createLogger({
-  level: env.LOG_LEVEL,
-  format: logFormat,
-  transports: [
-    new winston.transports.Console({
-      stderrLevels: ['error'],
-    }),
-  ],
+    level: env.LOG_LEVEL,
+    format: logFormat,
+    transports: [
+        new winston.transports.Console({
+            stderrLevels: ['error'],
+        }),
+    ],
 });
 
 export default logger;

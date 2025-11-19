@@ -38,7 +38,7 @@ export async function testWorkflow(input: TestWorkflowInput): Promise<TestWorkfl
 
         const result = await testActivity({
             message: `${input.message} - Iteration ${i + 1}`,
-            delay: input.delay
+            delay: input.delay,
         });
 
         results.push(result);
@@ -58,14 +58,14 @@ export async function testWorkflow(input: TestWorkflowInput): Promise<TestWorkfl
             results,
             totalDuration,
             startedAt,
-            completedAt
-        }
+            completedAt,
+        },
     };
 
     log.info('Test workflow completed', {
         totalDuration,
         iterations,
-        resultsCount: results.length
+        resultsCount: results.length,
     });
 
     return workflowResult;

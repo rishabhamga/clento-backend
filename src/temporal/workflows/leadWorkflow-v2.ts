@@ -1,26 +1,11 @@
-import { log, proxyActivities, sleep } from "@temporalio/workflow";
-import type * as activities from "../activities";
-import { ActivityResult, LeadWorkflowInput } from "./leadWorkflow";
-import { LeadResponseDto, LeadUpdateDto } from "../../dto/leads.dto";
-import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from "../../types/workflow.types";
-import logger from "../../utils/logger";
+import { log, proxyActivities, sleep } from '@temporalio/workflow';
+import type * as activities from '../activities';
+import { ActivityResult, LeadWorkflowInput } from './leadWorkflow';
+import { LeadResponseDto, LeadUpdateDto } from '../../dto/leads.dto';
+import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from '../../types/workflow.types';
+import logger from '../../utils/logger';
 
-const {
-    profile_visit,
-    like_post,
-    comment_post,
-    send_followup,
-    withdraw_request,
-    send_inmail,
-    send_connection_request,
-    check_connection_status,
-    updateLead,
-    verifyUnipileAccount,
-    updateCampaignStep,
-    extractLinkedInPublicIdentifier,
-    checkTimeWindow,
-    checkConnectionRequestLimits
-} = proxyActivities<typeof activities>({
+const { profile_visit, like_post, comment_post, send_followup, withdraw_request, send_inmail, send_connection_request, check_connection_status, updateLead, verifyUnipileAccount, updateCampaignStep, extractLinkedInPublicIdentifier, checkTimeWindow, checkConnectionRequestLimits } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
         initialInterval: '1s',
@@ -31,19 +16,25 @@ const {
 
 // Utility functions for workflow use
 const CheckNever = (value: never): never => {
-    throw new Error(`Unhandled case: ${value}`)
+    throw new Error(`Unhandled case: ${value}`);
 };
 
 function getDelayMs(edge: WorkflowEdge): number {
     if (edge.data?.delayData?.delay && edge.data?.delayData?.unit) {
         const delay = parseInt(edge.data.delayData.delay ?? '0', 10);
         switch (edge.data.delayData.unit) {
-            case 's': return delay * 1000;
-            case 'm': return delay * 60_000;
-            case 'h': return delay * 3_600_000;
-            case 'd': return delay * 86_400_000;
-            case 'w': return delay * 604_800_000;
-            default: CheckNever(edge.data.delayData.unit);
+            case 's':
+                return delay * 1000;
+            case 'm':
+                return delay * 60_000;
+            case 'h':
+                return delay * 3_600_000;
+            case 'd':
+                return delay * 86_400_000;
+            case 'w':
+                return delay * 604_800_000;
+            default:
+                CheckNever(edge.data.delayData.unit);
         }
     }
     return 0;
@@ -70,18 +61,7 @@ async function sleepMs(ms: number) {
     await sleep(`${hours} hours`);
 }
 
-
-const executeNode = async (
-    node: WorkflowNode,
-    accountId: string,
-    lead: LeadResponseDto,
-    campaignId: string,
-    workflow: WorkflowJson,
-    index: number,
-    startTime?: string | null,
-    endTime?: string | null,
-    timezone?: string | null
-): Promise<ActivityResult | null> => {
+const executeNode = async (node: WorkflowNode, accountId: string, lead: LeadResponseDto, campaignId: string, workflow: WorkflowJson, index: number, startTime?: string | null, endTime?: string | null, timezone?: string | null): Promise<ActivityResult | null> => {
     await waitForTimeWindow(startTime, endTime, timezone);
 
     const type = node.data.type;
@@ -115,7 +95,7 @@ const executeNode = async (
             result = await send_followup(accountId, identifier, config, lead.campaign_id, {
                 first_name: lead.first_name,
                 last_name: lead.last_name,
-                company: lead.company
+                company: lead.company,
             });
             break;
         case EWorkflowNodeType.withdraw_request:
@@ -129,16 +109,13 @@ const executeNode = async (
                 accountId,
                 identifier,
                 campaignId: lead.campaign_id,
-                leadId: lead.id
+                leadId: lead.id,
             });
 
             // -----------------------------------------
             // 1. Check LinkedIn daily/weekly limits
             // -----------------------------------------
-            const limitsCheck = await checkAndWaitConnectionLimits(
-                campaignId,
-                { accountId, identifier, leadId: lead.id }
-            );
+            const limitsCheck = await checkAndWaitConnectionLimits(campaignId, { accountId, identifier, leadId: lead.id });
 
             if (!limitsCheck.canProceed) {
                 result = limitsCheck.failureResult;
@@ -149,16 +126,14 @@ const executeNode = async (
             // 2. Attempt the send, retrying if provider
             //    imposes a temporary limit (24 hours)
             // -----------------------------------------
-            const sendResult = await retryUntilProviderLimitClears(() =>
-                send_connection_request(accountId, identifier, config || {}, lead.campaign_id)
-            );
+            const sendResult = await retryUntilProviderLimitClears(() => send_connection_request(accountId, identifier, config || {}, lead.campaign_id));
 
             // If null — treat as transient error
             if (!sendResult) {
                 result = {
                     success: false,
-                    message: "Unexpected empty send result",
-                    data: { error: { type: "unknown", message: "Provider returned null" } }
+                    message: 'Unexpected empty send result',
+                    data: { error: { type: 'unknown', message: 'Provider returned null' } },
                 };
                 break;
             }
@@ -170,7 +145,7 @@ const executeNode = async (
                 log.info('User already connected — skipping polling', {
                     accountId,
                     identifier,
-                    leadId: lead.id
+                    leadId: lead.id,
                 });
 
                 result = sendResult;
@@ -188,7 +163,7 @@ const executeNode = async (
                     identifier,
                     campaignId,
                     leadId: lead.id,
-                    sendResult
+                    sendResult,
                 });
 
                 result = {
@@ -198,9 +173,9 @@ const executeNode = async (
                         error: {
                             type: 'provider_id_missing',
                             message: 'Connection request was sent but provider ID was not returned',
-                            sendResult
-                        }
-                    }
+                            sendResult,
+                        },
+                    },
                 };
                 break;
             }
@@ -208,27 +183,14 @@ const executeNode = async (
             // -----------------------------------------
             // 5. Prepare polling config
             // -----------------------------------------
-            const rejectedEdge = workflow.edges.find(
-                e =>
-                    e.source === node.id &&
-                    e.data?.isConditionalPath === true &&
-                    e.data?.isPositive === false
-            );
+            const rejectedEdge = workflow.edges.find(e => e.source === node.id && e.data?.isConditionalPath === true && e.data?.isPositive === false);
 
             const { totalWaitMs, pollMs, pollText } = getPollingConfig(rejectedEdge);
 
             // -----------------------------------------
             // 6. Poll until accepted / rejected / timeout
             // -----------------------------------------
-            result = await pollUntilResolved(
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                totalWaitMs,
-                pollMs,
-                pollText
-            );
+            result = await pollUntilResolved(accountId, identifier, providerId, campaignId, totalWaitMs, pollMs, pollText);
 
             break;
         }
@@ -240,7 +202,7 @@ const executeNode = async (
             CheckNever(type);
     }
     return result;
-}
+};
 
 // Types used by the helper (adjust imports if these are declared elsewhere)
 type LimitsCheck = {
@@ -250,19 +212,13 @@ type LimitsCheck = {
 };
 
 // Helper return type
-type LimitsCheckOutcome =
-    | { canProceed: true }
-    | { canProceed: false; failureResult: ActivityResult };
+type LimitsCheckOutcome = { canProceed: true } | { canProceed: false; failureResult: ActivityResult };
 
 //
 // NOTE: this function expects `checkConnectionRequestLimits` and `sleep`
 // to be in scope (your proxyActivities and Temporal sleep).
 //
-export async function checkAndWaitConnectionLimits(
-    campaignId: string,
-    ctx: { accountId?: string; identifier?: string; leadId?: string | number },
-): Promise<LimitsCheckOutcome> {
-
+export async function checkAndWaitConnectionLimits(campaignId: string, ctx: { accountId?: string; identifier?: string; leadId?: string | number }): Promise<LimitsCheckOutcome> {
     const msToSleepString = (ms: number): string => {
         if (ms <= 0) return '0 seconds';
         const hours = Math.floor(ms / 3600000);
@@ -289,10 +245,10 @@ export async function checkAndWaitConnectionLimits(
                 data: {
                     error: {
                         type: 'limits_check_failed',
-                        message: err?.message ?? 'Unknown error when checking connection request limits'
-                    }
-                }
-            }
+                        message: err?.message ?? 'Unknown error when checking connection request limits',
+                    },
+                },
+            },
         };
     }
 
@@ -305,7 +261,7 @@ export async function checkAndWaitConnectionLimits(
             campaignId,
             ...ctx,
             waitMs,
-            sleepDuration
+            sleepDuration,
         });
 
         try {
@@ -321,10 +277,10 @@ export async function checkAndWaitConnectionLimits(
                     data: {
                         error: {
                             type: 'limits_sleep_failed',
-                            message: err?.message ?? 'Error during sleep before retrying limit check'
-                        }
-                    }
-                }
+                            message: err?.message ?? 'Error during sleep before retrying limit check',
+                        },
+                    },
+                },
             };
         }
 
@@ -340,10 +296,10 @@ export async function checkAndWaitConnectionLimits(
                     data: {
                         error: {
                             type: 'limits_check_failed_after_wait',
-                            message: err?.message ?? 'Unknown error when re-checking limits'
-                        }
-                    }
-                }
+                            message: err?.message ?? 'Unknown error when re-checking limits',
+                        },
+                    },
+                },
             };
         }
     }
@@ -358,17 +314,14 @@ export async function checkAndWaitConnectionLimits(
             data: {
                 error: {
                     type: 'connection_request_limit_exceeded',
-                    message: 'Daily or weekly connection request limit has been exceeded'
-                }
-            }
-        }
+                    message: 'Daily or weekly connection request limit has been exceeded',
+                },
+            },
+        },
     };
 }
 
-
-async function retryUntilProviderLimitClears(
-    fn: () => Promise<ActivityResult | null>
-): Promise<ActivityResult | null> {
+async function retryUntilProviderLimitClears(fn: () => Promise<ActivityResult | null>): Promise<ActivityResult | null> {
     while (true) {
         const res = await fn();
 
@@ -381,11 +334,7 @@ async function retryUntilProviderLimitClears(
         const err = res.data?.error;
 
         // If it's NOT your provider-limit error → return it
-        if (
-            !err ||
-            err.type !== "provider_limit_reached" ||
-            err.shouldRetry !== true
-        ) {
+        if (!err || err.type !== 'provider_limit_reached' || err.shouldRetry !== true) {
             return res;
         }
 
@@ -402,7 +351,7 @@ async function retryUntilProviderLimitClears(
 function getPollingConfig(rejectedEdge?: WorkflowEdge) {
     let totalWaitMs = 10 * 24 * 60 * 60 * 1000; // default 10 days
     let pollMs = 60 * 60 * 1000; // default 1 hour
-    let pollText = "1 hour";
+    let pollText = '1 hour';
 
     const edgeMs = rejectedEdge ? getDelayMs(rejectedEdge) : 0;
 
@@ -411,16 +360,15 @@ function getPollingConfig(rejectedEdge?: WorkflowEdge) {
 
         if (edgeMs < 24 * 60 * 60 * 1000) {
             pollMs = 15 * 60 * 1000;
-            pollText = "15 minutes";
+            pollText = '15 minutes';
         } else if (edgeMs < 7 * 24 * 60 * 60 * 1000) {
             pollMs = 30 * 60 * 1000;
-            pollText = "30 minutes";
+            pollText = '30 minutes';
         }
     }
 
     return { totalWaitMs, pollMs, pollText };
 }
-
 
 // -----------------------------------------------------
 // 2. Evaluate status result: accepted / rejected / pending
@@ -429,25 +377,25 @@ function evaluateStatus(statusResult: ActivityResult, elapsedMs: number) {
     const hours = elapsedMs / (60 * 60 * 1000);
     const days = elapsedMs / (24 * 60 * 60 * 1000);
 
-    if (statusResult.success && statusResult.data?.status === "accepted") {
+    if (statusResult.success && statusResult.data?.status === 'accepted') {
         return {
             done: true,
             result: {
                 success: true,
                 message: `Connection accepted after ${days.toFixed(1)} day(s)`,
-                data: { connected: true, hoursWaited: hours, daysWaited: days, status: "accepted" }
-            }
+                data: { connected: true, hoursWaited: hours, daysWaited: days, status: 'accepted' },
+            },
         };
     }
 
-    if (statusResult.data?.status === "rejected") {
+    if (statusResult.data?.status === 'rejected') {
         return {
             done: true,
             result: {
                 success: false,
                 message: `Connection rejected after ${days.toFixed(1)} day(s)`,
-                data: { connected: false, hoursWaited: hours, daysWaited: days, status: "rejected" }
-            }
+                data: { connected: false, hoursWaited: hours, daysWaited: days, status: 'rejected' },
+            },
         };
     }
 
@@ -460,9 +408,9 @@ function evaluateStatus(statusResult: ActivityResult, elapsedMs: number) {
                 connected: false,
                 daysWaited: days,
                 hoursWaited: days * 24,
-                status: "timeout"
-            }
-        }
+                status: 'timeout',
+            },
+        },
     };
 }
 
@@ -471,19 +419,10 @@ function msToTemporalDuration(ms: number): string {
     return `${seconds} seconds`;
 }
 
-
 // -----------------------------------------------------
 // 3. Polling Loop (super small)
 // -----------------------------------------------------
-async function pollUntilResolved(
-    accountId: string,
-    identifier: string,
-    providerId: string,
-    campaignId: string,
-    totalWaitMs: number,
-    pollMs: number,
-    pollText: string
-): Promise<ActivityResult> {
+async function pollUntilResolved(accountId: string, identifier: string, providerId: string, campaignId: string, totalWaitMs: number, pollMs: number, pollText: string): Promise<ActivityResult> {
     let elapsedMs = 0;
 
     while (elapsedMs < totalWaitMs) {
@@ -505,7 +444,7 @@ async function pollUntilResolved(
         if (status) {
             const evaluation = evaluateStatus(status, elapsedMs);
             if (evaluation.done) {
-                return evaluation.result;  // ALWAYS ActivityResult
+                return evaluation.result; // ALWAYS ActivityResult
             }
         }
     }
@@ -518,17 +457,17 @@ async function pollUntilResolved(
         data: {
             connected: false,
             timeoutReached: true,
-            status: "timeout",
+            status: 'timeout',
             daysWaited: days,
-            hoursWaited: days * 24
-        }
+            hoursWaited: days * 24,
+        },
     };
 }
 
 export const leadWorkflow = async (input: LeadWorkflowInput) => {
-    const { leadId, workflow, accountId, campaignId, organizationId, startTime, endTime, timezone } = input
+    const { leadId, workflow, accountId, campaignId, organizationId, startTime, endTime, timezone } = input;
 
-    const leadUpdate: LeadUpdateDto = { status: "Processing" };
+    const leadUpdate: LeadUpdateDto = { status: 'Processing' };
     const lead = await updateLead(leadId, leadUpdate);
 
     const nodes = workflow.nodes.filter(n => n.type !== EAction.addStep);
@@ -555,27 +494,17 @@ export const leadWorkflow = async (input: LeadWorkflowInput) => {
     while (queue.length > 0) {
         const unipileAccountId = await verifyUnipileAccount(accountId);
         if (!unipileAccountId) {
-            logger.error("Unipile Account not found - cannot continue lead execution", { leadId, accountId });
-            await updateLead(leadId, { status: "Failed" });
+            logger.error('Unipile Account not found - cannot continue lead execution', { leadId, accountId });
+            await updateLead(leadId, { status: 'Failed' });
             return;
         }
         const currentId = queue.shift()!;
         const currentNode = nodes.find(n => n.id === currentId);
 
-        if (!currentNode) continue
+        if (!currentNode) continue;
 
         // Execute the current node and store the result
-        const result = await executeNode(
-            currentNode,
-            unipileAccountId,
-            lead,
-            campaignId,
-            workflow,
-            stepIndex,
-            startTime,
-            endTime,
-            timezone
-        );
+        const result = await executeNode(currentNode, unipileAccountId, lead, campaignId, workflow, stepIndex, startTime, endTime, timezone);
 
         const outgoingEdges = adjacencyMap[currentId] || [];
 
@@ -602,10 +531,10 @@ export const leadWorkflow = async (input: LeadWorkflowInput) => {
             if (delayMs > 0) {
                 const delayStr = msToTemporalDuration(delayMs);
 
-                log.info("Waiting before next step", {
+                log.info('Waiting before next step', {
                     leadId: lead.id,
                     delayMs,
-                    delayStr
+                    delayStr,
                 });
 
                 await sleep(delayStr);
@@ -620,4 +549,4 @@ export const leadWorkflow = async (input: LeadWorkflowInput) => {
 
         stepIndex++;
     }
-}
+};

@@ -7,22 +7,22 @@ import logger from '../utils/logger';
 export interface UnipileError {
     error: {
         body: {
-            title: string,
-            detail: string,
-            instance: string,
-            type: string,
-            status: number,
+            title: string;
+            detail: string;
+            instance: string;
+            type: string;
+            status: number;
             connectionParams?: {
-                imap_host: string,
-                imap_encryption: string,
-                imap_port: number,
-                imap_user: string,
-                smtp_host: string,
-                smtp_port: number,
-                smtp_user: string
-            }
-        }
-    }
+                imap_host: string;
+                imap_encryption: string;
+                imap_port: number;
+                imap_user: string;
+                smtp_host: string;
+                smtp_port: number;
+                smtp_user: string;
+            };
+        };
+    };
 }
 /**
  * Unipile integration service for managing external accounts using Unipile Node SDK
@@ -56,7 +56,7 @@ export class UnipileService {
                 UnipileService.client = new UnipileClient(env.UNIPILE_DNS, env.UNIPILE_ACCESS_TOKEN);
                 logger.info('Unipile client initialized successfully', {
                     apiUrl: env.UNIPILE_DNS,
-                    hasApiKey: !!env.UNIPILE_ACCESS_TOKEN
+                    hasApiKey: !!env.UNIPILE_ACCESS_TOKEN,
                 });
             } catch (error) {
                 logger.error('Failed to initialize Unipile client', { error });
@@ -75,16 +75,7 @@ export class UnipileService {
     /**
      * Create hosted authentication link using Unipile SDK
      */
-    async createHostedAuthLink(params: {
-        type: 'create';
-        providers: string[];
-        expiresOn: string;
-        successRedirectUrl?: string;
-        failureRedirectUrl?: string;
-        notifyUrl?: string;
-        name?: string;
-        reconnectAccount?: string;
-    }): Promise<{ url: string }> {
+    async createHostedAuthLink(params: { type: 'create'; providers: string[]; expiresOn: string; successRedirectUrl?: string; failureRedirectUrl?: string; notifyUrl?: string; name?: string; reconnectAccount?: string }): Promise<{ url: string }> {
         try {
             logger.info('=== UnipileService: createHostedAuthLink START ===', { params });
 
@@ -93,9 +84,8 @@ export class UnipileService {
                 hasApiKey: !!env.UNIPILE_ACCESS_TOKEN,
                 apiUrl: env.UNIPILE_DNS,
                 apiKeyLength: env.UNIPILE_ACCESS_TOKEN?.length,
-                apiKeyPrefix: env.UNIPILE_ACCESS_TOKEN?.substring(0, 10) + '...'
+                apiKeyPrefix: env.UNIPILE_ACCESS_TOKEN?.substring(0, 10) + '...',
             });
-
 
             if (!UnipileService.isConfigured()) {
                 throw new ExternalAPIError('Unipile API is not configured. Please set UNIPILE_ACCESS_TOKEN and UNIPILE_DNS in your environment variables.');
@@ -123,7 +113,7 @@ export class UnipileService {
             logger.info('Unipile SDK request', {
                 unipileRequest,
                 clientExists: !!UnipileService.client,
-                apiKeyLength: env.UNIPILE_ACCESS_TOKEN?.length || 0
+                apiKeyLength: env.UNIPILE_ACCESS_TOKEN?.length || 0,
             });
 
             try {
@@ -134,18 +124,17 @@ export class UnipileService {
                         hasClient: !!UnipileService.client,
                         apiUrl: env.UNIPILE_DNS,
                         apiKeyPrefix: env.UNIPILE_ACCESS_TOKEN?.substring(0, 10) + '...',
-                    }
+                    },
                 });
 
                 const response = await UnipileService.client!.account.createHostedAuthLink(unipileRequest);
-
 
                 if (!response || !response.url) {
                     logger.error('=== INVALID UNIPILE RESPONSE ===', {
                         response,
                         hasResponse: !!response,
                         responseType: typeof response,
-                        responseKeys: response ? Object.keys(response) : null
+                        responseKeys: response ? Object.keys(response) : null,
                     });
                     throw new ExternalAPIError('Invalid response from Unipile API - missing URL');
                 }
@@ -164,7 +153,7 @@ export class UnipileService {
                     errorResponseHeaders: sdkError?.response?.headers,
                     requestData: unipileRequest,
                     sdkErrorKeys: Object.keys(sdkError || {}),
-                    fullError: sdkError
+                    fullError: sdkError,
                 });
 
                 // Check for common authentication errors
@@ -190,12 +179,15 @@ export class UnipileService {
             }
         } catch (error) {
             logger.error('=== UnipileService: createHostedAuthLink ERROR ===', {
-                error: error instanceof Error ? {
-                    name: error.name,
-                    message: error.message,
-                    stack: error.stack
-                } : error,
-                params
+                error:
+                    error instanceof Error
+                        ? {
+                              name: error.name,
+                              message: error.message,
+                              stack: error.stack,
+                          }
+                        : error,
+                params,
             });
             throw new ExternalAPIError('Failed to create authentication link');
         }
@@ -292,7 +284,7 @@ export class UnipileService {
         }
 
         try {
-            const profile = await UnipileService.client.users.getOwnProfile(accountId)
+            const profile = await UnipileService.client.users.getOwnProfile(accountId);
             return profile;
         } catch (error: any) {
             logger.error('=== UNIPILE SDK: Profile fetch failed ===', {
@@ -302,7 +294,7 @@ export class UnipileService {
                 errorStatus: error && typeof error === 'object' && 'body' in error && error.body && typeof error.body === 'object' && 'status' in error.body ? error.body.status : undefined,
                 errorType: error && typeof error === 'object' && 'body' in error && error.body && typeof error.body === 'object' && 'type' in error.body ? error.body.type : undefined,
                 errorDetail: error && typeof error === 'object' && 'body' in error && error.body && typeof error.body === 'object' && 'detail' in error.body ? error.body.detail : undefined,
-                sdkMethod: 'client.users.getOwnProfile'
+                sdkMethod: 'client.users.getOwnProfile',
             });
         }
     }
@@ -310,12 +302,7 @@ export class UnipileService {
     /**
      * Send message through connected account using SDK
      */
-    async sendMessage(params: {
-        accountId: string;
-        attendeesIds: string[];
-        text: string;
-        options?: any;
-    }): Promise<any> {
+    async sendMessage(params: { accountId: string; attendeesIds: string[]; text: string; options?: any }): Promise<any> {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
@@ -346,10 +333,7 @@ export class UnipileService {
      * Generate AI text for messages (placeholder)
      * TODO: Implement actual AI generation
      */
-    async generateAiText(params: {
-        config: WorkflowNodeConfig;
-        author: string;
-    }): Promise<string> {
+    async generateAiText(params: { config: WorkflowNodeConfig; author: string }): Promise<string> {
         // Placeholder AI generation - returns hardcoded value for now
         // This will be replaced with actual AI generation later
         const text = 'Hey just saw your work great stuff lets connect?';
@@ -391,7 +375,7 @@ export class UnipileService {
                 logger.info('Template variables replaced in message', {
                     originalMessage,
                     replacedMessage: message,
-                    templateData: params.templateData
+                    templateData: params.templateData,
                 });
             }
         }
@@ -414,11 +398,14 @@ export class UnipileService {
      * Supports: {{first_name}}, {{last_name}}, {{company}}
      * Case-insensitive replacement
      */
-    private replaceTemplateVariables(message: string, templateData: {
-        first_name?: string;
-        last_name?: string;
-        company?: string;
-    }): string {
+    private replaceTemplateVariables(
+        message: string,
+        templateData: {
+            first_name?: string;
+            last_name?: string;
+            company?: string;
+        },
+    ): string {
         let replacedMessage = message;
 
         // Map of template variables to their values
@@ -455,11 +442,7 @@ export class UnipileService {
     /**
      * Send LinkedIn invitation using SDK
      */
-    async sendLinkedInInvitation(params: {
-        accountId: string;
-        providerId: string;
-        config: WorkflowNodeConfig;
-    }): Promise<any> {
+    async sendLinkedInInvitation(params: { accountId: string; providerId: string; config: WorkflowNodeConfig }): Promise<any> {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
@@ -487,7 +470,7 @@ export class UnipileService {
 
             logger.info('LinkedIn invitation sent via SDK', {
                 accountId: params.accountId,
-                providerId: params.providerId
+                providerId: params.providerId,
             });
 
             return response;
@@ -510,11 +493,7 @@ export class UnipileService {
     /**
      * Visit LinkedIn profile (for tracking) using SDK
      */
-    async visitLinkedInProfile(params: {
-        accountId: string;
-        identifier: string;
-        notify?: boolean;
-    }) {
+    async visitLinkedInProfile(params: { accountId: string; identifier: string; notify?: boolean }) {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
@@ -527,7 +506,7 @@ export class UnipileService {
 
             logger.info('LinkedIn profile visited via SDK', {
                 accountId: params.accountId,
-                identifier: params.identifier
+                identifier: params.identifier,
             });
 
             return response;
@@ -537,11 +516,7 @@ export class UnipileService {
         }
     }
 
-    async getRecentPosts(params: {
-        accountId: string,
-        linkedInUrn: string,
-        lastDays: number
-    }) {
+    async getRecentPosts(params: { accountId: string; linkedInUrn: string; lastDays: number }) {
         if (!UnipileClient) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
@@ -549,7 +524,7 @@ export class UnipileService {
             const response = await UnipileService.client?.users.getAllPosts({
                 account_id: params.accountId,
                 identifier: params.linkedInUrn,
-                limit: 5
+                limit: 5,
             });
             // Filter posts to only those created within the last X days
             if (Array.isArray(response?.items)) {
@@ -564,22 +539,17 @@ export class UnipileService {
                     return postDate >= cutoffDate && postDate <= now;
                 });
             }
-            const filteredPosts = response?.items
+            const filteredPosts = response?.items;
             return filteredPosts;
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
     /**
      * Like LinkedIn post using SDK
      */
-    async likeLinkedInPost(params: {
-        accountId: string;
-        linkedInUrn: string;
-        lastDays: number;
-        reactionType?: string;
-    }) {
+    async likeLinkedInPost(params: { accountId: string; linkedInUrn: string; lastDays: number; reactionType?: string }) {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
@@ -588,7 +558,7 @@ export class UnipileService {
             const posts = await this.getRecentPosts({
                 accountId: params.accountId,
                 linkedInUrn: params.linkedInUrn,
-                lastDays: params.lastDays
+                lastDays: params.lastDays,
             });
 
             const postToLikeFull = posts?.getRandom();
@@ -602,17 +572,15 @@ export class UnipileService {
             const response = await UnipileService.client.users.sendPostReaction({
                 account_id: params.accountId,
                 post_id: postToLike,
-                reaction_type: (params.reactionType === 'like' || params.reactionType === 'celebrate' || params.reactionType === 'support' || params.reactionType === 'love' || params.reactionType === 'insightful' || params.reactionType === 'funny') ? params.reactionType : 'like',
+                reaction_type: params.reactionType === 'like' || params.reactionType === 'celebrate' || params.reactionType === 'support' || params.reactionType === 'love' || params.reactionType === 'insightful' || params.reactionType === 'funny' ? params.reactionType : 'like',
             });
             logger.info('LinkedIn post liked via SDK', {
                 accountId: params.accountId,
-                linkedInUrn: params.linkedInUrn
+                linkedInUrn: params.linkedInUrn,
             });
-            return response
-
-
+            return response;
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
@@ -620,10 +588,7 @@ export class UnipileService {
      * Generate comment using AI (placeholder)
      * TODO: Implement actual AI generation
      */
-    async generateAtComment(params: {
-        config: WorkflowNodeConfig;
-        author: string
-    }) {
+    async generateAtComment(params: { config: WorkflowNodeConfig; author: string }) {
         // Placeholder AI generation - returns hardcoded value for now
         // This will be replaced with actual AI generation later
         const text = 'Great Info ' + params.author;
@@ -632,11 +597,7 @@ export class UnipileService {
     /**
      * Comment on LinkedIn post using SDK
      */
-    async commentLinkedInPost(params: {
-        accountId: string;
-        linkedInUrn: string;
-        config: WorkflowNodeConfig;
-    }): Promise<any> {
+    async commentLinkedInPost(params: { accountId: string; linkedInUrn: string; config: WorkflowNodeConfig }): Promise<any> {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
@@ -644,7 +605,7 @@ export class UnipileService {
         const posts = await this.getRecentPosts({
             accountId: params.accountId,
             linkedInUrn: params.linkedInUrn,
-            lastDays: params.config.recentPostDays || 7
+            lastDays: params.config.recentPostDays || 7,
         });
 
         const postToComment = posts?.getRandom();
@@ -680,7 +641,7 @@ export class UnipileService {
 
             logger.info('LinkedIn post commented via SDK', {
                 accountId: params.accountId,
-                postId: postToCommentId
+                postId: postToCommentId,
             });
 
             return response;
@@ -690,16 +651,13 @@ export class UnipileService {
         }
     }
 
-    async withdrawLinkedInInvitationRequest(params: {
-        accountId: string;
-        providerId: string;
-    }): Promise<any> {
+    async withdrawLinkedInInvitationRequest(params: { accountId: string; providerId: string }): Promise<any> {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
         try {
             const invitation = await UnipileService.client.users.getAllInvitationsSent({
-                account_id: params.accountId
+                account_id: params.accountId,
             });
             const invitationId = invitation.items?.find(item => item.invited_user_id === params.providerId)?.id;
             if (!invitationId) {
@@ -712,7 +670,7 @@ export class UnipileService {
 
             logger.info('LinkedIn invitation request withdrawn via SDK', {
                 accountId: params.accountId,
-                invitationId: invitationId
+                invitationId: invitationId,
             });
 
             return response;
@@ -722,16 +680,13 @@ export class UnipileService {
         }
     }
 
-    async isConnected(params: {
-        accountId: string;
-        identifier: string;
-    }): Promise<any> {
+    async isConnected(params: { accountId: string; identifier: string }): Promise<any> {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
         try {
             const result = await UnipileService.client.users.getAllRelations({
-                account_id: params.accountId
+                account_id: params.accountId,
             });
             const relation = result.items?.find(item => item.public_identifier === params.identifier);
             return relation ? true : false;
@@ -744,16 +699,13 @@ export class UnipileService {
     /**
      * Check if an invitation is still pending for a specific user
      */
-    async isInvitationPending(params: {
-        accountId: string;
-        providerId: string;
-    }): Promise<boolean> {
+    async isInvitationPending(params: { accountId: string; providerId: string }): Promise<boolean> {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
         try {
             const invitation = await UnipileService.client.users.getAllInvitationsSent({
-                account_id: params.accountId
+                account_id: params.accountId,
             });
             const invitationExists = invitation.items?.some(item => item.invited_user_id === params.providerId);
             return invitationExists || false;
@@ -766,13 +718,7 @@ export class UnipileService {
     /**
      * Send email through connected account using SDK
      */
-    async sendEmail(params: {
-        accountId: string;
-        to: Array<{ identifier: string }>;
-        subject: string;
-        body: string;
-        replyTo?: string;
-    }): Promise<any> {
+    async sendEmail(params: { accountId: string; to: Array<{ identifier: string }>; subject: string; body: string; replyTo?: string }): Promise<any> {
         if (!UnipileService.client) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
@@ -788,7 +734,7 @@ export class UnipileService {
 
             logger.info('Email sent via SDK', {
                 accountId: params.accountId,
-                recipientCount: params.to.length
+                recipientCount: params.to.length,
             });
 
             return response;
@@ -805,7 +751,7 @@ export class UnipileService {
             const response = await UnipileService.client.messaging.getAllChats({
                 account_id: accountId,
                 limit: limit,
-                cursor: cursor
+                cursor: cursor,
             });
             return response;
         } catch (error) {
@@ -820,10 +766,10 @@ export class UnipileService {
         }
         try {
             const response = await UnipileService.client.messaging.getAllMessagesFromChat({
-                chat_id: chatId
+                chat_id: chatId,
             });
             return response;
-        }catch(error){
+        } catch (error) {
             logger.error('Error getting chat via SDK', { error, accountId, chatId });
         }
     }
@@ -832,17 +778,7 @@ export class UnipileService {
      * Get supported providers
      */
     static getSupportedProviders(): string[] {
-        return [
-            'linkedin',
-            'email',
-            'gmail',
-            'outlook',
-            'whatsapp',
-            'telegram',
-            'instagram',
-            'messenger',
-            'twitter'
-        ];
+        return ['linkedin', 'email', 'gmail', 'outlook', 'whatsapp', 'telegram', 'instagram', 'messenger', 'twitter'];
     }
 
     /**
@@ -862,64 +798,64 @@ export class UnipileService {
                 supportsMessaging: true,
                 supportsPosting: true,
                 supportsInvitations: true,
-                capabilities: ['messaging', 'posting', 'invitations', 'profile_visits']
+                capabilities: ['messaging', 'posting', 'invitations', 'profile_visits'],
             },
             email: {
                 name: 'Email',
                 supportsMessaging: true,
                 supportsPosting: false,
                 supportsInvitations: false,
-                capabilities: ['messaging']
+                capabilities: ['messaging'],
             },
             gmail: {
                 name: 'Gmail',
                 supportsMessaging: true,
                 supportsPosting: false,
                 supportsInvitations: false,
-                capabilities: ['messaging']
+                capabilities: ['messaging'],
             },
             outlook: {
                 name: 'Outlook',
                 supportsMessaging: true,
                 supportsPosting: false,
                 supportsInvitations: false,
-                capabilities: ['messaging']
+                capabilities: ['messaging'],
             },
             whatsapp: {
                 name: 'WhatsApp',
                 supportsMessaging: true,
                 supportsPosting: false,
                 supportsInvitations: false,
-                capabilities: ['messaging']
+                capabilities: ['messaging'],
             },
             telegram: {
                 name: 'Telegram',
                 supportsMessaging: true,
                 supportsPosting: false,
                 supportsInvitations: false,
-                capabilities: ['messaging']
+                capabilities: ['messaging'],
             },
             instagram: {
                 name: 'Instagram',
                 supportsMessaging: true,
                 supportsPosting: true,
                 supportsInvitations: false,
-                capabilities: ['messaging', 'posting']
+                capabilities: ['messaging', 'posting'],
             },
             messenger: {
                 name: 'Facebook Messenger',
                 supportsMessaging: true,
                 supportsPosting: false,
                 supportsInvitations: false,
-                capabilities: ['messaging']
+                capabilities: ['messaging'],
             },
             twitter: {
                 name: 'Twitter',
                 supportsMessaging: true,
                 supportsPosting: true,
                 supportsInvitations: false,
-                capabilities: ['messaging', 'posting']
-            }
+                capabilities: ['messaging', 'posting'],
+            },
         };
 
         return configs[provider.toLowerCase() as keyof typeof configs] || null;

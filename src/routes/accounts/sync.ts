@@ -9,31 +9,31 @@ import '../../utils/expressExtensions';
  * Account Sync API - Account sync endpoint
  */
 class AccountSyncAPI extends ClentoAPI {
-  public path = '/api/accounts/sync';
-  public authType: 'DASHBOARD' = 'DASHBOARD';
+    public path = '/api/accounts/sync';
+    public authType: 'DASHBOARD' = 'DASHBOARD';
 
-  private connectedAccountService = new ConnectedAccountService();
+    private connectedAccountService = new ConnectedAccountService();
 
-  /**
-   * Sync account with Unipile
-   */
-  public POST = async (req: Request, res: Response): Promise<Response> => {
-      const query = req.getQuery();
-      const id = query.getParamAsString('id', true);
-      const userId = req.userId;
+    /**
+     * Sync account with Unipile
+     */
+    public POST = async (req: Request, res: Response): Promise<Response> => {
+        const query = req.getQuery();
+        const id = query.getParamAsString('id', true);
+        const userId = req.userId;
 
-      if (!userId) {
-        throw new NotFoundError('User not found');
-      }
+        if (!userId) {
+            throw new NotFoundError('User not found');
+        }
 
-      const account = await this.connectedAccountService.syncAccount(id, userId);
+        const account = await this.connectedAccountService.syncAccount(id, userId);
 
-      return res.sendOKResponse({
-        message: 'Account synced successfully',
-        data: account,
-      });
-    }
-  };
+        return res.sendOKResponse({
+            message: 'Account synced successfully',
+            data: account,
+        });
+    };
+}
 
 export default new AccountSyncAPI();
 
