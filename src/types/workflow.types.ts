@@ -1,7 +1,7 @@
 // Workflow Types
 export enum EAction {
-    action = "action",
-    addStep = "addStep"
+    action = 'action',
+    addStep = 'addStep',
 }
 
 export enum EWorkflowNodeType {
@@ -11,15 +11,15 @@ export enum EWorkflowNodeType {
     send_followup = 'send_followup',
     withdraw_request = 'withdraw_request',
     send_inmail = 'send_inmail',
-    send_connection_request = 'send_connection_request'
+    send_connection_request = 'send_connection_request',
 }
 
-export type EPathType = 'accepted' | 'not-accepted'
+export type EPathType = 'accepted' | 'not-accepted';
 
 export enum EMessageLength {
     short = 'short',
     medium = 'medium',
-    long = 'long'
+    long = 'long',
 }
 
 export enum ETone {
@@ -30,7 +30,7 @@ export enum ETone {
     supportive = 'supportive',
     cold = 'cold',
     moderate = 'moderate',
-    warm = 'warm'
+    warm = 'warm',
 }
 
 export enum ELanguage {
@@ -38,42 +38,42 @@ export enum ELanguage {
     spanish = 'spanish',
     french = 'french',
     german = 'german',
-    portuguese = 'portuguese'
+    portuguese = 'portuguese',
 }
 
 export enum EFormality {
     casual = 'casual',
     approachable = 'approachable',
-    professional = 'professional'
+    professional = 'professional',
 }
 
 export enum EApproach {
     direct = 'direct',
     diplomatic = 'diplomatic',
-    indirect = 'indirect'
+    indirect = 'indirect',
 }
 
 export enum EFocus {
     personal = 'personal',
     relational = 'relational',
-    business = 'business'
+    business = 'business',
 }
 
 export enum EIntention {
     networking = 'networking',
     partnership = 'partnership',
-    collaboration = 'collaboration'
+    collaboration = 'collaboration',
 }
 
 export enum ECallToAction {
     strong = 'strong',
     confident = 'confident',
-    subtle = 'subtle'
+    subtle = 'subtle',
 }
 
 export enum EPersonalization {
     specific = 'specific',
-    generic = 'generic'
+    generic = 'generic',
 }
 
 // Workflow Structure Types

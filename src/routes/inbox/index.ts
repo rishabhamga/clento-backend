@@ -27,13 +27,13 @@ class DashboardAPI extends ClentoAPI {
 
         let provider_account_id;
 
-        if(accountId){
+        if (accountId) {
             const account = await this.connectedAccountService.getAccountById(accountId);
-            if(account.organization_id !== orgId){
-                throw new DisplayError('Account Not Found') //Security
+            if (account.organization_id !== orgId) {
+                throw new DisplayError('Account Not Found'); //Security
             }
-            if(!account){
-                throw new DisplayError('Account Not Found')
+            if (!account) {
+                throw new DisplayError('Account Not Found');
             }
             provider_account_id = account.provider_account_id;
         }
@@ -41,11 +41,11 @@ class DashboardAPI extends ClentoAPI {
         if (!provider_account_id) {
             const accountProviderIds = accounts.map(it => it.provider_account_id);
             if (!accounts || accounts.length === 0) {
-                throw new DisplayError('No Accounts Connected')
+                throw new DisplayError('No Accounts Connected');
             }
             provider_account_id = accountProviderIds[0];
         }
-        const inbox = await this.unipileService.getInbox(provider_account_id, limit, cursor || undefined)
+        const inbox = await this.unipileService.getInbox(provider_account_id, limit, cursor || undefined);
         const providers = inbox?.items.map(it => it.attendee_provider_id).filter(it => it !== undefined) || [];
         const attendesMap = new Map<string, any>();
 
@@ -70,10 +70,12 @@ class DashboardAPI extends ClentoAPI {
                 timestamp: it.timestamp,
                 account_id: accountId || accounts[0].id,
                 attendee_provider_id: it.attendee_provider_id,
-                attendee_profile: attendee ? {
-                    name: attendee.first_name + ' ' + attendee.last_name || 'Unknown',
-                    profile_picture_url: attendee.profile_picture_url
-                } : null
+                attendee_profile: attendee
+                    ? {
+                          name: attendee.first_name + ' ' + attendee.last_name || 'Unknown',
+                          profile_picture_url: attendee.profile_picture_url,
+                      }
+                    : null,
             };
         });
 
@@ -83,15 +85,15 @@ class DashboardAPI extends ClentoAPI {
                 limit,
                 cursor: inbox?.cursor || null,
                 hasMore: inbox?.cursor !== null,
-                nextCursor: inbox?.cursor || null
+                nextCursor: inbox?.cursor || null,
             },
             accounts: accounts.map(it => ({
                 id: it.id,
                 name: it.display_name,
                 email: it.email,
                 profile_picture_url: it.profile_picture_url,
-                status: it.status
-            }))
+                status: it.status,
+            })),
         });
     };
     public POST = async (req: Request, res: Response) => {
@@ -105,9 +107,9 @@ class DashboardAPI extends ClentoAPI {
         const chat = await this.unipileService.getChat(account.provider_account_id, chatId);
 
         return res.sendOKResponse({
-            chat
-        })
-    }
+            chat,
+        });
+    };
 }
 
 export default new DashboardAPI();

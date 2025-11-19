@@ -20,10 +20,14 @@ class LeadListAPI extends ClentoAPI {
 
             const leadList = await this.leadListService.getLeadListById(leadListId, organizationId);
 
-            await this.leadListService.updateLeadList(leadListId, {
-                name: leadListName,
-                connected_account_id: connectedAccountId,
-            }, organizationId);
+            await this.leadListService.updateLeadList(
+                leadListId,
+                {
+                    name: leadListName,
+                    connected_account_id: connectedAccountId,
+                },
+                organizationId,
+            );
 
             return res.sendOKResponse({
                 success: true,

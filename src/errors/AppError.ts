@@ -131,7 +131,6 @@ export class ExternalAPIError extends AppError {
     }
 }
 
-
 export class MethodNotImplementedError extends AppError {
     constructor(message = 'Method not implemented') {
         super(message, 405);

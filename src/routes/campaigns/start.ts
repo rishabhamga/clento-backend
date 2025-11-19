@@ -15,7 +15,7 @@ class StartCampaignAPI extends ClentoAPI {
 
         await this.temporalService.startCampaign(campaignId);
 
-        return res.sendOKResponse({message: "Campaign Started"});
+        return res.sendOKResponse({ message: 'Campaign Started' });
     };
 }
 

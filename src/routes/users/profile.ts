@@ -8,58 +8,58 @@ import '../../utils/expressExtensions';
  * User Profile API - Authenticated user endpoints
  */
 class UserProfileAPI extends ClentoAPI {
-  public path = '/api/users/me';
-  public authType: 'DASHBOARD' = 'DASHBOARD';
+    public path = '/api/users/me';
+    public authType: 'DASHBOARD' = 'DASHBOARD';
 
-  private userService = new UserService();
+    private userService = new UserService();
 
-  public GET = async (req: Request, res: Response): Promise<Response> => {
-    try {
-      // Get user from request (set by loadUser middleware)
-      const user = req.user;
+    public GET = async (req: Request, res: Response): Promise<Response> => {
+        try {
+            // Get user from request (set by loadUser middleware)
+            const user = req.user;
 
-      if (!user) {
-        throw new NotFoundError('User not found');
-      }
+            if (!user) {
+                throw new NotFoundError('User not found');
+            }
 
-      return res.sendOKResponse({
-        success: true,
-        data: user,
-        message: 'User profile retrieved successfully'
-      });
-    } catch (error) {
-      throw error;
-    }
-  };
+            return res.sendOKResponse({
+                success: true,
+                data: user,
+                message: 'User profile retrieved successfully',
+            });
+        } catch (error) {
+            throw error;
+        }
+    };
 
-  public PATCH = async (req: Request, res: Response): Promise<Response> => {
-    try {
-      const userId = req.userId;
+    public PATCH = async (req: Request, res: Response): Promise<Response> => {
+        try {
+            const userId = req.userId;
 
-      if (!userId) {
-        throw new NotFoundError('User not found');
-      }
+            if (!userId) {
+                throw new NotFoundError('User not found');
+            }
 
-      // Using express extensions for parameter validation
-      const body = req.getBody();
-      const fullName = body.getParamAsString('fullName', false);
-      const avatarUrl = body.getParamAsString('avatarUrl', false);
+            // Using express extensions for parameter validation
+            const body = req.getBody();
+            const fullName = body.getParamAsString('fullName', false);
+            const avatarUrl = body.getParamAsString('avatarUrl', false);
 
-      // Update user profile
-      const updatedUser = await this.userService.updateUser(userId, {
-        fullName: fullName || undefined,
-        avatarUrl: avatarUrl || undefined
-      });
+            // Update user profile
+            const updatedUser = await this.userService.updateUser(userId, {
+                fullName: fullName || undefined,
+                avatarUrl: avatarUrl || undefined,
+            });
 
-      return res.sendOKResponse({
-        success: true,
-        data: updatedUser,
-        message: 'User profile updated successfully'
-      });
-    } catch (error) {
-      throw error;
-    }
-  };
+            return res.sendOKResponse({
+                success: true,
+                data: updatedUser,
+                message: 'User profile updated successfully',
+            });
+        } catch (error) {
+            throw error;
+        }
+    };
 }
 
 export default new UserProfileAPI();

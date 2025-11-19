@@ -1,7 +1,7 @@
-import { Request, Response } from "express";
-import ClentoAPI from "../../utils/apiUtil";
-import { DisplayError } from "../../errors/AppError";
-import { ConnectedAccountService } from "../../services/ConnectedAccountService";
+import { Request, Response } from 'express';
+import ClentoAPI from '../../utils/apiUtil';
+import { DisplayError } from '../../errors/AppError';
+import { ConnectedAccountService } from '../../services/ConnectedAccountService';
 
 class AccountsWebhookAPI extends ClentoAPI {
     public path = '/api/accounts/webhook';
@@ -12,7 +12,7 @@ class AccountsWebhookAPI extends ClentoAPI {
     public POST = async (req: Request, res: Response): Promise<Response> => {
         const webhookData = req.body;
         const reqBody = req.getBody();
-        const status = reqBody.getParamAsString("status");
+        const status = reqBody.getParamAsString('status');
         const accountId = reqBody.getParamAsString('account_id');
         const name = reqBody.getParamAsString('name');
 
@@ -21,23 +21,23 @@ class AccountsWebhookAPI extends ClentoAPI {
             await this.connectedAccountService.handleAccountConnected({
                 unipileAccountId: accountId,
                 pendingAccountId: name,
-                accountData: webhookData
+                accountData: webhookData,
             });
 
             console.log('Account connection webhook processed successfully', {
                 unipileAccountId: accountId,
-                pendingAccountId: name
+                pendingAccountId: name,
             });
         } else {
             console.warn('Unhandled webhook status', {
                 status: status,
-                account_id: accountId
+                account_id: accountId,
             });
         }
 
         return res.sendOKResponse({
             success: true,
-            message: 'Webhook processed successfully'
+            message: 'Webhook processed successfully',
         });
     };
 }

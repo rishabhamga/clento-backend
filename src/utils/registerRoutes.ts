@@ -10,7 +10,7 @@ import ClentoAPI from './apiUtil';
 export const requireDirectory = <T>(folderPath: string): { [key: string]: T } => {
     const returningMap: { [key: string]: T } = {};
 
-    fs.readdirSync(folderPath).forEach((file) => {
+    fs.readdirSync(folderPath).forEach(file => {
         const filePath = path.join(folderPath, file);
 
         // Load only runtime files: .js (compiled) or .ts (source), but never .d.ts
@@ -23,7 +23,7 @@ export const requireDirectory = <T>(folderPath: string): { [key: string]: T } =>
             returningMap[file.replace(/\.(ts|js)$/i, '')] = required;
         } else if (fs.lstatSync(filePath).isDirectory()) {
             const innerFiles = requireDirectory<T>(filePath);
-            Object.keys(innerFiles).forEach((innerKey) => {
+            Object.keys(innerFiles).forEach(innerKey => {
                 returningMap[`${file}/${innerKey}`] = innerFiles[innerKey];
             });
         }
@@ -39,7 +39,7 @@ const registerAllRoutes = (app: Application, routesFolder: string) => {
     const routes = requireDirectory<ClentoAPI>(routesFolder);
     const allPaths = new Set<string>();
 
-    Object.values(routes).forEach((clentoAPI) => {
+    Object.values(routes).forEach(clentoAPI => {
         if (!(clentoAPI instanceof ClentoAPI)) return;
 
         if (allPaths.has(clentoAPI.path)) {

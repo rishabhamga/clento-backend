@@ -9,43 +9,40 @@ import '../../utils/expressExtensions';
  * Account API - Main account management endpoints
  */
 class AccountAPI extends ClentoAPI {
-  public path = '/api/accounts';
-  public authType: 'DASHBOARD' = 'DASHBOARD';
+    public path = '/api/accounts';
+    public authType: 'DASHBOARD' = 'DASHBOARD';
 
-  private connectedAccountService = new ConnectedAccountService();
+    private connectedAccountService = new ConnectedAccountService();
 
-  /**
-   * Get user's connected accounts
-   */
-  public GET = async (req: Request, res: Response): Promise<Response> => {
-    try {
-      const organizationId = req.organizationId;
-      // Using express extensions for parameter validation
-      const query = req.getQuery();
-      const provider = query.getParamAsString('provider', false);
-      const status = query.getParamAsString('status', false);
+    /**
+     * Get user's connected accounts
+     */
+    public GET = async (req: Request, res: Response): Promise<Response> => {
+        try {
+            const organizationId = req.organizationId;
+            // Using express extensions for parameter validation
+            const query = req.getQuery();
+            const provider = query.getParamAsString('provider', false);
+            const status = query.getParamAsString('status', false);
 
-      logger.info('Getting user accounts', { organizationId, provider });
+            logger.info('Getting user accounts', { organizationId, provider });
 
-      // Get actual accounts from the service
-      const accounts = await this.connectedAccountService.getUserAccounts(
-        organizationId,
-        provider || undefined
-      );
+            // Get actual accounts from the service
+            const accounts = await this.connectedAccountService.getUserAccounts(organizationId, provider || undefined);
 
-      return res.sendOKResponse({
-        success: true,
-        data: accounts,
-        meta: {
-          total: accounts.length,
-        },
-        message: 'Accounts retrieved successfully'
-      })
-    } catch (error) {
-      logger.error('Error in getUserAccounts controller', { error, userId: req.userId });
-      throw error;
-    }
-  };
+            return res.sendOKResponse({
+                success: true,
+                data: accounts,
+                meta: {
+                    total: accounts.length,
+                },
+                message: 'Accounts retrieved successfully',
+            });
+        } catch (error) {
+            logger.error('Error in getUserAccounts controller', { error, userId: req.userId });
+            throw error;
+        }
+    };
 }
 
 export default new AccountAPI();

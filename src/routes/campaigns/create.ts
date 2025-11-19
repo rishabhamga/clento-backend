@@ -4,26 +4,9 @@ import { DisplayError } from '../../errors/AppError';
 import { CampaignService } from '../../services/CampaignService';
 import { StorageService } from '../../services/StorageService';
 import { TemporalService } from '../../services/TemporalService';
-import {
-    DelayUnit,
-    EAction,
-    EApproach,
-    ECallToAction,
-    EFocus,
-    EFormality,
-    EIntention,
-    ELanguage,
-    EMessageLength,
-    EPathType,
-    EPersonalization,
-    ETone,
-    EWorkflowNodeType,
-    WorkflowJson
-} from '../../types/workflow.types';
+import { DelayUnit, EAction, EApproach, ECallToAction, EFocus, EFormality, EIntention, ELanguage, EMessageLength, EPathType, EPersonalization, ETone, EWorkflowNodeType, WorkflowJson } from '../../types/workflow.types';
 import ClentoAPI from '../../utils/apiUtil';
 import '../../utils/expressExtensions'; // Import extensions
-
-
 
 /**
  * Create Campaign API - Create new campaign endpoint
@@ -47,15 +30,15 @@ class CreateCampaignAPI extends ClentoAPI {
             const detail = reqBody.getParamAsNestedBody('detail');
 
             //   detail
-            const name = detail.getParamAsString("name");
-            const description = detail.getParamAsString("description");
-            const senderAccount = detail.getParamAsString("senderAccount");
-            const prospectList = detail.getParamAsString("prospectList");
-            const startDate = detail.getParamAsString("startDate", false); // Optional - if not provided, start immediately
-            const leadsPerDay = detail.getParamAsNumber("leadsPerDay");
-            const startTime = detail.getParamAsString("startTime", false); // Optional
-            const endTime = detail.getParamAsString("endTime", false); // Optional
-            const timezone = detail.getParamAsString("timezone", false); // Optional
+            const name = detail.getParamAsString('name');
+            const description = detail.getParamAsString('description');
+            const senderAccount = detail.getParamAsString('senderAccount');
+            const prospectList = detail.getParamAsString('prospectList');
+            const startDate = detail.getParamAsString('startDate', false); // Optional - if not provided, start immediately
+            const leadsPerDay = detail.getParamAsNumber('leadsPerDay');
+            const startTime = detail.getParamAsString('startTime', false); // Optional
+            const endTime = detail.getParamAsString('endTime', false); // Optional
+            const timezone = detail.getParamAsString('timezone', false); // Optional
 
             //Flow
             const flow = reqBody.getParamAsNestedBody('flow');
@@ -71,17 +54,17 @@ class CreateCampaignAPI extends ClentoAPI {
 
                 //measured
                 const measured = it.getParamAsNestedBody('measured');
-                const measuredWidth = measured.getParamAsNumber("width");
-                const measuredHeight = measured.getParamAsNumber("height");
+                const measuredWidth = measured.getParamAsNumber('width');
+                const measuredHeight = measured.getParamAsNumber('height');
 
                 //data
-                const data = it.getParamAsNestedBody('data')
-                const type = data.getParamAsEnumValue(EWorkflowNodeType, 'type', false)
-                const label = data.getParamAsString('label', false)
-                const isConfigured = data.getParamAsBoolean('isConfigured', false)
-                const pathType = data.getParamAsType<EPathType>('string', 'pathType', false)
+                const data = it.getParamAsNestedBody('data');
+                const type = data.getParamAsEnumValue(EWorkflowNodeType, 'type', false);
+                const label = data.getParamAsString('label', false);
+                const isConfigured = data.getParamAsBoolean('isConfigured', false);
+                const pathType = data.getParamAsType<EPathType>('string', 'pathType', false);
                 //Config
-                const config = data.getParamAsNestedBody('config', false)
+                const config = data.getParamAsNestedBody('config', false);
                 let useAI, numberOfPosts, recentPostDays, configureWithAI, commentLength, tone, language, customGuidelines, customComment, customMessage, formality, approach, focus, intention, callToAction, personalization, engageWithRecentActivity, smartFollowups, aiWritingAssistant, messageLength, messagePurpose;
                 if (config) {
                     useAI = config.getParamAsBoolean('useAI', false);
@@ -101,19 +84,18 @@ class CreateCampaignAPI extends ClentoAPI {
                     callToAction = config.getParamAsEnumValue(ECallToAction, 'callToAction', false);
                     personalization = config.getParamAsEnumValue(EPersonalization, 'personalization', false);
                     engageWithRecentActivity = config.getParamAsBoolean('engageWithRecentActivity', false);
-                    smartFollowups = config.getParamAsBoolean('smartFollowups', false)
-                    aiWritingAssistant = config.getParamAsBoolean('aiWritingAssistant', false)
-                    messageLength = config.getParamAsEnumValue(EMessageLength, 'messageLength', false)
-                    messagePurpose = config.getParamAsString('messagePurpose', false)
+                    smartFollowups = config.getParamAsBoolean('smartFollowups', false);
+                    aiWritingAssistant = config.getParamAsBoolean('aiWritingAssistant', false);
+                    messageLength = config.getParamAsEnumValue(EMessageLength, 'messageLength', false);
+                    messagePurpose = config.getParamAsString('messagePurpose', false);
                 }
-
 
                 return {
                     id: it.getParamAsString('id'),
                     type: it.getParamAsEnumValue(EAction, 'type'),
                     position: {
                         x: positionX,
-                        y: positionY
+                        y: positionY,
                     },
                     data: {
                         type,
@@ -141,48 +123,48 @@ class CreateCampaignAPI extends ClentoAPI {
                             smartFollowups,
                             aiWritingAssistant,
                             messageLength,
-                            messagePurpose
-                        }
+                            messagePurpose,
+                        },
                     },
                     measured: {
                         height: measuredHeight,
-                        width: measuredWidth
+                        width: measuredWidth,
                     },
                     selected: it.getParamAsBoolean('selected'),
-                    deletable: it.getParamAsBoolean('deletable', false)
-                }
-            })
+                    deletable: it.getParamAsBoolean('deletable', false),
+                };
+            });
 
             const edges = edgesRaw.map(it => {
-                const data = it.getParamAsNestedBody("data");
-                const delay = data.getParamAsString("delay", false);
-                const isPositive = data.getParamAsBoolean("isPositive", false);
-                const isConditionalPath = data.getParamAsBoolean("isConditionalPath", false);
+                const data = it.getParamAsNestedBody('data');
+                const delay = data.getParamAsString('delay', false);
+                const isPositive = data.getParamAsBoolean('isPositive', false);
+                const isConditionalPath = data.getParamAsBoolean('isConditionalPath', false);
                 // Delay Data
-                const delayData = data.getParamAsNestedBody("delayData", false);
+                const delayData = data.getParamAsNestedBody('delayData', false);
                 let delayDataDelay, delayDataUnit;
                 if (delayData) {
-                    delayDataDelay = delayData.getParamAsString("delay", false);
+                    delayDataDelay = delayData.getParamAsString('delay', false);
                     delayDataUnit = delayData.getParamAsType<DelayUnit>('string', 'unit', false);
                 }
                 return {
-                    id: it.getParamAsString("id"),
-                    source: it.getParamAsString("source"),
-                    target: it.getParamAsString("target"),
-                    type: it.getParamAsString("type"),
-                    animated: it.getParamAsBoolean("animated"),
-                    selected: it.getParamAsBoolean("selected", false),
+                    id: it.getParamAsString('id'),
+                    source: it.getParamAsString('source'),
+                    target: it.getParamAsString('target'),
+                    type: it.getParamAsString('type'),
+                    animated: it.getParamAsBoolean('animated'),
+                    selected: it.getParamAsBoolean('selected', false),
                     data: {
                         delay,
                         isPositive,
                         isConditionalPath,
                         delayData: {
                             delay: delayDataDelay,
-                            unit: delayDataUnit
-                        }
-                    }
-                }
-            })
+                            unit: delayDataUnit,
+                        },
+                    },
+                };
+            });
 
             // Determine campaign status: if start_date is not provided, start immediately
             const shouldStartImmediately = !startDate;
@@ -196,27 +178,31 @@ class CreateCampaignAPI extends ClentoAPI {
                 prospect_list: prospectList,
                 leads_per_day: leadsPerDay,
                 status: campaignStatus,
+                requests_sent_this_day: 0,
+                requests_sent_this_week: 0,
                 ...(startDate && { start_date: startDate }),
                 ...(startTime && { start_time: startTime }),
                 ...(endTime && { end_time: endTime }),
-                ...(timezone && { timezone: timezone })
-            }
+                ...(timezone && { timezone: timezone }),
+            };
 
             const campaign = await this.campaignService.createCampaign(campaignCreateDto);
             const worflowJson: WorkflowJson = {
                 nodes,
-                edges
-            }
+                edges,
+            };
             if (campaign) {
                 await this.storageService.uploadJson(worflowJson, organizationId, `${campaign.id}.json`, this.bucketName);
             } else {
-                throw new DisplayError("Error while creating the campaign")
+                throw new DisplayError('Error while creating the campaign');
             }
 
             const campaignUpdateDto: UpdateCampaignDto = {
                 file_name: `${campaign.id}.json`,
-                bucket: this.bucketName
-            }
+                bucket: this.bucketName,
+                requests_sent_this_day: 0,
+                requests_sent_this_week: 0,
+            };
 
             await this.campaignService.updateCampaign(campaign.id, campaignUpdateDto);
 
@@ -233,14 +219,12 @@ class CreateCampaignAPI extends ClentoAPI {
             }
 
             return res.sendOKResponse({
-                message: shouldStartImmediately
-                    ? 'Campaign created and started successfully'
-                    : 'Campaign created successfully',
+                message: shouldStartImmediately ? 'Campaign created and started successfully' : 'Campaign created successfully',
                 data: {
                     campaignId: campaign.id,
                     status: campaign.status,
-                    started: shouldStartImmediately
-                }
+                    started: shouldStartImmediately,
+                },
             });
         } catch (error) {
             throw error;

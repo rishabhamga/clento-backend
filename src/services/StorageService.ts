@@ -24,7 +24,7 @@ export class StorageService {
      * Initialize Google Cloud Storage client
      */
     private static initializeStorage(): Storage | null {
-        if(!StorageService.storage){
+        if (!StorageService.storage) {
             try {
                 if (!env.GOOGLE_CLOUD_PROJECT_ID || !env.GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY) {
                     logger.warn('Google Cloud Storage credentials not configured, using mock for development');
@@ -42,7 +42,7 @@ export class StorageService {
                 logger.error('Failed to initialize Google Cloud Storage', { error });
             }
         }
-        return StorageService.storage
+        return StorageService.storage;
     }
 
     /**
@@ -55,13 +55,7 @@ export class StorageService {
     /**
      * Upload CSV file to Google Cloud Storage
      */
-    async uploadCsvFile(
-        fileBuffer: Buffer,
-        filename: string,
-        organizationId: string,
-        leadListId: string,
-        bucketName: string
-    ): Promise<UploadResult> {
+    async uploadCsvFile(fileBuffer: Buffer, filename: string, organizationId: string, leadListId: string, bucketName: string): Promise<UploadResult> {
         try {
             if (!StorageService.storage) {
                 throw new ServiceUnavailableError('Storage service not configured');
@@ -122,12 +116,7 @@ export class StorageService {
     /**
      * Delete CSV file from Google Cloud Storage
      */
-    async deleteCsvFile(
-        organizationId: string,
-        leadListId: string,
-        filename: string,
-        bucketName: string
-    ): Promise<void> {
+    async deleteCsvFile(organizationId: string, leadListId: string, filename: string, bucketName: string): Promise<void> {
         try {
             // For development, just log the deletion
             if (env.NODE_ENV === 'development') {
@@ -175,15 +164,8 @@ export class StorageService {
     /**
      * Get signed URL for existing file
      */
-    async getSignedUrl(
-        organizationId: string,
-        leadListId: string,
-        filename: string,
-        expirationMinutes: number = 60,
-        bucketName: string
-    ): Promise<string> {
+    async getSignedUrl(organizationId: string, leadListId: string, filename: string, expirationMinutes: number = 60, bucketName: string): Promise<string> {
         try {
-
             if (!StorageService.storage) {
                 throw new ServiceUnavailableError('Storage service not configured');
             }
@@ -225,15 +207,8 @@ export class StorageService {
     /**
      * Check if file exists
      */
-    async fileExists(
-        organizationId: string,
-        leadListId: string,
-        filename: string,
-        bucketName: string,
-        filePath: string
-    ): Promise<boolean> {
+    async fileExists(organizationId: string, leadListId: string, filename: string, bucketName: string, filePath: string): Promise<boolean> {
         try {
-
             if (!StorageService.storage) {
                 return false;
             }
@@ -265,7 +240,7 @@ export class StorageService {
         organizationId: string,
         leadListId: string,
         filename: string,
-        bucketName: string
+        bucketName: string,
     ): Promise<{
         size: number;
         contentType: string;
@@ -298,7 +273,7 @@ export class StorageService {
             const [metadata] = await file.getMetadata();
 
             return {
-                size: parseInt(metadata.size as string || '0'),
+                size: parseInt((metadata.size as string) || '0'),
                 contentType: metadata.contentType || 'text/csv',
                 created: metadata.timeCreated || new Date().toISOString(),
                 updated: metadata.updated || new Date().toISOString(),
@@ -322,7 +297,7 @@ export class StorageService {
         organizationId: string,
         leadListId: string,
         filename: string,
-        bucketName: string
+        bucketName: string,
     ): Promise<{
         stream: NodeJS.ReadableStream;
         metadata: {
@@ -360,13 +335,13 @@ export class StorageService {
                 organizationId,
                 leadListId,
                 filePath,
-                size: parseInt(metadata.size as string || '0'),
+                size: parseInt((metadata.size as string) || '0'),
             });
 
             return {
                 stream,
                 metadata: {
-                    size: parseInt(metadata.size as string || '0'),
+                    size: parseInt((metadata.size as string) || '0'),
                     contentType: metadata.contentType || 'text/csv',
                     filename,
                 },
@@ -395,7 +370,7 @@ export class StorageService {
         leadListId: string,
         filename: string,
         bucketName: string,
-        filePath: string
+        filePath: string,
     ): Promise<{
         buffer: Buffer;
         metadata: {
@@ -471,9 +446,7 @@ export class StorageService {
                     contentType: 'application/json',
                 },
             });
-
-        }
-        catch (error) {
+        } catch (error) {
             logger.error('Error uploading JSON file', {
                 error,
                 filename,

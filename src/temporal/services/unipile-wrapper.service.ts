@@ -1,6 +1,6 @@
-import { UnipileClient } from "unipile-node-sdk";
-import logger from "../../utils/logger";
-import { RateLimiterRegistry } from "../config/rate-limiter.config";
+import { UnipileClient } from 'unipile-node-sdk';
+import logger from '../../utils/logger';
+import { RateLimiterRegistry } from '../config/rate-limiter.config';
 
 export interface UnipileConfig {
     dns: string;
