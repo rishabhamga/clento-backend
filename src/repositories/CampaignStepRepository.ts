@@ -22,8 +22,10 @@ export class CampaignStepRepository extends BaseRepository<CampaignStepResponseD
 
     public async getRecentCampaignStepsByOrgIdAndDays(organizationId: string, days: number): Promise<CampaignStepResponseDto[]> {
         const now = new Date();
+        now.setHours(11, 59, 59, 0);
         const daysAgo = new Date();
         daysAgo.setDate(now.getDate() - days);
+        daysAgo.setHours(0, 0, 0, 0);
         const { data, error } = await this.client.from(this.tableName).select('*').eq('organization_id', organizationId).gte('created_at', daysAgo.toISOString()).lte('created_at', now.toISOString()).order('created_at', { ascending: false });
         if (error) throw error;
         return data;

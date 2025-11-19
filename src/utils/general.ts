@@ -27,3 +27,23 @@ export function extractLinkedInPublicIdentifier(url: string): string | null {
         return null;
     }
 }
+
+export const getDateArrayForLastDays = (days: number): string[] => {
+    if (!Number.isInteger(days) || days <= 0) {
+        throw new Error(`Invalid days parameter: ${days}. Days must be a positive integer.`);
+    }
+
+    const array: string[] = [];
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // normalize
+
+    for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(today.getDate() - i);
+        const dateString = date.toISOString().split('T')[0];
+        array.push(dateString);
+    }
+
+    return array;
+};

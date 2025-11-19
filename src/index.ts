@@ -13,6 +13,7 @@ import { TemporalService } from './services/TemporalService';
 import { WorkerManager } from './temporal/worker';
 import './utils/expressExtensions'; // Import express extensions
 import './utils/arrayExtensions'; // Import array extensions globally
+import './utils/mapExtensions' // Import map extensions globally
 import logger from './utils/logger';
 import registerAllRoutes from './utils/registerRoutes';
 
