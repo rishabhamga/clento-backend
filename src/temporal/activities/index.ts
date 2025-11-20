@@ -132,36 +132,103 @@ export async function profile_visit(accountId: string, identifier: string, campa
         };
         return { success: true, message: 'Profile visit completed', data: null, providerId: result?.provider_id, lead_data };
     } catch (error: any) {
-        const errorBody = error as UnipileError;
-        if (errorBody?.error?.body?.status === 422) {
-            logger.error('The Profile doesnt exist skipping', errorBody);
+        // Handle different error structures - SDK might throw error.body directly or nested
+        const errorStatus = error?.body?.status || error?.error?.body?.status || error?.status;
+        const errorType = error?.body?.type || error?.error?.body?.type || error?.type;
+        const errorDetail = error?.body?.detail || error?.error?.body?.detail || error?.detail;
+
+        // Check for 422 errors (profile not found, recipient cannot be reached, etc.)
+        if (errorStatus === 422) {
+            // Check if it's a "recipient cannot be reached" error
+            if (errorType === 'errors/invalid_recipient' || errorDetail?.includes('Recipient cannot be reached')) {
+                logger.warn('Recipient cannot be reached - marking lead as failed and continuing', {
+                    accountId,
+                    identifier,
+                    campaignId,
+                    errorType,
+                    errorDetail,
+                });
+                return {
+                    success: false,
+                    message: 'Recipient cannot be reached',
+                    data: {
+                        error: {
+                            type: 'recipient_unreachable',
+                            message: errorDetail || 'The recipient cannot be reached. Profile may be locked or invalid.',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            }
+
+            // Other 422 errors (profile doesn't exist, etc.)
+            logger.warn('Profile does not exist or is inaccessible - marking lead as failed and continuing', {
+                accountId,
+                identifier,
+                campaignId,
+                errorType,
+                errorDetail,
+            });
             return {
                 success: false,
-                message: 'Profile does not exist',
+                message: 'Profile does not exist or is inaccessible',
                 data: {
                     error: {
                         type: 'profile_not_found',
-                        message: 'The LinkedIn profile does not exist or is inaccessible',
+                        message: errorDetail || 'The LinkedIn profile does not exist or is inaccessible',
                         statusCode: 422,
                     },
                 },
             };
-        } else {
-            logger.info('Unipile account not found', { accountId, identifier, campaignId });
+        }
+
+        // For non-422 errors, check if it's an account/authentication issue that should pause the campaign
+        // Only pause for authentication/authorization errors (401, 403) or critical account issues
+        if (errorStatus === 401 || errorStatus === 403) {
+            logger.error('Authentication/authorization failed - pausing campaign', {
+                accountId,
+                identifier,
+                campaignId,
+                errorStatus,
+                errorType,
+                errorDetail,
+            });
             await pauseCampaign(campaignId);
             return {
                 success: false,
-                message: 'Unipile account not found',
+                message: 'Account authentication failed',
                 data: {
                     campaignPaused: true,
                     error: {
                         type: 'account_verification_failed',
-                        message: error.message || 'Failed to verify Unipile account',
-                        details: errorBody?.error?.body || {},
+                        message: errorDetail || error?.message || 'Failed to verify Unipile account',
+                        statusCode: errorStatus,
                     },
                 },
             };
         }
+
+        // For other errors, log but don't pause - let the workflow handle it
+        logger.error('Error visiting LinkedIn profile - marking lead as failed and continuing', {
+            accountId,
+            identifier,
+            campaignId,
+            errorStatus,
+            errorType,
+            errorDetail,
+            errorMessage: error?.message,
+        });
+        return {
+            success: false,
+            message: 'Failed to visit LinkedIn profile',
+            data: {
+                error: {
+                    type: 'profile_visit_failed',
+                    message: errorDetail || error?.message || 'Failed to visit LinkedIn profile',
+                    statusCode: errorStatus,
+                },
+            },
+        };
     }
 }
 
@@ -407,10 +474,31 @@ export async function send_connection_request(accountId: string, identifier: str
     let providerId: string | undefined;
     try {
         const profileVisitResult = await profile_visit(accountId, identifier, campaignId);
+
+        // If profile visit failed, return early without pausing campaign
+        if (!profileVisitResult.success) {
+            logger.warn('Profile visit failed - cannot send connection request', {
+                accountId,
+                identifier,
+                campaignId,
+                profileVisitResult,
+            });
+            return {
+                success: false,
+                message: profileVisitResult.message || 'Failed to visit profile before sending connection request',
+                data: profileVisitResult.data || {
+                    error: {
+                        type: 'profile_visit_failed',
+                        message: 'Profile visit failed, cannot send connection request',
+                    },
+                },
+            };
+        }
+
         providerId = profileVisitResult.providerId;
 
         if (!providerId) {
-            logger.error('Provider ID not found after profile visit', {
+            logger.warn('Provider ID not found after profile visit - marking lead as failed and continuing', {
                 accountId,
                 identifier,
                 campaignId,
@@ -436,8 +524,9 @@ export async function send_connection_request(accountId: string, identifier: str
             providerId,
         });
     } catch (error: any) {
+        // This catch block handles unexpected errors (shouldn't happen with updated profile_visit)
         const errorBody = error as UnipileError;
-        logger.error('Failed to visit profile before sending connection request', {
+        logger.error('Unexpected error during profile visit', {
             accountId,
             identifier,
             campaignId,
