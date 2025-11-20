@@ -626,6 +626,33 @@ export async function send_connection_request(accountId: string, identifier: str
                 };
             }
 
+            // Check for "already_invited_recently" error - invitation already exists, start polling
+            if (errorType === 'errors/already_invited_recently' || errorType === 'already_invited_recently') {
+                logger.info('Connection request already sent recently - will start polling for status', {
+                    accountId,
+                    identifier,
+                    providerId,
+                    campaignId,
+                    errorStatus,
+                    errorType,
+                    errorDetail,
+                });
+                return {
+                    success: false,
+                    message: 'Connection request already sent recently - starting polling',
+                    data: {
+                        error: {
+                            type: 'already_invited_recently',
+                            message: errorDetail || 'An invitation has already been sent recently to this recipient. Please try again later.',
+                            statusCode: 422,
+                            errorType: errorType,
+                        },
+                        providerId: providerId, // Include providerId so workflow can start polling
+                        alreadyInvited: true,
+                    },
+                };
+            }
+
             logger.error('Cannot send connection request - validation error (422)', {
                 accountId,
                 identifier,

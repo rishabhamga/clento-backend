@@ -309,102 +309,129 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
 
             // If request failed to send or user already connected, return immediately
             if (!sendResult.success) {
-                // Check if this is a provider limit error that requires 24-hour wait
+                // Check if this is an "already_invited_recently" error - invitation exists, start polling
                 const errorType = sendResult.data?.error?.type;
-                const shouldRetry = sendResult.data?.error?.shouldRetry;
-                const retryAfterHours = sendResult.data?.error?.retryAfterHours || 24;
+                const alreadyInvited = sendResult.data?.alreadyInvited;
+                const providerIdFromError = sendResult.data?.providerId;
 
-                if (errorType === 'provider_limit_reached' && shouldRetry) {
-                    log.warn('LinkedIn provider limit reached - waiting 24 hours before retry', {
+                if (errorType === 'already_invited_recently' && alreadyInvited && providerIdFromError) {
+                    log.info('Connection request already sent recently - starting polling for existing invitation', {
                         accountId,
                         identifier,
                         campaignId,
                         leadId: lead.id,
-                        retryAfterHours,
+                        providerId: providerIdFromError,
                         errorMessage: sendResult.message,
-                        errorDetails: sendResult.data?.error,
                     });
+                    // Use the providerId from the error response and continue to polling logic below
+                    // We'll set sendResult.success to true temporarily to bypass the early return
+                    // and use providerIdFromError instead of sendResult.data.providerId
+                    sendResult = {
+                        success: true,
+                        message: 'Connection request already exists - polling for status',
+                        data: {
+                            providerId: providerIdFromError,
+                            alreadyInvited: true,
+                        },
+                    };
+                    // Continue to polling logic below
+                } else {
+                    // Check if this is a provider limit error that requires 24-hour wait
+                    const shouldRetry = sendResult.data?.error?.shouldRetry;
+                    const retryAfterHours = sendResult.data?.error?.retryAfterHours || 24;
 
-                    try {
-                        // Sleep for 24 hours (24 * 60 * 60 = 86400 seconds)
-                        const sleepDuration = `${retryAfterHours} hours`;
-                        log.info('Sleeping before retry', {
+                    if (errorType === 'provider_limit_reached' && shouldRetry) {
+                        log.warn('LinkedIn provider limit reached - waiting 24 hours before retry', {
                             accountId,
                             identifier,
                             campaignId,
                             leadId: lead.id,
-                            sleepDuration,
                             retryAfterHours,
+                            errorMessage: sendResult.message,
+                            errorDetails: sendResult.data?.error,
                         });
-                        await sleep(sleepDuration);
 
-                        // Retry sending the connection request after waiting
-                        log.info('Retrying connection request after 24-hour wait', {
-                            accountId,
-                            identifier,
-                            campaignId,
-                            leadId: lead.id,
-                        });
-                        sendResult = await send_connection_request(accountId, identifier, config || {}, lead.campaign_id);
-
-                        // If retry also failed, return the result
-                        if (!sendResult.success) {
-                            log.error('Connection request failed after 24-hour retry', {
+                        try {
+                            // Sleep for 24 hours (24 * 60 * 60 = 86400 seconds)
+                            const sleepDuration = `${retryAfterHours} hours`;
+                            log.info('Sleeping before retry', {
                                 accountId,
                                 identifier,
                                 campaignId,
                                 leadId: lead.id,
-                                result: sendResult,
-                                errorType: sendResult.data?.error?.type,
-                                errorMessage: sendResult.message,
+                                sleepDuration,
+                                retryAfterHours,
                             });
-                            result = sendResult;
+                            await sleep(sleepDuration);
+
+                            // Retry sending the connection request after waiting
+                            log.info('Retrying connection request after 24-hour wait', {
+                                accountId,
+                                identifier,
+                                campaignId,
+                                leadId: lead.id,
+                            });
+                            sendResult = await send_connection_request(accountId, identifier, config || {}, lead.campaign_id);
+
+                            // If retry also failed, return the result
+                            if (!sendResult.success) {
+                                log.error('Connection request failed after 24-hour retry', {
+                                    accountId,
+                                    identifier,
+                                    campaignId,
+                                    leadId: lead.id,
+                                    result: sendResult,
+                                    errorType: sendResult.data?.error?.type,
+                                    errorMessage: sendResult.message,
+                                });
+                                result = sendResult;
+                                break;
+                            }
+
+                            // If retry succeeded, continue with normal flow
+                            log.info('Connection request succeeded after 24-hour retry', {
+                                accountId,
+                                identifier,
+                                campaignId,
+                                leadId: lead.id,
+                            });
+                        } catch (retryError: any) {
+                            log.error('Error during 24-hour retry wait or retry attempt', {
+                                accountId,
+                                identifier,
+                                campaignId,
+                                leadId: lead.id,
+                                error: retryError.message,
+                                errorStack: retryError.stack,
+                            });
+                            result = {
+                                success: false,
+                                message: 'Failed to retry connection request after waiting',
+                                data: {
+                                    error: {
+                                        type: 'retry_failed',
+                                        message: retryError.message || 'Error during retry attempt',
+                                        originalError: sendResult.data?.error,
+                                    },
+                                },
+                            };
                             break;
                         }
-
-                        // If retry succeeded, continue with normal flow
-                        log.info('Connection request succeeded after 24-hour retry', {
+                    } else {
+                        // For other errors, return immediately without retry
+                        log.error('Failed to send connection request', {
                             accountId,
                             identifier,
                             campaignId,
                             leadId: lead.id,
+                            result: sendResult,
+                            errorType: sendResult.data?.error?.type,
+                            errorMessage: sendResult.message,
+                            errorDetails: sendResult.data?.error,
                         });
-                    } catch (retryError: any) {
-                        log.error('Error during 24-hour retry wait or retry attempt', {
-                            accountId,
-                            identifier,
-                            campaignId,
-                            leadId: lead.id,
-                            error: retryError.message,
-                            errorStack: retryError.stack,
-                        });
-                        result = {
-                            success: false,
-                            message: 'Failed to retry connection request after waiting',
-                            data: {
-                                error: {
-                                    type: 'retry_failed',
-                                    message: retryError.message || 'Error during retry attempt',
-                                    originalError: sendResult.data?.error,
-                                },
-                            },
-                        };
+                        result = sendResult;
                         break;
                     }
-                } else {
-                    // For other errors, return immediately without retry
-                    log.error('Failed to send connection request', {
-                        accountId,
-                        identifier,
-                        campaignId,
-                        leadId: lead.id,
-                        result: sendResult,
-                        errorType: sendResult.data?.error?.type,
-                        errorMessage: sendResult.message,
-                        errorDetails: sendResult.data?.error,
-                    });
-                    result = sendResult;
-                    break;
                 }
             }
 
@@ -478,8 +505,9 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
             // Calculate number of polling attempts needed
             const maxAttempts = Math.ceil(totalWaitDurationMs / pollIntervalMs);
             const totalDays = totalWaitDurationMs / (24 * 60 * 60 * 1000);
+            const isExistingInvitation = sendResult.data?.alreadyInvited === true;
 
-            log.info('Connection request sent, starting polling', {
+            log.info(isExistingInvitation ? 'Connection request already exists, starting polling' : 'Connection request sent, starting polling', {
                 accountId,
                 identifier,
                 providerId,
@@ -489,6 +517,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                 pollInterval,
                 maxAttempts,
                 delayFromEdge: rejectedEdge?.data?.delayData,
+                isExistingInvitation,
             });
 
             // Wait and poll for connection status
