@@ -111,6 +111,8 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
     // Start all daily batches concurrently with delays
     const allChildWorkflowHandles: Promise<any>[] = [];
     let processedLeads = 0;
+    // Track which lead IDs have been processed to avoid duplicates
+    const processedLeadIds = new Set<string>();
 
     while (processedLeads < totalLeadsToProcess) {
         // Get campaign Everyday To Catch Any Update
@@ -163,23 +165,31 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
             break;
         }
 
-        const batchSize = Math.min(leadsPerDay, remainingLeads);
-        const todaysLeads = dbLeads.slice(processedLeads, processedLeads + batchSize);
+        // Filter out already processed leads
+        const unprocessedLeads = dbLeads.filter(lead => !processedLeadIds.has(lead.id));
 
-        // Safety check: if no leads to process in batch, increment processedLeads to avoid infinite loop
-        if (todaysLeads.length === 0) {
-            log.warn('No leads found in batch slice - incrementing processedLeads to prevent infinite loop', {
+        // Safety check: if no unprocessed leads remain, break
+        if (unprocessedLeads.length === 0) {
+            log.info('All leads have been processed - ending workflow', {
                 campaignId,
                 processedLeads,
                 totalLeadsToProcess,
-                dbLeadsLength: dbLeads.length,
-                batchSize,
-                remainingLeads,
+                processedLeadIdsCount: processedLeadIds.size,
             });
-            // Increment processedLeads by batchSize to prevent infinite loop
-            processedLeads += batchSize > 0 ? batchSize : remainingLeads;
-            continue;
+            break;
         }
+
+        // Shuffle the unprocessed leads to randomize batch selection
+        // Create a copy to avoid mutating the original array
+        const shuffledLeads = [...unprocessedLeads];
+        // Fisher-Yates shuffle algorithm
+        for (let i = shuffledLeads.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffledLeads[i], shuffledLeads[j]] = [shuffledLeads[j], shuffledLeads[i]];
+        }
+
+        const batchSize = Math.min(leadsPerDay, shuffledLeads.length);
+        const todaysLeads = shuffledLeads.slice(0, batchSize);
 
         log.info('Starting daily batch', {
             campaignId,
@@ -187,7 +197,11 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
             processedSoFar: processedLeads,
             totalLeadsToProcess,
             dayNumber: Math.floor(processedLeads / leadsPerDay) + 1,
+            shuffledBatch: true,
         });
+
+        // Mark these leads as processed before starting workflows
+        todaysLeads.forEach(lead => processedLeadIds.add(lead.id));
 
         // Start child workflows for this batch with random delays between each lead
         for (let i = 0; i < todaysLeads.length; i++) {
