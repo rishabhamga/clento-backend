@@ -19,6 +19,7 @@ declare global {
         average: () => number;
         averageBy: (fn: (arg0: T) => number) => number;
         flatten: () => Array<PocketlyFlatArray<T, 21>>;
+        shuffle: () => T[];
     }
 }
 Object.defineProperty(Array.prototype, 'chunked', {
@@ -149,6 +150,26 @@ Object.defineProperty(Array.prototype, 'averageBy', {
 Object.defineProperty(Array.prototype, 'flatten', {
     value: function () {
         return this.flat(Infinity);
+    },
+});
+
+Object.defineProperty(Array.prototype, 'shuffle', {
+    value: function () {
+        let currentIndex = this.length;
+        let temporaryValue;
+        let randomIndex;
+        // While there remain elements to shuffle...
+        while (0 !== currentIndex) {
+            // Pick a remaining element...
+            randomIndex = Math.floor(Math.random() * currentIndex);
+            currentIndex -= 1;
+
+            // And swap it with the current element.
+            temporaryValue = this[currentIndex];
+            this[currentIndex] = this[randomIndex];
+            this[randomIndex] = temporaryValue;
+        }
+        return this;
     },
 });
 
