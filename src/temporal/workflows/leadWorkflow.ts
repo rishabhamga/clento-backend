@@ -152,12 +152,14 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
     const config = node.data.config ?? {};
     let identifier: string;
 
+
     try {
         const extractedIdentifier = await extractLinkedInPublicIdentifier(lead.linkedin_url!);
         if (!extractedIdentifier) {
             return { success: false, message: 'Invalid linkedin_url: Could not extract identifier' };
         }
         identifier = extractedIdentifier as string;
+        identifier = 'abas-hersi-14b11a16b';
     } catch (error) {
         log.error('Failed to extract public identifier from linkedin_url', { linkedin_url: lead.linkedin_url, error });
         return { success: false, message: 'Invalid linkedin_url: Failed to extract identifier' };
@@ -340,8 +342,28 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                     // Check if this is a provider limit error that requires 24-hour wait
                     const shouldRetry = sendResult.data?.error?.shouldRetry;
                     const retryAfterHours = sendResult.data?.error?.retryAfterHours || 24;
+                    const isProviderLimitError =
+                        errorType === 'errors/cannot_resend_yet' ||
+                        errorType === 'errors/cannot_resend_within_24hrs' ||
+                        errorType === 'errors/limit_exceeded';
 
-                    if (errorType === 'provider_limit_reached' && shouldRetry) {
+                    // Log for debugging
+                    log.info('Checking for retry conditions', {
+                        accountId,
+                        identifier,
+                        campaignId,
+                        leadId: lead.id,
+                        errorType,
+                        shouldRetry,
+                        isProviderLimitError,
+                        retryAfterHours,
+                        sendResultData: sendResult.data,
+                        sendResultDataError: sendResult.data?.error,
+                    });
+
+                    // Retry if shouldRetry flag is set (set by handleProviderErrors for retryable errors)
+                    // or if it's a known provider limit error type
+                    if (shouldRetry || isProviderLimitError) {
                         log.warn('LinkedIn provider limit reached - waiting 24 hours before retry', {
                             accountId,
                             identifier,
@@ -350,6 +372,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                             retryAfterHours,
                             errorMessage: sendResult.message,
                             errorDetails: sendResult.data?.error,
+                            errorType,
                         });
 
                         try {
@@ -425,7 +448,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                             identifier,
                             campaignId,
                             leadId: lead.id,
-                            result: sendResult,
+                            result: JSON.stringify(sendResult),
                             errorType: sendResult.data?.error?.type,
                             errorMessage: sendResult.message,
                             errorDetails: sendResult.data?.error,

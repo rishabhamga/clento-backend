@@ -50,12 +50,23 @@ export enum EProviderError {
     InsufficientJobSlot = 'errors/insufficient_job_slot',
 }
 
-interface ProviderError {
-    title: string;
-    detail: string;
-    instance: string;
-    type: EProviderError;
-    status: 422;
+
+/**
+ * Extract error information from Unipile SDK error following UnipileError interface structure
+ * Interface structure: error.error.body.{status, type, detail}
+ */
+function extractUnipileError(error: any): {
+    errorStatus?: number;
+    errorType?: EProviderError;
+    errorDetail?: string;
+} {
+    // Follow UnipileError interface structure: error.error.body.{status, type, detail}
+    const unipileError = error;
+    const errorStatus = unipileError?.body?.status;
+    const errorType = unipileError?.body?.type as EProviderError;
+    const errorDetail = unipileError?.body?.detail;
+
+    return { errorStatus, errorType, errorDetail };
 }
 
 export async function testActivity(input: { message: string; delay?: number }): Promise<{ success: boolean; data: any; timestamp: string }> {
@@ -178,10 +189,10 @@ export async function profile_visit(accountId: string, identifier: string, campa
         };
         return { success: true, message: 'Profile visit completed', data: null, providerId: result?.provider_id, lead_data };
     } catch (error: any) {
-        // Handle different error structures - SDK might throw error.body directly or nested
-        const errorStatus = error?.error?.status;
-        const errorType = error?.error?.type;
-        const errorDetail = error?.error?.detail;
+        // Unipile SDK error structure: error.error.body.{status, type, detail}
+        const errorStatus = error?.error?.body?.status || error?.error?.status;
+        const errorType = (error?.error?.body?.type || error?.error?.type) as EProviderError;
+        const errorDetail = error?.error?.body?.detail || error?.error?.detail;
 
         // Check for 422 errors (profile not found, recipient cannot be reached, etc.)
         const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
@@ -220,9 +231,8 @@ export async function like_post(accountId: string, identifier: string, config: W
             reactionType: 'like',
         });
     } catch (error: any) {
-        const errorStatus = error?.error?.status;
-        const errorType = error?.error?.type;
-        const errorDetail = error?.error?.detail;
+        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
+        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
         const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
         if (!result) {
             return {
@@ -257,9 +267,8 @@ export async function comment_post(accountId: string, identifier: string, config
         });
         return { success: true, message: 'Comment posted successfully' };
     } catch (error: any) {
-        const errorStatus = error?.error?.status;
-        const errorType = error?.error?.type;
-        const errorDetail = error?.error?.detail;
+        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
+        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
         const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
         if (!result) {
             return {
@@ -302,9 +311,8 @@ export async function send_followup(accountId: string, identifier: string, confi
         });
         return { success: true, message: 'Follow-up message sent', data: result };
     } catch (error: any) {
-        const errorStatus = error?.error?.status;
-        const errorType = error?.error?.type;
-        const errorDetail = error?.error?.detail;
+        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
+        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
         const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
         if (!result) {
             return {
@@ -340,9 +348,8 @@ export async function withdraw_request(accountId: string, identifier: string, ca
         await unipileService.withdrawLinkedInInvitationRequest({ accountId, providerId });
         return { success: true, message: 'Request withdrawn' };
     } catch (error: any) {
-        const errorStatus = error?.error?.status;
-        const errorType = error?.error?.type;
-        const errorDetail = error?.error?.detail;
+        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
+        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
         const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
         if (!result) {
             return {
@@ -368,9 +375,8 @@ export async function isConnected(accountId: string, identifier: string, campaig
         const result = await unipileService.isConnected({ accountId, identifier });
         return { success: true, message: 'Connection status checked', data: { connected: result } };
     } catch (error: any) {
-        const errorStatus = error?.error?.status;
-        const errorType = error?.error?.type;
-        const errorDetail = error?.error?.detail;
+        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
+        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
         const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
         if (!result) {
             return {
@@ -447,10 +453,8 @@ export async function send_connection_request(accountId: string, identifier: str
             providerId,
         });
     } catch (error: any) {
-        // Handle different error structures - SDK might throw error.body directly or nested
-        const errorStatus = error?.error?.status;
-        const errorType = error?.error?.type;
-        const errorDetail = error?.error?.detail;
+        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
+        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
 
         // Check for 422 errors (profile not found, recipient cannot be reached, etc.)
         const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
@@ -482,10 +486,8 @@ export async function send_connection_request(accountId: string, identifier: str
                 alreadyConnected,
             });
         } catch (error: any) {
-            // Handle different error structures - SDK might throw error.body directly or nested
-            const errorStatus = error?.error?.status;
-            const errorType = error?.error?.type;
-            const errorDetail = error?.error?.detail;
+            // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
+            const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
 
             // Check for 422 errors (profile not found, recipient cannot be reached, etc.)
             const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
@@ -608,9 +610,23 @@ export async function send_connection_request(accountId: string, identifier: str
             data: { providerId, invitationSent: true },
         };
     } catch (error: any) {
-        const errorStatus = error?.error?.status;
-        const errorType = error?.error?.type;
-        const errorDetail = error?.error?.detail;
+        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
+        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
+
+        // Log extracted values for debugging
+        logger.info('Extracted error from send_connection_request', {
+            accountId,
+            identifier,
+            campaignId,
+            providerId,
+            errorStatus,
+            errorType,
+            errorDetail,
+            hasError: !!error,
+            hasErrorError: !!error?.error,
+            hasErrorErrorBody: !!error?.error?.body,
+        });
+
         const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId, providerId });
         if (!result) {
             return {
@@ -857,10 +873,8 @@ export async function check_connection_status(accountId: string, identifier: str
             data: { connected: false, status: 'pending' },
         };
     } catch (error: any) {
-        const errorBody = error as UnipileError;
-        const errorStatus = errorBody?.error?.body?.status;
-        const errorType = errorBody?.error?.body?.type;
-        const errorDetail = errorBody?.error?.body?.detail;
+        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
+        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
 
         if (errorStatus === 422) {
             logger.error('Profile not found while checking connection status (422)', {
@@ -872,7 +886,6 @@ export async function check_connection_status(accountId: string, identifier: str
                 errorType,
                 errorDetail,
                 errorMessage: error.message,
-                errorBody: errorBody?.error?.body,
                 fullError: error,
             });
             return {
@@ -900,7 +913,6 @@ export async function check_connection_status(accountId: string, identifier: str
                 errorType,
                 errorDetail,
                 errorMessage: error.message,
-                errorBody: errorBody?.error?.body,
             });
             // Don't pause campaign for rate limits during status checks - just return error
             return {
@@ -927,7 +939,6 @@ export async function check_connection_status(accountId: string, identifier: str
                 errorDetail,
                 errorMessage: error.message,
                 errorStack: error.stack,
-                errorBody: errorBody?.error?.body,
                 fullError: error,
             });
             await pauseCampaign(campaignId);
@@ -941,7 +952,7 @@ export async function check_connection_status(accountId: string, identifier: str
                         message: error.message || 'Failed to check connection status',
                         statusCode: errorStatus,
                         errorType: errorType,
-                        details: errorBody?.error?.body || {},
+                        details: errorDetail || {},
                     },
                 },
             };
@@ -1161,8 +1172,8 @@ export async function checkTimeWindow(startTime: string | null | undefined, endT
     }
 }
 
-export const handleProviderErrors = async ({ errorType, errorStatus, errorDetail, accountId, identifier, campaignId, providerId }: { errorType: EProviderError; errorStatus: number; errorDetail: string; accountId: string; identifier: string; campaignId: string; providerId?: string }): Promise<ActivityResult | undefined> => {
-    if (errorStatus === 422) {
+export const handleProviderErrors = async ({ errorType, errorStatus, errorDetail, accountId, identifier, campaignId, providerId }: { errorType?: EProviderError; errorStatus?: number; errorDetail?: string; accountId: string; identifier: string; campaignId: string; providerId?: string }): Promise<ActivityResult | undefined> => {
+    if (errorStatus === 422 && errorType) {
         switch (errorType) {
             case EProviderError.InvalidAccount:
                 logger.warn('Invalid Account', {
