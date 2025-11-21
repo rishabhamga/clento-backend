@@ -14,6 +14,7 @@ export type ActivityResult = {
         last_name: string;
         company?: string;
     };
+    criticalError?: boolean;
 };
 
 const { profile_visit, like_post, comment_post, send_followup, withdraw_request, send_inmail, send_connection_request, check_connection_status, updateLead, verifyUnipileAccount, updateCampaignStep, extractLinkedInPublicIdentifier, checkTimeWindow, checkConnectionRequestLimits } = proxyActivities<typeof activities>({
@@ -796,6 +797,21 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
 
         // Execute the current node and store the result
         const result = await executeNode(currentNode, unipileAccountId, lead, campaignId, workflow, stepIndex, startTime, endTime, timezone);
+
+        // Stop the lead if a critical error is thrown
+        if (result && result.criticalError === true) {
+            log.error('Critical error occurred - stopping lead execution and marking as failed', {
+                leadId,
+                accountId,
+                campaignId,
+                nodeId: currentNode.id,
+                nodeType: currentNode.data.type,
+                errorMessage: result.message,
+                errorData: result.data,
+            });
+            await updateLead(leadId, { status: 'Failed' });
+            return; // Stop workflow execution for this lead
+        }
 
         // Get outgoing edges from this node
         const outgoingEdges = adjacencyMap[currentId] || [];
