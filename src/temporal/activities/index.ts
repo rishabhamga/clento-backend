@@ -12,6 +12,52 @@ import { ActivityResult } from '../workflows/leadWorkflow';
 import { NotFoundError } from '../../errors/AppError';
 import env from '../../config/env';
 
+export enum EProviderError {
+    InvalidAccount = 'errors/invalid_account',
+    InvalidRecipient = 'errors/invalid_recipient',
+    NoConnectionWithRecipient = 'errors/no_connection_with_recipient',
+    BlockedRecipient = 'errors/blocked_recipient',
+    UserUnreachable = 'errors/user_unreachable',
+    UnprocessableEntity = 'errors/unprocessable_entity',
+    PaymentError = 'errors/payment_error',
+    ActionAlreadyPerformed = 'errors/action_already_performed',
+    InvalidMessage = 'errors/invalid_message',
+    InvalidPost = 'errors/invalid_post',
+    NotAllowedInmail = 'errors/not_allowed_inmail',
+    InsufficientCredits = 'errors/insufficient_credits',
+    CannotResendYet = 'errors/cannot_resend_yet',
+    CannotResendWithin24hrs = 'errors/cannot_resend_within_24hrs',
+    LimitExceeded = 'errors/limit_exceeded',
+    AlreadyInvitedRecently = 'errors/already_invited_recently',
+    AlreadyConnected = 'errors/already_connected',
+    CannotInviteAttendee = 'errors/cannot_invite_attendee',
+    ParentMailNotFound = 'errors/parent_mail_not_found',
+    InvalidReplySubject = 'errors/invalid_reply_subject',
+    InvalidHeaders = 'errors/invalid_headers',
+    SendAsDenied = 'errors/send_as_denied',
+    InvalidFolder = 'errors/invalid_folder',
+    InvalidThread = 'errors/invalid_thread',
+    LimitTooHigh = 'errors/limit_too_high',
+    Unauthorized = 'errors/unauthorized',
+    SenderRejected = 'errors/sender_rejected',
+    RecipientRejected = 'errors/recipient_rejected',
+    IpRejectedByServer = 'errors/ip_rejected_by_server',
+    ProviderUnreachable = 'errors/provider_unreachable',
+    AccountConfigurationError = 'errors/account_configuration_error',
+    CantSendMessage = 'errors/cant_send_message',
+    RealtimeClientNotInitialized = 'errors/realtime_client_not_initialized',
+    CommentsDisabled = 'errors/comments_disabled',
+    InsufficientJobSlot = 'errors/insufficient_job_slot',
+}
+
+interface ProviderError {
+    title: string;
+    detail: string;
+    instance: string;
+    type: EProviderError;
+    status: 422;
+}
+
 export async function testActivity(input: { message: string; delay?: number }): Promise<{ success: boolean; data: any; timestamp: string }> {
     logger.info('Test activity started', { input });
 
@@ -133,102 +179,26 @@ export async function profile_visit(accountId: string, identifier: string, campa
         return { success: true, message: 'Profile visit completed', data: null, providerId: result?.provider_id, lead_data };
     } catch (error: any) {
         // Handle different error structures - SDK might throw error.body directly or nested
-        const errorStatus = error?.body?.status || error?.error?.body?.status || error?.status;
-        const errorType = error?.body?.type || error?.error?.body?.type || error?.type;
-        const errorDetail = error?.body?.detail || error?.error?.body?.detail || error?.detail;
+        const errorStatus = error?.error?.status;
+        const errorType = error?.error?.type;
+        const errorDetail = error?.error?.detail;
 
         // Check for 422 errors (profile not found, recipient cannot be reached, etc.)
-        if (errorStatus === 422) {
-            // Check if it's a "recipient cannot be reached" error
-            if (errorType === 'errors/invalid_recipient' || errorDetail?.includes('Recipient cannot be reached')) {
-                logger.warn('Recipient cannot be reached - marking lead as failed and continuing', {
-                    accountId,
-                    identifier,
-                    campaignId,
-                    errorType,
-                    errorDetail,
-                });
-                return {
-                    success: false,
-                    message: 'Recipient cannot be reached',
-                    data: {
-                        error: {
-                            type: 'recipient_unreachable',
-                            message: errorDetail || 'The recipient cannot be reached. Profile may be locked or invalid.',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            }
-
-            // Other 422 errors (profile doesn't exist, etc.)
-            logger.warn('Profile does not exist or is inaccessible - marking lead as failed and continuing', {
-                accountId,
-                identifier,
-                campaignId,
-                errorType,
-                errorDetail,
-            });
+        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
+        if (!result) {
             return {
                 success: false,
-                message: 'Profile does not exist or is inaccessible',
+                message: errorDetail,
                 data: {
                     error: {
-                        type: 'profile_not_found',
-                        message: errorDetail || 'The LinkedIn profile does not exist or is inaccessible',
-                        statusCode: 422,
-                    },
-                },
-            };
-        }
-
-        // For non-422 errors, check if it's an account/authentication issue that should pause the campaign
-        // Only pause for authentication/authorization errors (401, 403) or critical account issues
-        if (errorStatus === 401 || errorStatus === 403) {
-            logger.error('Authentication/authorization failed - pausing campaign', {
-                accountId,
-                identifier,
-                campaignId,
-                errorStatus,
-                errorType,
-                errorDetail,
-            });
-            await pauseCampaign(campaignId);
-            return {
-                success: false,
-                message: 'Account authentication failed',
-                data: {
-                    campaignPaused: true,
-                    error: {
-                        type: 'account_verification_failed',
-                        message: errorDetail || error?.message || 'Failed to verify Unipile account',
+                        type: errorType,
+                        message: errorDetail || 'Unknown',
                         statusCode: errorStatus,
                     },
                 },
             };
         }
-
-        // For other errors, log but don't pause - let the workflow handle it
-        logger.error('Error visiting LinkedIn profile - marking lead as failed and continuing', {
-            accountId,
-            identifier,
-            campaignId,
-            errorStatus,
-            errorType,
-            errorDetail,
-            errorMessage: error?.message,
-        });
-        return {
-            success: false,
-            message: 'Failed to visit LinkedIn profile',
-            data: {
-                error: {
-                    type: 'profile_visit_failed',
-                    message: errorDetail || error?.message || 'Failed to visit LinkedIn profile',
-                    statusCode: errorStatus,
-                },
-            },
-        };
+        return result;
     }
 }
 
@@ -250,36 +220,24 @@ export async function like_post(accountId: string, identifier: string, config: W
             reactionType: 'like',
         });
     } catch (error: any) {
-        const errorBody = error as UnipileError;
-        if (errorBody?.error?.body?.status === 422) {
-            logger.error('The Profile doesnt exist skipping | Posts are unreachable', errorBody);
+        const errorStatus = error?.error?.status;
+        const errorType = error?.error?.type;
+        const errorDetail = error?.error?.detail;
+        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
+        if (!result) {
             return {
                 success: false,
-                message: 'Posts are unreachable',
+                message: errorDetail,
                 data: {
                     error: {
-                        type: 'posts_unreachable',
-                        message: 'Unable to access or like posts on this profile',
-                        statusCode: 422,
-                    },
-                },
-            };
-        } else {
-            logger.error('Error liking LinkedIn post', { error });
-            await pauseCampaign(campaignId);
-            return {
-                success: false,
-                message: 'Error liking LinkedIn post',
-                data: {
-                    campaignPaused: true,
-                    error: {
-                        type: 'like_post_failed',
-                        message: error.message || 'Failed to like LinkedIn post',
-                        details: errorBody?.error?.body || {},
+                        type: errorType,
+                        message: errorDetail || 'Unknown',
+                        statusCode: errorStatus,
                     },
                 },
             };
         }
+        return result;
     }
     return { success: true, message: 'Post liked successfully' };
 }
@@ -299,36 +257,24 @@ export async function comment_post(accountId: string, identifier: string, config
         });
         return { success: true, message: 'Comment posted successfully' };
     } catch (error: any) {
-        const errorBody = error as UnipileError;
-        if (errorBody?.error?.body?.status === 422) {
-            logger.error('Profile doesnt exist or posts unreachable, skipping', errorBody);
+        const errorStatus = error?.error?.status;
+        const errorType = error?.error?.type;
+        const errorDetail = error?.error?.detail;
+        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
+        if (!result) {
             return {
                 success: false,
-                message: 'Profile doesnt exist or posts unreachable',
+                message: errorDetail,
                 data: {
                     error: {
-                        type: 'comment_post_unreachable',
-                        message: 'Unable to access or comment on posts for this profile',
-                        statusCode: 422,
-                    },
-                },
-            };
-        } else {
-            logger.error('Error commenting on LinkedIn post', { error });
-            await pauseCampaign(campaignId);
-            return {
-                success: false,
-                message: 'Error commenting on LinkedIn post',
-                data: {
-                    campaignPaused: true,
-                    error: {
-                        type: 'comment_post_failed',
-                        message: error.message || 'Failed to comment on LinkedIn post',
-                        details: errorBody?.error?.body || {},
+                        type: errorType,
+                        message: errorDetail || 'Unknown',
+                        statusCode: errorStatus,
                     },
                 },
             };
         }
+        return result;
     }
 }
 
@@ -356,24 +302,25 @@ export async function send_followup(accountId: string, identifier: string, confi
         });
         return { success: true, message: 'Follow-up message sent', data: result };
     } catch (error: any) {
-        const errorBody = error as UnipileError;
-        if (errorBody?.error?.body?.status === 422) {
-            logger.error('Profile doesnt exist or posts unreachable, skipping', errorBody);
+        const errorStatus = error?.error?.status;
+        const errorType = error?.error?.type;
+        const errorDetail = error?.error?.detail;
+        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
+        if (!result) {
             return {
                 success: false,
-                message: 'Profile doesnt exist or posts unreachable',
+                message: errorDetail,
                 data: {
                     error: {
-                        type: 'comment_post_unreachable',
-                        message: 'Unable to access or comment on posts for this profile',
-                        statusCode: 422,
+                        type: errorType,
+                        message: errorDetail || 'Unknown',
+                        statusCode: errorStatus,
                     },
                 },
             };
         }
+        return result;
     }
-    // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
-    return { success: true, message: 'Follow-up message sent' };
 }
 
 export async function send_inmail(): Promise<ActivityResult> {
@@ -393,36 +340,24 @@ export async function withdraw_request(accountId: string, identifier: string, ca
         await unipileService.withdrawLinkedInInvitationRequest({ accountId, providerId });
         return { success: true, message: 'Request withdrawn' };
     } catch (error: any) {
-        const errorBody = error as UnipileError;
-        if (errorBody?.error?.body?.status === 422) {
-            logger.error('Invitation not found or already withdrawn, skipping', errorBody);
+        const errorStatus = error?.error?.status;
+        const errorType = error?.error?.type;
+        const errorDetail = error?.error?.detail;
+        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
+        if (!result) {
             return {
                 success: false,
-                message: 'Invitation not found or already withdrawn',
+                message: errorDetail,
                 data: {
                     error: {
-                        type: 'invitation_not_found',
-                        message: 'The invitation request does not exist or was already withdrawn',
-                        statusCode: 422,
-                    },
-                },
-            };
-        } else {
-            logger.error('Error withdrawing request', { error, accountId, identifier });
-            await pauseCampaign(campaignId);
-            return {
-                success: false,
-                message: 'Failed to withdraw request',
-                data: {
-                    campaignPaused: true,
-                    error: {
-                        type: 'withdraw_request_failed',
-                        message: error.message || 'Failed to withdraw connection request',
-                        details: errorBody?.error?.body || {},
+                        type: errorType,
+                        message: errorDetail || 'Unknown',
+                        statusCode: errorStatus,
                     },
                 },
             };
         }
+        return result;
     }
 }
 
@@ -433,36 +368,24 @@ export async function isConnected(accountId: string, identifier: string, campaig
         const result = await unipileService.isConnected({ accountId, identifier });
         return { success: true, message: 'Connection status checked', data: { connected: result } };
     } catch (error: any) {
-        const errorBody = error as UnipileError;
-        if (errorBody?.error?.body?.status === 422) {
-            logger.error('Profile not found, skipping', errorBody);
+        const errorStatus = error?.error?.status;
+        const errorType = error?.error?.type;
+        const errorDetail = error?.error?.detail;
+        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
+        if (!result) {
             return {
                 success: false,
-                message: 'Profile not found',
+                message: errorDetail,
                 data: {
                     error: {
-                        type: 'profile_not_found',
-                        message: 'Profile not found while checking connection status',
-                        statusCode: 422,
-                    },
-                },
-            };
-        } else {
-            logger.error('Error checking connection status', { error });
-            await pauseCampaign(campaignId);
-            return {
-                success: false,
-                message: 'Error checking connection status',
-                data: {
-                    campaignPaused: true,
-                    error: {
-                        type: 'connection_check_failed',
-                        message: error.message || 'Failed to check connection status',
-                        details: errorBody?.error?.body || {},
+                        type: errorType,
+                        message: errorDetail || 'Unknown',
+                        statusCode: errorStatus,
                     },
                 },
             };
         }
+        return result;
     }
 }
 
@@ -524,30 +447,27 @@ export async function send_connection_request(accountId: string, identifier: str
             providerId,
         });
     } catch (error: any) {
-        // This catch block handles unexpected errors (shouldn't happen with updated profile_visit)
-        const errorBody = error as UnipileError;
-        logger.error('Unexpected error during profile visit', {
-            accountId,
-            identifier,
-            campaignId,
-            error: error.message,
-            errorStack: error.stack,
-            errorBody: errorBody?.error?.body,
-            errorStatus: errorBody?.error?.body?.status,
-            errorType: errorBody?.error?.body?.type,
-            errorDetail: errorBody?.error?.body?.detail,
-        });
-        return {
-            success: false,
-            message: 'Failed to visit profile before sending connection request',
-            data: {
-                error: {
-                    type: 'profile_visit_failed',
-                    message: error.message || 'Failed to visit LinkedIn profile',
-                    details: errorBody?.error?.body || {},
+        // Handle different error structures - SDK might throw error.body directly or nested
+        const errorStatus = error?.error?.status;
+        const errorType = error?.error?.type;
+        const errorDetail = error?.error?.detail;
+
+        // Check for 422 errors (profile not found, recipient cannot be reached, etc.)
+        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
+        if (!result) {
+            return {
+                success: false,
+                message: errorDetail,
+                data: {
+                    error: {
+                        type: errorType,
+                        message: errorDetail || 'Unknown',
+                        statusCode: errorStatus,
+                    },
                 },
-            },
-        };
+            };
+        }
+        return result;
     }
 
     try {
@@ -562,17 +482,27 @@ export async function send_connection_request(accountId: string, identifier: str
                 alreadyConnected,
             });
         } catch (error: any) {
-            const errorBody = error as UnipileError;
-            logger.error('Failed to check if user is already connected', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                error: error.message,
-                errorStack: error.stack,
-                errorBody: errorBody?.error?.body,
-                errorStatus: errorBody?.error?.body?.status,
-            });
+            // Handle different error structures - SDK might throw error.body directly or nested
+            const errorStatus = error?.error?.status;
+            const errorType = error?.error?.type;
+            const errorDetail = error?.error?.detail;
+
+            // Check for 422 errors (profile not found, recipient cannot be reached, etc.)
+            const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
+            if (!result) {
+                return {
+                    success: false,
+                    message: errorDetail,
+                    data: {
+                        error: {
+                            type: errorType,
+                            message: errorDetail || 'Unknown',
+                            statusCode: errorStatus,
+                        },
+                    },
+                };
+            }
+            return result;
             // Continue with sending request even if connection check fails
         }
 
@@ -678,174 +608,24 @@ export async function send_connection_request(accountId: string, identifier: str
             data: { providerId, invitationSent: true },
         };
     } catch (error: any) {
-        const errorBody = error as UnipileError;
-        // Handle different error structures - SDK might throw error.body directly or nested
-        const errorStatus = errorBody?.error?.body?.status || error?.body?.status || error?.status;
-        const errorType = errorBody?.error?.body?.type || error?.body?.type || error?.type;
-        const errorDetail = errorBody?.error?.body?.detail || error?.body?.detail || error?.detail;
-
-        if (errorStatus === 422) {
-            // Check for specific "cannot_resend_yet" error that requires 24-hour wait
-            // Handle both "errors/cannot_resend_yet" and "cannot_resend_yet" formats
-            if (errorType === 'errors/cannot_resend_yet' || errorType === 'cannot_resend_yet') {
-                logger.warn('LinkedIn provider limit reached - need to wait 24 hours before retry', {
-                    accountId,
-                    identifier,
-                    providerId,
-                    campaignId,
-                    errorStatus,
-                    errorType,
-                    errorDetail,
-                    errorMessage: error.message,
-                    errorBody: errorBody?.error?.body,
-                });
-                return {
-                    success: false,
-                    message: 'Temporary provider limit reached - will retry after 24 hours',
-                    data: {
-                        error: {
-                            type: 'provider_limit_reached',
-                            message: errorDetail || 'You have reached a temporary provider limit. Please try again later.',
-                            statusCode: 422,
-                            errorType: errorType,
-                            retryAfterHours: 24,
-                            shouldRetry: true,
-                        },
-                    },
-                };
-            }
-
-            // Check for "already_invited_recently" error - invitation already exists, start polling
-            if (errorType === 'errors/already_invited_recently' || errorType === 'already_invited_recently') {
-                logger.info('Connection request already sent recently - will start polling for status', {
-                    accountId,
-                    identifier,
-                    providerId,
-                    campaignId,
-                    errorStatus,
-                    errorType,
-                    errorDetail,
-                });
-                return {
-                    success: false,
-                    message: 'Connection request already sent recently - starting polling',
-                    data: {
-                        error: {
-                            type: 'already_invited_recently',
-                            message: errorDetail || 'An invitation has already been sent recently to this recipient. Please try again later.',
-                            statusCode: 422,
-                            errorType: errorType,
-                        },
-                        providerId: providerId, // Include providerId so workflow can start polling
-                        alreadyInvited: true,
-                    },
-                };
-            }
-
-            logger.error('Cannot send connection request - validation error (422)', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                errorStatus,
-                errorType,
-                errorDetail,
-                errorMessage: error.message,
-                errorBody: errorBody?.error?.body,
-                fullError: error,
-            });
+        const errorStatus = error?.error?.status;
+        const errorType = error?.error?.type;
+        const errorDetail = error?.error?.detail;
+        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId, providerId });
+        if (!result) {
             return {
                 success: false,
-                message: 'Cannot send connection request - profile issue or already pending',
+                message: errorDetail,
                 data: {
                     error: {
-                        type: 'connection_request_rejected',
-                        message: errorDetail || 'Cannot send connection request at this time',
-                        statusCode: 422,
-                        errorType: errorType || 'unknown',
-                    },
-                },
-            };
-        } else if (errorStatus === 429) {
-            logger.error('Cannot send connection request - rate limit exceeded (429)', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                errorStatus,
-                errorType,
-                errorDetail,
-                errorMessage: error.message,
-                errorBody: errorBody?.error?.body,
-            });
-            await pauseCampaign(campaignId);
-            return {
-                success: false,
-                message: 'Rate limit exceeded for connection requests',
-                data: {
-                    campaignPaused: true,
-                    error: {
-                        type: 'rate_limit_exceeded',
-                        message: errorDetail || 'Too many connection requests sent',
-                        statusCode: 429,
-                    },
-                },
-            };
-        } else if (errorStatus === 401 || errorStatus === 403) {
-            logger.error('Cannot send connection request - authentication/authorization error', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                errorStatus,
-                errorType,
-                errorDetail,
-                errorMessage: error.message,
-                errorBody: errorBody?.error?.body,
-            });
-            await pauseCampaign(campaignId);
-            return {
-                success: false,
-                message: 'Authentication failed for connection request',
-                data: {
-                    campaignPaused: true,
-                    error: {
-                        type: 'authentication_failed',
-                        message: errorDetail || 'Account authentication failed',
+                        type: errorType,
+                        message: errorDetail || 'Unknown',
                         statusCode: errorStatus,
-                    },
-                },
-            };
-        } else {
-            logger.error('Error sending connection request - unexpected error', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                errorStatus,
-                errorType,
-                errorDetail,
-                errorMessage: error.message,
-                errorStack: error.stack,
-                errorBody: errorBody?.error?.body,
-                fullError: error,
-            });
-            await pauseCampaign(campaignId);
-            return {
-                success: false,
-                message: 'Error sending connection request',
-                data: {
-                    campaignPaused: true,
-                    error: {
-                        type: 'send_connection_request_failed',
-                        message: error.message || 'Failed to send connection request',
-                        statusCode: errorStatus,
-                        errorType: errorType,
-                        details: errorBody?.error?.body || {},
                     },
                 },
             };
         }
+        return result;
     }
 }
 
@@ -1380,3 +1160,501 @@ export async function checkTimeWindow(startTime: string | null | undefined, endT
         }
     }
 }
+
+export const handleProviderErrors = async ({ errorType, errorStatus, errorDetail, accountId, identifier, campaignId, providerId }: { errorType: EProviderError; errorStatus: number; errorDetail: string; accountId: string; identifier: string; campaignId: string; providerId?: string }): Promise<ActivityResult | undefined> => {
+    if (errorStatus === 422) {
+        switch (errorType) {
+            case EProviderError.InvalidAccount:
+                logger.warn('Invalid Account', {
+                    accountId,
+                    identifier,
+                    campaignId,
+                    errorType,
+                });
+                return {
+                    success: false,
+                    message: 'Invalid Account',
+                    data: {
+                        error: {
+                            type: EProviderError.InvalidAccount,
+                            message: errorDetail || 'The Unipile Account is invalid',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.InvalidRecipient:
+                return {
+                    success: false,
+                    message: 'Recipient cannot be reached',
+                    data: {
+                        error: {
+                            type: 'recipient_unreachable',
+                            message: errorDetail || 'The recipient cannot be reached. Profile may be locked or invalid.',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.NoConnectionWithRecipient:
+                return {
+                    success: false,
+                    message: 'Recipient cannot be reached',
+                    data: {
+                        error: {
+                            type: 'recipient_unreachable',
+                            message: errorDetail || 'The recipient cannot be reached. Because no connections with recipient.',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.BlockedRecipient:
+                return {
+                    success: false,
+                    message: 'Blocked Recipient',
+                    data: {
+                        error: {
+                            type: EProviderError.BlockedRecipient,
+                            message: errorDetail || 'Blocked Recipient',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.UserUnreachable:
+                await pauseCampaign(campaignId);
+                return {
+                    success: false,
+                    message: 'user unreachable',
+                    data: {
+                        error: {
+                            type: EProviderError.UserUnreachable,
+                            message: errorDetail || 'Unreachable',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.UnprocessableEntity:
+                return {
+                    success: false,
+                    message: 'Unprocessable Entity',
+                    data: {
+                        error: {
+                            type: EProviderError.UnprocessableEntity,
+                            message: errorDetail || 'Unprocessable Entity',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.PaymentError:
+                return {
+                    success: false,
+                    message: 'Payment Error',
+                    data: {
+                        error: {
+                            type: EProviderError.PaymentError,
+                            message: errorDetail || 'Payment Error',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.ActionAlreadyPerformed:
+                return {
+                    success: false,
+                    message: 'Action Already Performed',
+                    data: {
+                        error: {
+                            type: EProviderError.ActionAlreadyPerformed,
+                            message: errorDetail || 'Action Already Performed',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.InvalidMessage:
+                return {
+                    success: false,
+                    message: 'Invalid Message',
+                    data: {
+                        error: {
+                            type: EProviderError.InvalidMessage,
+                            message: errorDetail || 'Invalid Message',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.InvalidPost:
+                return {
+                    success: false,
+                    message: 'Invalid Post',
+                    data: {
+                        error: {
+                            type: EProviderError.InvalidPost,
+                            message: errorDetail || 'Invalid Post',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.NotAllowedInmail:
+                return {
+                    success: false,
+                    message: 'Inmail Not Allowed',
+                    data: {
+                        error: {
+                            type: EProviderError.NotAllowedInmail,
+                            message: errorDetail || 'Inmail Now Allowed',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.InsufficientCredits:
+                return {
+                    success: false,
+                    message: 'Insufficient Credits',
+                    data: {
+                        error: {
+                            type: EProviderError.InsufficientCredits,
+                            message: errorDetail || 'Insufficient Credits',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.CannotResendYet:
+                return {
+                    success: false,
+                    message: 'Cannot Resent Yet',
+                    data: {
+                        error: {
+                            type: EProviderError.CannotResendYet,
+                            message: errorDetail || 'Cannot Resend Yet',
+                            statusCode: 422,
+                            retryAfterHours: 24,
+                            shouldRetry: true,
+                        },
+                    },
+                };
+            case EProviderError.CannotResendWithin24hrs:
+                return {
+                    success: false,
+                    message: 'Cannot Resent in 24 hours',
+                    data: {
+                        error: {
+                            type: EProviderError.CannotResendWithin24hrs,
+                            message: errorDetail || 'Cannot Resent in 24 hours',
+                            statusCode: 422,
+                            retryAfterHours: 24,
+                            shouldRetry: true,
+                        },
+                    },
+                };
+            case EProviderError.LimitExceeded:
+                return {
+                    success: false,
+                    message: 'Provider Limit Execeeded',
+                    data: {
+                        error: {
+                            type: EProviderError.LimitExceeded,
+                            message: errorDetail || 'Provider Limit Exceeded',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.AlreadyInvitedRecently:
+                return {
+                    success: false,
+                    message: 'Alread Invited',
+                    data: {
+                        error: {
+                            type: EProviderError.AlreadyInvitedRecently,
+                            message: errorDetail || 'Alread Invited',
+                            statusCode: 422,
+                        },
+                        providerId: providerId, // Include providerId so workflow can start polling
+                        alreadyInvited: true,
+                    },
+                };
+            case EProviderError.AlreadyConnected:
+                return {
+                    success: false,
+                    message: 'Recipient cannot be reached',
+                    data: {
+                        error: {
+                            type: 'recipient_unreachable',
+                            message: errorDetail || 'The recipient cannot be reached. Profile may be locked or invalid.',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.CannotInviteAttendee:
+                return {
+                    success: false,
+                    message: 'Cannot Invite',
+                    data: {
+                        error: {
+                            type: EProviderError.CannotInviteAttendee,
+                            message: errorDetail || 'Cannot Invite',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.ParentMailNotFound:
+                return {
+                    success: false,
+                    message: 'Parent Mail Not Found',
+                    data: {
+                        error: {
+                            type: EProviderError.ParentMailNotFound,
+                            message: errorDetail || 'Parent Mail Not Found',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.InvalidReplySubject:
+                return {
+                    success: false,
+                    message: 'Invalid Reply Subject',
+                    data: {
+                        error: {
+                            type: EProviderError.InvalidReplySubject,
+                            message: errorDetail || 'Invalid Reply Subject',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.InvalidHeaders:
+                return {
+                    success: false,
+                    message: 'Invalid Headers',
+                    data: {
+                        error: {
+                            type: EProviderError.InvalidHeaders,
+                            message: errorDetail || 'Invalid Headers',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.SendAsDenied:
+                return {
+                    success: false,
+                    message: 'Denied',
+                    data: {
+                        error: {
+                            type: EProviderError.SendAsDenied,
+                            message: errorDetail || 'Denied',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.InvalidFolder:
+                return {
+                    success: false,
+                    message: 'Invalid Folder',
+                    data: {
+                        error: {
+                            type: EProviderError.InvalidFolder,
+                            message: errorDetail || 'Invalid Folder',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.InvalidThread:
+                return {
+                    success: false,
+                    message: 'Invalid thread',
+                    data: {
+                        error: {
+                            type: EProviderError.InvalidThread,
+                            message: errorDetail || 'Invalid Thread',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.LimitTooHigh:
+                return {
+                    success: false,
+                    message: 'Limit too high',
+                    data: {
+                        error: {
+                            type: EProviderError.LimitTooHigh,
+                            message: errorDetail || 'Limit too high',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.Unauthorized:
+                return {
+                    success: false,
+                    message: 'Unauthorized',
+                    data: {
+                        error: {
+                            type: EProviderError.Unauthorized,
+                            message: errorDetail || 'Unauthorized',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.SenderRejected:
+                return {
+                    success: false,
+                    message: 'Sender Rejected',
+                    data: {
+                        error: {
+                            type: EProviderError.SenderRejected,
+                            message: errorDetail || 'Sender Rejected',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.RecipientRejected:
+                return {
+                    success: false,
+                    message: 'Recipient Rejected',
+                    data: {
+                        error: {
+                            type: EProviderError.RecipientRejected,
+                            message: errorDetail || 'Recipient Rejected',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.IpRejectedByServer:
+                return {
+                    success: false,
+                    message: 'Ip Rejected By Server',
+                    data: {
+                        error: {
+                            type: EProviderError.IpRejectedByServer,
+                            message: errorDetail || 'Ip Rejected By Server',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true, //very serious error
+                };
+            case EProviderError.ProviderUnreachable:
+                await pauseCampaign(campaignId);
+                return {
+                    success: false,
+                    message: 'Provider Unreachable',
+                    data: {
+                        error: {
+                            type: EProviderError.ProviderUnreachable,
+                            message: errorDetail || 'Provider Unreachable',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.AccountConfigurationError:
+                await pauseCampaign(campaignId);
+                return {
+                    success: false,
+                    message: 'Account Config Error',
+                    data: {
+                        error: {
+                            type: EProviderError.AccountConfigurationError,
+                            message: errorDetail || 'Account Config Error',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.CantSendMessage:
+                return {
+                    success: false,
+                    message: 'Cannot Sent Message',
+                    data: {
+                        error: {
+                            type: EProviderError.CantSendMessage,
+                            message: errorDetail || 'Cannot Sent Message',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.RealtimeClientNotInitialized:
+                return {
+                    success: false,
+                    message: 'Realtime Client Not Initialized',
+                    data: {
+                        error: {
+                            type: EProviderError.RealtimeClientNotInitialized,
+                            message: errorDetail || 'Realtime Client Not Initialized',
+                            statusCode: 422,
+                        },
+                    },
+                    criticalError: true,
+                };
+            case EProviderError.CommentsDisabled:
+                return {
+                    success: false,
+                    message: 'Comments Disabled',
+                    data: {
+                        error: {
+                            type: EProviderError.CommentsDisabled,
+                            message: errorDetail || 'Comments Disabled',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            case EProviderError.InsufficientJobSlot:
+                return {
+                    success: false,
+                    message: 'Insufficient Job slots',
+                    data: {
+                        error: {
+                            type: EProviderError.InsufficientJobSlot,
+                            message: errorDetail || 'Insufficient Job slots',
+                            statusCode: 422,
+                        },
+                    },
+                };
+            default:
+                CheckNever(errorType);
+        }
+    }
+    if (errorStatus === 401 || errorStatus === 403) {
+        logger.error('Authentication/authorization failed - pausing campaign', {
+            accountId,
+            identifier,
+            campaignId,
+            errorStatus,
+            errorType,
+            errorDetail,
+        });
+        await pauseCampaign(campaignId);
+        return {
+            success: false,
+            message: 'Account authentication failed',
+            data: {
+                campaignPaused: true,
+                error: {
+                    type: 'account_verification_failed',
+                    message: errorDetail || 'Failed to verify Unipile account',
+                    statusCode: errorStatus,
+                },
+            },
+        };
+    }
+    if (errorStatus === 429) {
+        await pauseCampaign(campaignId);
+        return {
+            success: false,
+            message: 'Rate limit exceeded',
+            data: {
+                campaignPaused: true,
+                error: {
+                    type: 'rate_limit_exceeded',
+                    message: errorDetail || 'Rate Limit Exceeded',
+                    statusCode: 429,
+                },
+            },
+        };
+    }
+};
