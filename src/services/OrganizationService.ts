@@ -80,6 +80,15 @@ export class OrganizationService {
         }
     }
 
+    async getOrganizationByClerkOrgId(id: string): Promise<Organization | null> {
+        try {
+            return await this.organizationRepository.findByClerkOrgId(id);
+        } catch (error) {
+            logger.error('Error getting organization', { error, id });
+            throw error;
+        }
+    }
+
     /**
      * Update organization
      */

@@ -112,29 +112,53 @@ export const loadOrganization = async (req: Request, res: Response, next: NextFu
 
         if (!orgId) {
             // Try to get user's default organization
+            const userRepo = new UserRepository();
+            const user = await userRepo.findById(req.userId);
             const organizationRepository = new OrganizationRepository();
             const userOrgs = await organizationRepository.getUserOrganizations(req.userId);
-
-            if (userOrgs.length > 0) {
-                // Use the first organization as default
-                const defaultOrg = userOrgs[0];
-                req.organizationId = defaultOrg.id;
+            if (!user.selected_org) {
+                console.log('no org selected setting original org')
+                if (userOrgs.length > 0) {
+                    // Use the first organization as default
+                    const defaultOrg = userOrgs[0];
+                    req.organizationId = defaultOrg.id;
+                    req.organization = {
+                        id: defaultOrg.id,
+                        name: defaultOrg.name,
+                        slug: defaultOrg.slug,
+                        plan: defaultOrg.plan,
+                        timezone: defaultOrg.timezone,
+                    };
+                    req.organizationMember = {
+                        role: defaultOrg.role,
+                        permissions: {},
+                        status: defaultOrg.status,
+                    };
+                    await userRepo.update(user.id, { selected_org: defaultOrg.id });
+                } else {
+                    // User has no organizations - this might be an error case
+                    logger.warn('User has no organizations', { userId: req.userId });
+                    // Don't set organizationId - let the route handle this case
+                }
+            } else {
+                const selected_org_data = userOrgs.find(it => it.id === user.selected_org);
+                console.log('setting org data of this org', selected_org_data?.id)
+                if (!selected_org_data) {
+                    throw new UnauthorizedError('Error');
+                }
+                req.organizationId = selected_org_data.id;
                 req.organization = {
-                    id: defaultOrg.id,
-                    name: defaultOrg.name,
-                    slug: defaultOrg.slug,
-                    plan: defaultOrg.plan,
-                    timezone: defaultOrg.timezone,
+                    id: selected_org_data.id,
+                    name: selected_org_data.name,
+                    slug: selected_org_data.slug,
+                    plan: selected_org_data.plan,
+                    timezone: selected_org_data.timezone,
                 };
                 req.organizationMember = {
-                    role: defaultOrg.role,
+                    role: selected_org_data.role,
                     permissions: {},
-                    status: defaultOrg.status,
+                    status: selected_org_data.status,
                 };
-            } else {
-                // User has no organizations - this might be an error case
-                logger.warn('User has no organizations', { userId: req.userId });
-                // Don't set organizationId - let the route handle this case
             }
             return next();
         }
