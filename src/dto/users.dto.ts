@@ -31,6 +31,7 @@ export const UserResponseDto = z.object({
     email: z.string(),
     full_name: z.string().nullable(),
     avatar_url: z.string().nullable(),
+    selected_org: z.string().optional(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime(),
 });
@@ -62,6 +63,7 @@ export const UserInsertDto = z.object({
     email: z.string(),
     full_name: z.string().nullable().optional(),
     avatar_url: z.string().nullable().optional(),
+    selected_org: z.string().uuid().optional(),
     created_at: z.string().datetime().optional(),
     updated_at: z.string().datetime().optional(),
 });
@@ -75,6 +77,7 @@ export const UserUpdateDto = z.object({
     email: z.string().optional(),
     full_name: z.string().nullable().optional(),
     avatar_url: z.string().nullable().optional(),
+    selected_org: z.string().uuid().optional(),
     created_at: z.string().datetime().optional(),
     updated_at: z.string().datetime().optional(),
 });
