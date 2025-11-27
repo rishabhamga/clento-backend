@@ -12,6 +12,7 @@ export enum EWorkflowNodeType {
     withdraw_request = 'withdraw_request',
     send_inmail = 'send_inmail',
     send_connection_request = 'send_connection_request',
+    webhook = 'webhook',
 }
 
 export type EPathType = 'accepted' | 'not-accepted';
@@ -109,6 +110,7 @@ export interface WorkflowNodeConfig {
     aiWritingAssistant?: boolean | null;
     messageLength?: EMessageLength | null;
     messagePurpose?: string | null;
+    webhookId?: string | null;
 }
 
 export interface WorkflowNodeData {

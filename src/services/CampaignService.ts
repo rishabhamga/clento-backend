@@ -76,6 +76,9 @@ export class CampaignService {
     async getCampaignSteps(campaignId: string): Promise<CampaignStepResponseDto[]> {
         return this.campaignStepRepository.findByCampaignId(campaignId);
     }
+    async getStepsByLeadId(leadId: string): Promise<CampaignStepResponseDto[]> {
+        return this.campaignStepRepository.findByField('lead_id', leadId);
+    }
     async getRecentStats(organization_id: string, days: number) {
         try {
             const recentSteps = await this.campaignStepRepository.getRecentCampaignStepsByOrgIdAndDays(organization_id, days);

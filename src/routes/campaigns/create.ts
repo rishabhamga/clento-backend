@@ -65,7 +65,7 @@ class CreateCampaignAPI extends ClentoAPI {
                 const pathType = data.getParamAsType<EPathType>('string', 'pathType', false);
                 //Config
                 const config = data.getParamAsNestedBody('config', false);
-                let useAI, numberOfPosts, recentPostDays, configureWithAI, commentLength, tone, language, customGuidelines, customComment, customMessage, formality, approach, focus, intention, callToAction, personalization, engageWithRecentActivity, smartFollowups, aiWritingAssistant, messageLength, messagePurpose;
+                let useAI, numberOfPosts, recentPostDays, configureWithAI, commentLength, tone, language, customGuidelines, customComment, customMessage, formality, approach, focus, intention, callToAction, personalization, engageWithRecentActivity, smartFollowups, aiWritingAssistant, messageLength, messagePurpose, webhookId;
                 if (config) {
                     useAI = config.getParamAsBoolean('useAI', false);
                     numberOfPosts = config.getParamAsNumber('numberOfPosts', false);
@@ -88,6 +88,7 @@ class CreateCampaignAPI extends ClentoAPI {
                     aiWritingAssistant = config.getParamAsBoolean('aiWritingAssistant', false);
                     messageLength = config.getParamAsEnumValue(EMessageLength, 'messageLength', false);
                     messagePurpose = config.getParamAsString('messagePurpose', false);
+                    webhookId = config.getParamAsString('webhookId', false);
                 }
 
                 return {
@@ -124,6 +125,7 @@ class CreateCampaignAPI extends ClentoAPI {
                             aiWritingAssistant,
                             messageLength,
                             messagePurpose,
+                            webhookId
                         },
                     },
                     measured: {
@@ -166,9 +168,31 @@ class CreateCampaignAPI extends ClentoAPI {
                 };
             });
 
-            // Determine campaign status: if start_date is not provided, start immediately
-            const shouldStartImmediately = !startDate;
-            const campaignStatus = shouldStartImmediately ? CampaignStatus.IN_PROGRESS : CampaignStatus.SCHEDULED;
+            // Determine campaign status based on start_date
+            let shouldStartImmediately = !startDate;
+            let campaignStatus = CampaignStatus.SCHEDULED;
+
+            if (startDate) {
+                // Parse start date and compare with today
+                const startDateObj = new Date(startDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Reset time to compare dates only
+                startDateObj.setHours(0, 0, 0, 0);
+
+                // If start date is today or in the past, start immediately
+                if (startDateObj <= today) {
+                    shouldStartImmediately = true;
+                    campaignStatus = CampaignStatus.IN_PROGRESS;
+                } else {
+                    // Start date is in the future
+                    shouldStartImmediately = false;
+                    campaignStatus = CampaignStatus.SCHEDULED;
+                }
+            } else {
+                // No start date provided, start immediately
+                shouldStartImmediately = true;
+                campaignStatus = CampaignStatus.IN_PROGRESS;
+            }
 
             const campaignCreateDto: CreateCampaignDto = {
                 organization_id: organizationId,
@@ -206,15 +230,21 @@ class CreateCampaignAPI extends ClentoAPI {
 
             await this.campaignService.updateCampaign(campaign.id, campaignUpdateDto);
 
-            // If start_date is not provided, start the campaign immediately
+            // Start the campaign immediately if no start_date or start_date has passed
             if (shouldStartImmediately) {
                 try {
                     console.log('starting the campaign immediately', campaign.id);
                     await this.temporalService.startCampaign(campaign.id);
-                } catch (error) {
-                    // Log error but don't fail campaign creation
-                    // Campaign is already created, user can start it manually later
-                    console.error('Failed to start campaign immediately', error);
+                } catch (error: any) {
+                    // Handle workflow already exists error gracefully
+                    if (error?.name === 'WorkflowExecutionAlreadyStartedError' || error?.message?.includes('already started') || error?.message?.includes('already exists')) {
+                        console.log('Campaign workflow already running', campaign.id);
+                        // Campaign workflow is already running, which is fine
+                    } else {
+                        // Log other errors but don't fail campaign creation
+                        // Campaign is already created, user can start it manually later
+                        console.error('Failed to start campaign immediately', error);
+                    }
                 }
             }
 
