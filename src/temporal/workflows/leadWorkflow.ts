@@ -17,7 +17,7 @@ export type ActivityResult = {
     criticalError?: boolean;
 };
 
-const { profile_visit, like_post, comment_post, send_followup, withdraw_request, send_inmail, send_connection_request, check_connection_status, updateLead, verifyUnipileAccount, updateCampaignStep, extractLinkedInPublicIdentifier, checkTimeWindow, checkConnectionRequestLimits } = proxyActivities<typeof activities>({
+const { profile_visit, like_post, comment_post, send_followup, withdraw_request, send_inmail, send_connection_request, check_connection_status, callWebhook, updateLead, verifyUnipileAccount, updateCampaignStep, extractLinkedInPublicIdentifier, checkTimeWindow, checkConnectionRequestLimits } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
         initialInterval: '1s',
@@ -755,6 +755,18 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
             }
             break;
         }
+        case EWorkflowNodeType.webhook:
+            if (!config.webhookId) {
+                log.error('Webhook ID is required', {
+                    leadId: lead.id,
+                    webhookId: config.webhookId,
+                });
+                return {
+                    success: false,
+                    message: 'Webhook ID is required',
+                };
+            }
+            return await callWebhook(config.webhookId, lead.id);
         case null:
             return null;
         case undefined:

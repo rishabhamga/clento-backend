@@ -11,6 +11,9 @@ import logger from '../../utils/logger';
 import { ActivityResult } from '../workflows/leadWorkflow';
 import { NotFoundError } from '../../errors/AppError';
 import env from '../../config/env';
+import { WebhookRepository } from '../../repositories/WebhookRepository';
+import { LeadRepository } from '../../repositories/LeadRepository';
+import { CampaignRepository } from '../../repositories/CampaignRepository';
 
 export enum EProviderError {
     InvalidAccount = 'errors/invalid_account',
@@ -49,7 +52,6 @@ export enum EProviderError {
     CommentsDisabled = 'errors/comments_disabled',
     InsufficientJobSlot = 'errors/insufficient_job_slot',
 }
-
 
 /**
  * Extract error information from Unipile SDK error following UnipileError interface structure
@@ -1664,6 +1666,70 @@ export const handleProviderErrors = async ({ errorType, errorStatus, errorDetail
                     type: 'rate_limit_exceeded',
                     message: errorDetail || 'Rate Limit Exceeded',
                     statusCode: 429,
+                },
+            },
+        };
+    }
+};
+
+export const callWebhook = async (webhookId: string, leadId: string): Promise<ActivityResult> => {
+    const webhookRepository = new WebhookRepository();
+    const leadRepository = new LeadRepository();
+    const campaignService = new CampaignService();
+    try {
+        const webhook = await webhookRepository.findById(webhookId);
+        const lead = await leadRepository.findById(leadId);
+        const leadSteps = await campaignService.getStepsByLeadId(leadId);
+        const data = {
+            lead: lead,
+            leadSteps: leadSteps,
+        };
+        if (!webhook) {
+            return {
+                success: false,
+                message: 'Webhook not found',
+                data: {
+                    error: {
+                        type: 'webhook_not_found',
+                        message: 'Webhook not found',
+                        statusCode: 404,
+                    },
+                },
+            };
+        }
+        const response = await fetch(webhook.url, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            return {
+                success: false,
+                message: 'Failed to call webhook',
+                data: {
+                    error: {
+                        type: 'webhook_failed',
+                        message: 'Failed to call webhook',
+                        statusCode: response.status,
+                    },
+                },
+            };
+        }
+        return {
+            success: true,
+            message: 'Webhook called successfully',
+            data: {
+                webhookId,
+            },
+        };
+    } catch (err) {
+        logger.error('Failed to call webhook', { error: err, webhookId, leadId });
+        return {
+            success: false,
+            message: 'Failed to call webhook',
+            data: {
+                error: {
+                    type: 'webhook_failed',
+                    message: err instanceof Error ? err.message : 'Failed to call webhook',
                 },
             },
         };
