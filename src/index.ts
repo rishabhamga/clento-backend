@@ -16,6 +16,7 @@ import './utils/arrayExtensions'; // Import array extensions globally
 import './utils/mapExtensions' // Import map extensions globally
 import logger from './utils/logger';
 import registerAllRoutes from './utils/registerRoutes';
+import { rawBodyCapture } from './middleware/validation';
 
 // Create Express application
 const app = express();
@@ -42,7 +43,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ verify: rawBodyCapture }));
 app.use(express.urlencoded({ extended: true }));
 
 // Configure multer for file uploads

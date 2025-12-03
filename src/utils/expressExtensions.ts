@@ -50,6 +50,7 @@ declare module 'express-serve-static-core' {
             pathParams: { [key: string]: any };
         };
         clentoAPIClass?: ClentoAPIClass | null;
+        rawBody: Buffer;
         getBody: () => ClentoRequestBody;
         getQuery: () => ClentoRequestBody;
         getPathParams: () => ClentoRequestBody;

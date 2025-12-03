@@ -26,6 +26,11 @@ const envSchema = z.object({
     UNIPILE_DNS: z.string().default('https://api.unipile.com/v1'),
     UNIPILE_ACCESS_TOKEN: z.string().optional(),
 
+    // XPay Integration
+    XPAY_PUBLIC_KEY: z.string().optional(),
+    XPAY_SECRET_KEY: z.string().optional(),
+    XPAY_WEBHOOK_SECRET: z.string().optional(),
+
     // Google Cloud Storage (optional for development)
     GOOGLE_CLOUD_PROJECT_ID: z.string().optional(),
     GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY: z.string().optional(),
