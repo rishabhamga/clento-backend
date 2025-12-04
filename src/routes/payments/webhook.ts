@@ -2,11 +2,14 @@ import { Request, Response } from 'express';
 import '../../utils/expressExtensions';
 import * as crypto from 'crypto';
 import { DisplayError, UnauthorizedError } from '../../errors/AppError';
-import ClentoAPI from '../../utils/apiUtil';
+import ClentoAPI, { CheckNever } from '../../utils/apiUtil';
 import env from '../../config/env';
 import logger from '../../utils/logger';
 import { OrderRepository } from '../../repositories/OrderRepository';
 import { OrderStatus } from '../../dto/orders.dto';
+import { SubscriptionRepository } from '../../repositories/SubscriptionRepository';
+import { SubscriptionType } from '../../dto/subscriptions.dto';
+import { plans } from '../../config/plans';
 
 interface XpayWebhookPayload {
     eventId: string;
@@ -44,6 +47,7 @@ class API extends ClentoAPI {
     public authType: 'NONE' = 'NONE';
 
     private orderRepository = new OrderRepository();
+    private subscriptionRepository = new SubscriptionRepository();
 
     private verifySignature(incomingSignature: string, payload: Buffer, signingKey: string): boolean {
         try {
@@ -88,9 +92,44 @@ class API extends ClentoAPI {
                 throw new UnauthorizedError('Invalid webhook signature');
             }
 
-            await this.orderRepository.update(payloadJson.metadata.orderId, {
+            const order = await this.orderRepository.update(payloadJson.metadata.orderId, {
                 status: OrderStatus.SUCCESS,
             });
+
+            const plan = plans.find(plan => plan.id === order.plan_id);
+
+            if(!plan){
+                console.log('THIS SHOULD NEVER HAPPEN');
+                throw new DisplayError('That Plan Doesnt Exist');
+            }
+
+            switch(plan.type){
+                case SubscriptionType.PLAN:
+                    await this.subscriptionRepository.create({
+                        organization_id: order.organization_id,
+                        plan_id: order.plan_id,
+                        type: plan.type,
+                        parent_id: order.id,
+                        numberOfSeats: order.numberOfSeats,
+                        period_start: new Date().toISOString(),
+                        period_end: new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                    })
+                    break;
+                case SubscriptionType.ADDON:
+                    const parentPlan = (await this.subscriptionRepository.getActiveSubscription(order.organization_id)).filter(it => it.type === SubscriptionType.PLAN).firstOrNull();
+                    await this.subscriptionRepository.create({
+                        organization_id: order.organization_id,
+                        plan_id: order.plan_id,
+                        type: plan.type,
+                        parent_id: parentPlan?.id || order.id,
+                        numberOfSeats: order.numberOfSeats,
+                        period_start: new Date().toISOString(),
+                        period_end: parentPlan?.period_end || new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                    })
+                    break;
+                default: CheckNever(plan.type);
+            }
+
 
             return res.sendOKResponse({ success: true });
         } catch (error) {

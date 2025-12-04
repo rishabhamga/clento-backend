@@ -20,6 +20,10 @@ declare global {
         averageBy: (fn: (arg0: T) => number) => number;
         flatten: () => Array<PocketlyFlatArray<T, 21>>;
         shuffle: () => T[];
+        first: (conditionFunction?: (item: T) => boolean) => T;
+        last: () => T;
+        firstOrNull: (conditionFunction?: (item: T) => boolean) => T | null;
+        lastOrNull: () => T | null;
     }
 }
 Object.defineProperty(Array.prototype, 'chunked', {
@@ -170,6 +174,64 @@ Object.defineProperty(Array.prototype, 'shuffle', {
             this[randomIndex] = temporaryValue;
         }
         return this;
+    },
+});
+
+Object.defineProperty(Array.prototype, 'first', {
+    value: function (conditionFunction?: <T>(item: T) => boolean) {
+        if (this.length < 1) {
+            throw new Error('Index Out of bounds');
+        }
+        if (conditionFunction) {
+            for (let i = 0; i < this.length; i++) {
+                const item = this[i];
+                const conditionResult = conditionFunction(item);
+                if (conditionResult) {
+                    return item;
+                }
+            }
+            throw new Error('No Such Element');
+        } else {
+            return this[0];
+        }
+    },
+});
+
+Object.defineProperty(Array.prototype, 'last', {
+    value: function () {
+        if (this.length < 1) {
+            throw new Error('Index Out of bounds');
+        }
+        return this[this.length - 1];
+    },
+});
+
+Object.defineProperty(Array.prototype, 'firstOrNull', {
+    value: function (conditionFunction?: <T>(item: T) => boolean) {
+        if (this.length < 1) {
+            return null;
+        }
+        if (conditionFunction) {
+            for (let i = 0; i < this.length; i++) {
+                const item = this[i];
+                const conditionResult = conditionFunction(item);
+                if (conditionResult) {
+                    return item;
+                }
+            }
+            return null;
+        } else {
+            return this[0];
+        }
+    },
+});
+
+Object.defineProperty(Array.prototype, 'lastOrNull', {
+    value: function () {
+        if (this.length < 1) {
+            return null;
+        }
+        return this[this.length - 1];
     },
 });
 

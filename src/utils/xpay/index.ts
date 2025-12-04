@@ -34,8 +34,8 @@ export class Xpay {
         return encodedAuth;
     }
 
-    async createIntent({ amount, currency, organization_id, seats = 1 }: { amount: number; currency: string; organization_id: string, seats?: number}) {
-        const order = await this.orderRepository.create({ organization_id, plan_id: plans[0].id, amount, status: OrderStatus.INITIATED });
+    async createIntent({ amount, currency, organization_id, numberOfSeats, planId }: { amount: number; currency: string; organization_id: string, numberOfSeats: number, planId: string}) {
+        const order = await this.orderRepository.create({ organization_id, plan_id: planId, amount, status: OrderStatus.INITIATED, numberOfSeats });
 
         const orderId = order.id;
         const encodedAuth = this.getAuth();
