@@ -19,6 +19,7 @@ class AccountAPI extends ClentoAPI {
      */
     public GET = async (req: Request, res: Response): Promise<Response> => {
         try {
+            const allowedSeats = req?.subscription?.totalSeats ?? 0;
             const organizationId = req.organizationId;
             // Using express extensions for parameter validation
             const query = req.getQuery();
@@ -32,10 +33,11 @@ class AccountAPI extends ClentoAPI {
 
             return res.sendOKResponse({
                 success: true,
-                data: accounts,
+                data: { accounts, allowedSeats },
                 meta: {
                     total: accounts.length,
                 },
+                allowedSeats,
                 message: 'Accounts retrieved successfully',
             });
         } catch (error) {

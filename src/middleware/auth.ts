@@ -5,6 +5,9 @@ import { UserRepository } from '../repositories/UserRepository';
 import { OrganizationRepository } from '../repositories/OrganizationRepository';
 import logger from '../utils/logger';
 import env from '../config/env';
+import { SubscriptionRepository } from '../repositories/SubscriptionRepository';
+import { plans } from '../config/plans';
+import { SubscriptionType } from '../dto/subscriptions.dto';
 
 // Extend Express Request type to include user and organization information
 declare global {
@@ -38,6 +41,11 @@ declare global {
                 permissions: Record<string, any>;
                 status: string;
             };
+            subscription: {
+                hasPlans: boolean
+                hasAddons: boolean,
+                totalSeats: number;
+            }
         }
     }
 }
@@ -117,7 +125,7 @@ export const loadOrganization = async (req: Request, res: Response, next: NextFu
             const organizationRepository = new OrganizationRepository();
             const userOrgs = await organizationRepository.getUserOrganizations(req.userId);
             if (!user.selected_org) {
-                console.log('no org selected setting original org')
+                console.log('no org selected setting original org');
                 if (userOrgs.length > 0) {
                     // Use the first organization as default
                     const defaultOrg = userOrgs[0];
@@ -142,7 +150,7 @@ export const loadOrganization = async (req: Request, res: Response, next: NextFu
                 }
             } else {
                 const selected_org_data = userOrgs.find(it => it.id === user.selected_org);
-                console.log('setting org data of this org', selected_org_data?.id)
+                console.log('setting org data of this org', selected_org_data?.id);
                 if (!selected_org_data) {
                     throw new UnauthorizedError('Error');
                 }
@@ -204,6 +212,21 @@ export const loadOrganization = async (req: Request, res: Response, next: NextFu
 export const requireOrganization = (req: Request, res: Response, next: NextFunction) => {
     if (!req.organizationId) {
         return next(new UnauthorizedError('Organization context required'));
+    }
+    next();
+};
+
+export const loadSubscription = async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.organizationId) {
+        return next(new UnauthorizedError('Organization context required'));
+    }
+    const subscriptionRepository = new SubscriptionRepository();
+    const subscriptions = await subscriptionRepository.getActiveSubscription(req.organizationId);
+    const orgPlans = subscriptions.map(it => plans.find(p => p.id === it.plan_id))
+    req.subscription = {
+        hasPlans: orgPlans.length > 0,
+        hasAddons: subscriptions.some(it => it.type === SubscriptionType.ADDON),
+        totalSeats: subscriptions.reduce((acc, it) => acc + it.numberOfSeats, 0)
     }
     next();
 };
@@ -301,7 +324,7 @@ export const createSupabaseAuthClient = async (req: Request, res: Response, next
  * Default authentication middleware that applies auth, user loading, and organization loading
  * This should be applied to all routes by default
  */
-export const defaultAuth = [requireAuth, loadUser, loadOrganization];
+export const defaultAuth = [requireAuth, loadUser, loadOrganization, loadSubscription];
 
 /**
  * Skip authentication middleware - use this to opt out of default auth

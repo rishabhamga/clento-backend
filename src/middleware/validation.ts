@@ -232,3 +232,7 @@ export const validateFileUpload = (options: { maxSize?: number; allowedTypes?: s
         }
     };
 };
+
+export function rawBodyCapture(req: Request, res: Response, buf: Buffer, encoding: string) {
+    (req as any).rawBody = buf;
+}

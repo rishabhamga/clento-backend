@@ -24,6 +24,18 @@ class AccountConnectAPI extends ClentoAPI {
         const userId = req.userId;
         const organizationId = req.organizationId;
 
+        const subscription = req.subscription.hasPlans;
+        const allowedSeats = req?.subscription?.totalSeats ?? 0;
+
+        if(!subscription){
+            throw new DisplayError('You need to have a plan to connect accounts');
+        }
+
+        const linkedinAccounts = await this.connectedAccountService.getUserAccounts(organizationId, 'linkedin');
+        if(linkedinAccounts.length >= allowedSeats){
+            throw new DisplayError('You have reached the maximum number of allowed linkedin accounts, Please upgrade your plan to connect more accounts');
+        }
+
         // Using express extensions for parameter validation
         const body = req.getBody();
         const provider = body.getParamAsString('provider', true);
