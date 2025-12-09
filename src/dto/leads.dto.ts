@@ -190,11 +190,31 @@ export const PublishLeadListResponseDto = z.object({
 
 /**
  * DTO for lead response (matches database Row type)
+ *
+ * Table: public.leads
+ * - id: uuid not null default gen_random_uuid() (PK)
+ * - lead_list_id: uuid null (FK to lead_lists.id ON DELETE CASCADE)
+ * - full_name: text not null
+ * - first_name: text null
+ * - last_name: text null
+ * - email: text null
+ * - phone: text null
+ * - title: text null
+ * - company: text null
+ * - industry: text null
+ * - location: text null
+ * - linkedin_url: text null
+ * - linkedin_id: text null
+ * - status: varchar(50) null default 'new'
+ * - source: varchar(50) not null
+ * - enrichment_data: jsonb null default '{}'
+ * - created_at: timestamptz null default now()
+ * - updated_at: timestamptz null default now()
+ * - organization_id: uuid not null
+ * - campaign_id: uuid not null
  */
 export const LeadResponseDto = z.object({
     id: z.string().uuid(),
-    organization_id: z.string().uuid(),
-    campaign_id: z.string().uuid(),
     lead_list_id: z.string().uuid().nullable(),
     full_name: z.string(),
     first_name: z.string().nullable(),
@@ -207,22 +227,26 @@ export const LeadResponseDto = z.object({
     location: z.string().nullable(),
     linkedin_url: z.string().nullable(),
     linkedin_id: z.string().nullable(),
-    status: z.string().nullable(),
-    source: z.string(),
-    enrichment_data: z.record(z.any()),
+    status: z.string().max(50).nullable(),
+    source: z.string().max(50),
+    enrichment_data: z.record(z.any()).nullable(),
     created_at: z.string().datetime().nullable(),
     updated_at: z.string().datetime().nullable(),
+    organization_id: z.string().uuid(),
+    campaign_id: z.string().uuid(),
 });
 
 /**
  * DTO for lead insert (matches database Insert type)
+ *
+ * Required fields: full_name, source, organization_id, campaign_id
+ * Optional fields with defaults: id (gen_random_uuid), status ('new'), enrichment_data ('{}'), created_at (now), updated_at (now)
+ * Optional nullable fields: lead_list_id, first_name, last_name, email, phone, title, company, industry, location, linkedin_url, linkedin_id
  */
 export const LeadInsertDto = z.object({
-    id: z.string().uuid().optional(),
-    organization_id: z.string().uuid(),
-    campaign_id: z.string().uuid(),
+    id: z.string().uuid().optional(), // default: gen_random_uuid()
     lead_list_id: z.string().uuid().nullable().optional(),
-    full_name: z.string(),
+    full_name: z.string(), // required
     first_name: z.string().nullable().optional(),
     last_name: z.string().nullable().optional(),
     email: z.string().nullable().optional(),
@@ -233,18 +257,22 @@ export const LeadInsertDto = z.object({
     location: z.string().nullable().optional(),
     linkedin_url: z.string().nullable().optional(),
     linkedin_id: z.string().nullable().optional(),
-    status: z.string().max(50).default('new').optional(),
-    source: z.string().max(50),
-    enrichment_data: z.record(z.any()).default({}).optional(),
-    created_at: z.string().datetime().nullable().optional(),
-    updated_at: z.string().datetime().nullable().optional(),
+    status: z.string().max(50).default('new').optional(), // default: 'new'
+    source: z.string().max(50), // required
+    enrichment_data: z.record(z.any()).nullable().default({}).optional(), // default: '{}'
+    created_at: z.string().datetime().nullable().optional(), // default: now()
+    updated_at: z.string().datetime().nullable().optional(), // default: now()
+    organization_id: z.string().uuid(), // required
+    campaign_id: z.string().uuid(), // required
 });
 
 /**
  * DTO for lead update (matches database Update type)
+ *
+ * All fields are optional for partial updates.
+ * Note: organization_id and campaign_id are intentionally excluded as they should not be updated.
  */
 export const LeadUpdateDto = z.object({
-    id: z.string().uuid().optional(),
     lead_list_id: z.string().uuid().nullable().optional(),
     full_name: z.string().optional(),
     first_name: z.string().nullable().optional(),
@@ -257,10 +285,9 @@ export const LeadUpdateDto = z.object({
     location: z.string().nullable().optional(),
     linkedin_url: z.string().nullable().optional(),
     linkedin_id: z.string().nullable().optional(),
-    status: z.string().max(50).optional(),
+    status: z.string().max(50).nullable().optional(),
     source: z.string().max(50).optional(),
-    enrichment_data: z.record(z.any()).optional(),
-    created_at: z.string().datetime().nullable().optional(),
+    enrichment_data: z.record(z.any()).nullable().optional(),
     updated_at: z.string().datetime().nullable().optional(),
 });
 

@@ -56,6 +56,9 @@ const envSchema = z.object({
         .default('1'),
     REQUESTS_PER_DAY: z.coerce.number().default(60),
     REQUESTS_PER_WEEK: z.coerce.number().default(200),
+
+    // JWT Token Authentication
+    JWT_SECRET: z.string().min(1, 'JWT Secret is required'),
 });
 
 // Parse and validate environment variables

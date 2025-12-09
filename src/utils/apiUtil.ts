@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { promisify } from 'util';
-import { BadRequestError, AppError } from '../errors/AppError';
+import { BadRequestError, AppError, UnauthorizedError } from '../errors/AppError';
 import { defaultAuth } from '../middleware/auth';
 
 export interface ExpressRequestParams {
@@ -29,7 +29,7 @@ export const CheckNever = (value: never): never => {
 export default abstract class ClentoAPI {
     public abstract path: string;
 
-    public authType: 'NONE' | 'API' | 'DASHBOARD';
+    public authType: 'NONE' | 'API' | 'DASHBOARD' | 'REPORTER';
 
     public forceJSON: boolean;
     public redisLockEnabled: boolean;
@@ -118,8 +118,11 @@ export default abstract class ClentoAPI {
 
             // Apply authentication based on authType
             if (this.authType !== 'NONE') {
-                // Apply authentication middleware for DASHBOARD and API auth types
-                if (this.authType === 'DASHBOARD' || this.authType === 'API') {
+                if (this.authType === 'REPORTER') {
+                    if (!req.reporter?.id || !req.reporter.id.length) {
+                        throw new UnauthorizedError('Authentication required');
+                    }
+                } else if (this.authType === 'DASHBOARD' || this.authType === 'API') {
                     // Create a middleware chain for authentication
                     const authChain = [...defaultAuth];
 
