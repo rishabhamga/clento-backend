@@ -56,6 +56,16 @@ declare module 'express-serve-static-core' {
         getPathParams: () => ClentoRequestBody;
         getFiles: () => ClentoRequestBody;
         getIPAddress: () => string | null;
+        subscription: {
+            hasPlans: boolean;
+            hasAddons: boolean;
+            totalSeats: number;
+        };
+        reporter: {
+            id: string;
+            name: string;
+            email: string;
+        };
     }
 }
 

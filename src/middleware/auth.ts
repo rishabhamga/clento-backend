@@ -43,11 +43,11 @@ declare global {
                 status: string;
             };
             subscription: {
-                hasPlans: boolean
-                hasAddons: boolean,
+                hasPlans: boolean;
+                hasAddons: boolean;
                 totalSeats: number;
             };
-            reporter?: {
+            reporter: {
                 id: string;
                 name: string;
                 email: string;
