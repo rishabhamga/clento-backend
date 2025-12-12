@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { DisplayError, ValidationError } from '../../../errors/AppError';
 import { TemporalClientService } from '../../../temporal/services/temporal-client.service';
-import { leadMonitorWorkflow } from '../../../temporal/workflows/leadMonitorWorkflow';
+import { leadMonitorWorkflow } from '../../../temporal/workflows';
 import ClentoAPI from '../../../utils/apiUtil';
 import '../../../utils/expressExtensions';
 import { CsvService } from '../../../services/CsvService';
@@ -14,12 +14,8 @@ class API extends ClentoAPI {
 
     public POST = async (req: Request, res: Response): Promise<Response> => {
         const reporterUserId = req.reporter?.id;
-        if (!reporterUserId) {
-            throw new DisplayError('Authentication required');
-        }
-
         const body = req.getBody();
-        const linkedinUrl = body.getParamAsString('linkedin_url', true);
+        const linkedinUrl = body.getParamAsString('linkedin_url');
 
         const identifier = CsvService.extractLinkedInPublicIdentifier(linkedinUrl);
         if (!identifier) {
@@ -38,7 +34,7 @@ class API extends ClentoAPI {
             const client = this.temporalClient.getClient();
             const handle = await client.workflow.start(leadMonitorWorkflow, {
                 args: [workflowInput],
-                taskQueue: 'campaign-task-queue',
+                taskQueue: 'lead-monitor-task-queue',
                 workflowId,
             });
 

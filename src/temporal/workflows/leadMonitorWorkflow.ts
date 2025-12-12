@@ -1,13 +1,13 @@
 import { log, proxyActivities, sleep } from '@temporalio/workflow';
 import { Duration } from '@temporalio/common';
-import type * as activities from '../activities/reportingActivities'
+import type * as reportingActivities from '../activities/reportingActivities';
 
 const {
     fetchReporterLeadProfile,
     updateReporterLeadProfile,
     getReporterConnectedAccount,
     findOrCreateReporterLead,
-} = proxyActivities<typeof activities>({
+} = proxyActivities<typeof reportingActivities>({
     startToCloseTimeout: '1 minute',
     retry: {
         maximumAttempts: 10,

@@ -1,5 +1,5 @@
 import { TemporalClientService } from '../temporal/services/temporal-client.service';
-import { leadMonitorWorkflow, LeadMonitorWorkflowInput } from '../temporal/workflows/leadMonitorWorkflow';
+import { leadMonitorWorkflow, LeadMonitorWorkflowInput } from '../temporal/workflows';
 import { CsvService } from './CsvService';
 import { ReporterLeadRepository } from '../repositories/reporterRepositories/LeadRepository';
 import logger from '../utils/logger';
