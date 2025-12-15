@@ -264,9 +264,12 @@ export class UnipileService {
             const profile = await UnipileService.client.users.getProfile({
                 account_id: accountId,
                 identifier: identifier,
+                linkedin_sections: '*',
             });
 
             logger.info('User profile retrieved via SDK', { accountId, identifier });
+
+            console.log(JSON.stringify(profile));
 
             return profile;
         } catch (error) {

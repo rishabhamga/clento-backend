@@ -11,7 +11,7 @@ class API extends ClentoAPI {
     private connectedAccountService = new ReporterConnectedAccountService();
 
     public GET = async (req: Request, res: Response): Promise<Response> => {
-        const reporterUserId = req.reporter?.id;
+        const reporterUserId = req.reporter.id;
         if (!reporterUserId) {
             throw new DisplayError('Authentication required');
         }

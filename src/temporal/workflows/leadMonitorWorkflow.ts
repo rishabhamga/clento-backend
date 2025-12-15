@@ -1,4 +1,4 @@
-import { log, proxyActivities, sleep } from '@temporalio/workflow';
+import { log, proxyActivities, sleep, defineSignal, defineQuery, condition, setHandler } from '@temporalio/workflow';
 import { Duration } from '@temporalio/common';
 import type * as reportingActivities from '../activities/reportingActivities';
 
@@ -6,7 +6,7 @@ const {
     fetchReporterLeadProfile,
     updateReporterLeadProfile,
     getReporterConnectedAccount,
-    findOrCreateReporterLead,
+    getReporterLeadById,
 } = proxyActivities<typeof reportingActivities>({
     startToCloseTimeout: '1 minute',
     retry: {
@@ -16,30 +16,60 @@ const {
     },
 });
 
+// Signal definitions for pause/resume functionality
+// Signals allow external systems to communicate with the workflow without polling
+const pauseSignal = defineSignal('pause-lead-monitoring');
+const resumeSignal = defineSignal('resume-lead-monitoring');
+
+// Query definition to check monitoring status
+// Queries allow external systems to read workflow state without affecting execution
+const monitoringStatusQuery = defineQuery<{ isPaused: boolean; leadId: string }>('get-monitoring-status');
+
 export interface LeadMonitorWorkflowInput {
-    userId: string;
-    linkedinUrl: string;
+    leadId: string;
 }
 
 export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Promise<void> {
-    const { userId, linkedinUrl } = input;
+    const { leadId } = input;
 
-    log.info('Starting lead monitor workflow', { userId, linkedinUrl });
+    log.info('Starting lead monitor workflow', { leadId });
 
-    // Step 1: Get connected account
-    const accountId = await getReporterConnectedAccount(userId);
-    log.info('Connected account retrieved', { userId, accountId });
+    let isPaused = false;
 
-    // Step 2: Find or create lead
-    const leadId = await findOrCreateReporterLead(userId, linkedinUrl);
-    log.info('Lead found or created', { userId, linkedinUrl, leadId });
+    const pauseHandler = () => {
+        isPaused = true;
+        log.info('Lead monitoring paused via signal', { leadId });
+    };
+
+    const resumeHandler = () => {
+        isPaused = false;
+        log.info('Lead monitoring resumed via signal', { leadId });
+    };
+
+    const statusQueryHandler = () => {
+        return {
+            isPaused,
+            leadId,
+        };
+    };
+
+    setHandler(pauseSignal, pauseHandler);
+    setHandler(resumeSignal, resumeHandler);
+    setHandler(monitoringStatusQuery, statusQueryHandler);
+
+    // Step 1: Get lead details from database
+    const lead = await getReporterLeadById(leadId);
+    log.info('Lead details retrieved', { leadId, userId: lead.user_id, linkedinUrl: lead.linkedin_url });
+
+    // Step 2: Get connected account
+    const accountId = await getReporterConnectedAccount(lead.user_id);
+    log.info('Connected account retrieved', { userId: lead.user_id, accountId });
 
     // Step 3: Initial fetch to establish baseline
-    log.info('Performing initial profile fetch', { leadId, accountId, linkedinUrl });
+    log.info('Performing initial profile fetch', { leadId, accountId, linkedinUrl: lead.linkedin_url });
 
-    const initialProfile = await fetchReporterLeadProfile(accountId, linkedinUrl);
+    const initialProfile = await fetchReporterLeadProfile(accountId, lead.linkedin_url);
 
-    // Update lead with initial profile data
     const initialUpdateResult = await updateReporterLeadProfile(leadId, initialProfile);
 
     log.info('Initial profile fetch completed', {
@@ -47,24 +77,67 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
         hasChanges: Object.values(initialUpdateResult.changes).some(v => v),
     });
 
-    // Step 4: Daily monitoring loop
     log.info('Starting daily monitoring loop', { leadId });
 
-    // Continue monitoring indefinitely (workflow will run until cancelled)
     while (true) {
-        // Wait 24 hours before next fetch
+        if (isPaused) {
+            log.info('Workflow is paused, waiting for resume signal', { leadId });
+
+            await condition(() => !isPaused);
+
+            log.info('Workflow resumed, continuing immediately', { leadId });
+        }
+
         log.info('Waiting 24 hours before next profile fetch', { leadId });
-        // await sleep('24 hours' as Duration);
-        await sleep('5 minutes' as Duration);
+
+        const totalMs = 24 * 60 * 60 * 1000; // Total wait before the repeat
+        const checkMs = 60 * 60 * 1000; // Wait before checking the pause status
+
+
+        let remainingMs = totalMs;
+
+        while (remainingMs > 0 && !isPaused) {
+            const sleepMs = Math.min(checkMs, remainingMs);
+
+            let sleepChunk: Duration;
+            if (sleepMs >= 3600000) {
+                const hours = Math.floor(sleepMs / 3600000);
+                sleepChunk = `${hours} hour${hours > 1 ? 's' : ''}` as Duration;
+            } else if (sleepMs >= 60000) {
+                const minutes = Math.floor(sleepMs / 60000);
+                sleepChunk = `${minutes} minute${minutes > 1 ? 's' : ''}` as Duration;
+            } else {
+                const seconds = Math.floor(sleepMs / 1000);
+                sleepChunk = `${seconds} second${seconds > 1 ? 's' : ''}` as Duration;
+            }
+
+            await sleep(sleepChunk);
+            remainingMs -= sleepMs;
+
+            if (isPaused) {
+                log.info('Pause signal received during sleep, pausing workflow', { leadId });
+                break;
+            }
+        }
+
+        if (isPaused) {
+            log.info('Workflow is paused after sleep, waiting for resume signal', { leadId });
+            await condition(() => !isPaused);
+            log.info('Workflow resumed after pause, continuing immediately', { leadId });
+        }
 
         // Fetch profile
-        log.info('Fetching profile for daily check', { leadId, accountId, linkedinUrl });
-        const profile = await fetchReporterLeadProfile(accountId, linkedinUrl);
+        log.info('Fetching profile for daily check', { leadId, accountId, linkedinUrl: lead.linkedin_url });
+        const profile = await fetchReporterLeadProfile(accountId, lead.linkedin_url);
 
-        // Update lead with new profile data
+        if (isPaused) {
+            log.info('Workflow paused after profile fetch, waiting for resume', { leadId });
+            await condition(() => !isPaused);
+            log.info('Workflow resumed, continuing with profile update', { leadId });
+        }
+
         const updateResult = await updateReporterLeadProfile(leadId, profile);
 
-        // Log changes if any
         const hasChanges = Object.values(updateResult.changes).some(v => v);
         if (hasChanges) {
             log.info('Profile changes detected', {
@@ -73,6 +146,6 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
             });
         } else {
             log.info('No profile changes detected', { leadId });
-            }
+        }
     }
 }

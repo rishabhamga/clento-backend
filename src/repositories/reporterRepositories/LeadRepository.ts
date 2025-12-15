@@ -1,8 +1,4 @@
-import {
-    CreateReporterLeadDto,
-    UpdateReporterLeadDto,
-    ReporterLeadResponseDto,
-} from '../../dto/reporterDtos/leads.dto';
+import { CreateReporterLeadDto, UpdateReporterLeadDto, ReporterLeadResponseDto } from '../../dto/reporterDtos/leads.dto';
 import { DatabaseError } from '../../errors/AppError';
 import logger from '../../utils/logger';
 import { BaseRepository } from '../BaseRepository';
@@ -10,11 +6,7 @@ import { BaseRepository } from '../BaseRepository';
 /**
  * Repository for reporter lead database operations
  */
-export class ReporterLeadRepository extends BaseRepository<
-    ReporterLeadResponseDto,
-    CreateReporterLeadDto,
-    UpdateReporterLeadDto
-> {
+export class ReporterLeadRepository extends BaseRepository<ReporterLeadResponseDto, CreateReporterLeadDto, UpdateReporterLeadDto> {
     constructor() {
         super('reporter_leads');
     }
@@ -38,10 +30,7 @@ export class ReporterLeadRepository extends BaseRepository<
     /**
      * Find lead by user ID and LinkedIn URL
      */
-    public async findByUserAndLinkedInUrl(
-        userId: string,
-        linkedinUrl: string
-    ): Promise<ReporterLeadResponseDto | null> {
+    public async findByUserAndLinkedInUrl(userId: string, linkedinUrl: string): Promise<ReporterLeadResponseDto | null> {
         try {
             const data = await this.findOneByMultipleFields({
                 user_id: userId,
@@ -84,6 +73,20 @@ export class ReporterLeadRepository extends BaseRepository<
         } catch (error) {
             logger.error('Error updating reporter lead last fetched timestamp', { error, leadId });
             throw new DatabaseError('Failed to update last fetched timestamp');
+        }
+    }
+
+    public async bulkCreate(leads: CreateReporterLeadDto[]): Promise<ReporterLeadResponseDto[]> {
+        try {
+            const {data, error} = await this.client.from(this.tableName).insert(leads).select();
+            if (error) {
+                logger.error('Error bulk creating reporter leads', { error, leads });
+                throw error;
+            }
+            return data || [];
+        } catch (error) {
+            logger.error('Error bulk creating reporter leads', { error, leads });
+            throw new DatabaseError('Failed to create reporter leads');
         }
     }
 }
