@@ -21,6 +21,11 @@ class ReporterAccountConnectAPI extends ClentoAPI {
         const failureRedirectUrl = 'http://localhost:3000/dashboard/accounts';
         const notifyUrl = 'https://34c8c9603e64.ngrok-free.app/api/reporter/accounts/webhook';
 
+        const accounts = await this.connectedAccountService.getUserAccounts(reporterUserId, provider);
+        if(accounts.length > 0) {
+            throw new DisplayError('You already have a linkedin account connected');
+        }
+
         try {
             const result = await this.connectedAccountService.createHostedAuthLink({
                 reporterUserId,

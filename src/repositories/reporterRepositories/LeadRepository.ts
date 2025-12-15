@@ -52,11 +52,14 @@ export class ReporterLeadRepository extends BaseRepository<ReporterLeadResponseD
      */
     public async getUserLeads(userId: string): Promise<ReporterLeadResponseDto[]> {
         try {
-            const data = await this.findByField('user_id' as keyof ReporterLeadResponseDto, userId);
+            const {data, error} = await this.client.from(this.tableName).select('*').eq('user_id', userId).eq('is_deleted', false);
+            if (error) {
+                logger.error('Error getting reporter user leads', { error, userId });
+                throw error;
+            }
             return data || [];
         } catch (error) {
-            logger.error('Error getting reporter user leads', { error, userId });
-            throw new DatabaseError('Failed to get user leads');
+            throw error;
         }
     }
 

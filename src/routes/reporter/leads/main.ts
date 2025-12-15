@@ -82,6 +82,22 @@ class API extends ClentoAPI {
         }
     };
 
+    private handleDeleteLead = async (req: Request, res: Response) => {
+        const userId = req.reporter?.id;
+        const reqBody = req.getBody();
+        const leadId = reqBody.getParamAsString('leadId');
+        const lead = await this.leadRepository.findById(leadId);
+        if (!lead) {
+            throw new DisplayError('Not Found');
+        }
+        if (lead.user_id !== userId) {
+            throw new DisplayError('Not Found');
+        }
+        await this.monitorService.stopMonitoring(leadId);
+        await this.leadRepository.update(leadId, { is_deleted: true, updated_at: new Date().toISOString() });
+        return res.sendOKResponse({ success: true, message: 'Lead deleted successfully', leadId });
+    };
+
     public GET = async (req: Request, res: Response) => {
         const userId = req.reporter.id;
 
@@ -89,9 +105,10 @@ class API extends ClentoAPI {
 
         const leadsWithStatus = await leads.mapAsyncOneByOne(async lead => {
             const status = await this.monitorService.getMonitoringStatus(lead.id);
+            console.log(status);
             return {
                 ...lead,
-                status,
+                status: status.status !== 'CANCELLED' ? status : null,
             };
         });
 
@@ -110,6 +127,25 @@ class API extends ClentoAPI {
         switch (command) {
             case ECommand.UPLOAD:
                 const urls = reqBody.getParamAsStringArray('linkedin_urls');
+                // eslint-disable-next-line
+                const linkedinUrlRegex = `^https?:\/\/(www\.)?linkedin\.com\/in\/[a-zA-Z0-9-_%]+\/?$`;
+                const errored = urls.find(it => !it.match(linkedinUrlRegex));
+                if (errored) {
+                    throw new DisplayError(`Invalid LinkedIn URL: ${errored}`);
+                }
+                const MAX_LEADS_ALLOWED = 10;
+
+                // Get current non-deleted leads count for the user
+                const existingLeads = await this.leadRepository.getUserLeads(userId);
+                const currentLeadCount = existingLeads.length;
+                const leadsToUpload = urls.length;
+                const totalAfterUpload = currentLeadCount + leadsToUpload;
+
+                // Check if upload would exceed the limit
+                if (totalAfterUpload > MAX_LEADS_ALLOWED) {
+                    const allowedToUpload = Math.max(0, MAX_LEADS_ALLOWED - currentLeadCount);
+                    throw new DisplayError(`You have reached the maximum limit of ${MAX_LEADS_ALLOWED} leads. You currently have ${currentLeadCount} leads and can only upload ${allowedToUpload} more lead${allowedToUpload !== 1 ? 's' : ''}.`);
+                }
 
                 const leads: CreateReporterLeadDto[] = urls.map(url => ({
                     user_id: userId,
@@ -122,14 +158,14 @@ class API extends ClentoAPI {
                     last_company_name: null,
                     last_company_id: null,
                 }));
-                this.leadRepository.bulkCreate(leads);
+                await this.leadRepository.bulkCreate(leads);
                 return res.sendOKResponse({
                     success: true,
                     message: 'Leads uploaded successfully',
                     data: leads,
                 });
             case ECommand.DELETE:
-                throw new DisplayError('Deleting leads is not allowed for now');
+                return await this.handleDeleteLead(req, res);
             case ECommand.PAUSE:
                 return await this.handlePauseCampaign(req, res);
             case ECommand.RESUME:

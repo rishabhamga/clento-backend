@@ -257,10 +257,10 @@ export class ReporterConnectedAccountService {
                 display_name: displayName,
                 profile_picture_url: profilePictureUrl,
                 capabilities: capabilities,
-                status: unipileAccount.status === 'active' ? 'connected' : 'error',
+                status: unipileAccount?.sources?.[0]?.status === 'OK' ? 'connected' : 'error',
                 metadata: {
                     ...account.metadata,
-                    connection_quality: unipileAccount.status === 'active' ? 'good' : 'error',
+                    connection_quality: unipileAccount?.sources?.[0]?.status === 'OK' ? 'good' : 'error',
                     last_synced_at: new Date().toISOString(),
                     unipile_account_data: unipileAccount,
                     profile_data: profileData,
