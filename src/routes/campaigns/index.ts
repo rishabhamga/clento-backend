@@ -7,6 +7,7 @@ import '../../utils/expressExtensions'; // Import extensions
 import { StorageService } from '../../services/StorageService';
 import { LeadListService } from '../../services/LeadListService';
 import { ConnectedAccountService } from '../../services/ConnectedAccountService';
+import { TemporalService } from '../../services/TemporalService';
 
 /**
  * Campaigns API - Manage campaigns and download workflow files
@@ -19,6 +20,7 @@ class CampaignsAPI extends ClentoAPI {
     private leadListService = new LeadListService();
     private connectedAccountService = new ConnectedAccountService();
     private storageService = new StorageService();
+    private temporalService = TemporalService.getInstance();
     /**
      * Get all campaigns for the organization
      */
@@ -30,9 +32,10 @@ class CampaignsAPI extends ClentoAPI {
         const sender_accountData = await this.connectedAccountService.getAccountsByIdIn(senderIds);
         const listData = await this.leadListService.getLeadListByIdIn(leadsIds);
 
-        const campaignData = campaigns.map(it => {
+        const campaignData = await campaigns.mapAsyncOneByOne(async it => {
             const list = listData.find(list => list.id === it.prospect_list);
             const sender = sender_accountData.find(sender => sender.id === it.sender_account);
+            const workflowStatus = await this.temporalService.getCampaignStatus(it.id);
             return {
                 ...it,
                 list_data: {
@@ -45,6 +48,7 @@ class CampaignsAPI extends ClentoAPI {
                     status: sender?.status,
                     provider: sender?.provider,
                 },
+                workflowStatus: workflowStatus.status !== 'CANCELLED' ? workflowStatus : null,
             };
         });
 

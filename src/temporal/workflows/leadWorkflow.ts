@@ -1,9 +1,8 @@
-import { log, proxyActivities, sleep, ApplicationFailure } from '@temporalio/workflow';
+import { ApplicationFailure, Duration } from '@temporalio/common';
+import { log, proxyActivities, sleep } from '@temporalio/workflow';
 import { LeadResponseDto, LeadUpdateDto } from '../../dto/leads.dto';
 import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from '../../types/workflow.types';
 import type * as activities from '../activities';
-import { ProfileVisitResult, ConnectionRequestResult, ConnectionStatusResult, NodeResult } from '../../types/activity.types';
-import { Duration } from '@temporalio/common';
 
 // ActivityResult type for workflow compatibility - activities now throw ApplicationFailure instead
 export type ActivityResult = {
@@ -256,7 +255,8 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
 
                 // Default: 10 days, poll every hour
                 let totalWaitDurationMs = 10 * 24 * 60 * 60 * 1000;
-                let pollInterval = '1 hour' as Duration;
+                let pollInterval: Duration = '1 hour';
+                let pollIntervalMs = 60 * 60 * 1000; // 1 hour in milliseconds
 
                 // Use edge delay if specified
                 if (rejectedEdge?.data?.delayData?.delay && rejectedEdge?.data?.delayData?.unit) {
@@ -265,9 +265,11 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                         totalWaitDurationMs = edgeDelayMs;
                         // Adjust poll interval based on total wait time
                         if (totalWaitDurationMs < 24 * 60 * 60 * 1000) {
-                            pollInterval = '15 minutes' as Duration;
+                            pollInterval = '15 minutes';
+                            pollIntervalMs = 15 * 60 * 1000;
                         } else if (totalWaitDurationMs < 7 * 24 * 60 * 60 * 1000) {
-                            pollInterval = '30 minutes' as Duration;
+                            pollInterval = '30 minutes';
+                            pollIntervalMs = 30 * 60 * 1000;
                         }
                     }
                 }
@@ -283,10 +285,6 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
 
                 // Poll for connection status until accepted/rejected or timeout
                 let elapsedTimeMs = 0;
-                const pollIntervalMs = pollInterval === '15 minutes' ? 15 * 60 * 1000 :
-                                      pollInterval === '30 minutes' ? 30 * 60 * 1000 :
-                                      60 * 60 * 1000; // 1 hour default
-
                 while (elapsedTimeMs < totalWaitDurationMs) {
                     await sleep(pollInterval);
                     elapsedTimeMs += pollIntervalMs;
@@ -424,7 +422,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
     // Record step execution in database
     if (result && type) {
         log.info('Recording step execution', { step: `step-${index}`, nodeId: node.id, type, success: result.success });
-        await updateCampaignStep(campaignId, type, config, result.success, result.data || {}, index, lead.organization_id, lead.id);
+        await updateCampaignStep(campaignId, type, config, result.success, (result.data || {}) as Record<string, unknown>, index, lead.organization_id, lead.id);
     }
 
     return result;

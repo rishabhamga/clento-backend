@@ -13,7 +13,7 @@ import { UnipileError, UnipileService } from '../../services/UnipileService';
 import { ProfileVisitResult, ConnectionRequestResult, ConnectionStatusResult, LikePostResult, CommentPostResult, FollowUpResult, WithdrawRequestResult, WebhookResult } from '../../types/activity.types';
 import { EWorkflowNodeType, WorkflowJson, WorkflowNodeConfig } from '../../types/workflow.types';
 import logger from '../../utils/logger';
-import { ActivityResult } from '../workflows/leadWorkflow';
+// ActivityResult type removed - activities now throw ApplicationFailure instead of returning ActivityResult
 
 export enum EProviderError {
     InvalidAccount = 'errors/invalid_account',
@@ -549,6 +549,20 @@ export async function pauseCampaign(campaignId: string): Promise<void> {
     logger.info('Campaign paused successfully', { campaignId });
 }
 
+export async function resumeCampaign(campaignId: string): Promise<void> {
+    logger.info('resuming campaign', { campaignId });
+    const campaignService = new CampaignService();
+    const campaign = await campaignService.getCampaignById(campaignId);
+    if (!campaign) {
+        logger.error('Campaign not found for resuming', { campaignId });
+        return;
+    }
+    await campaignService.updateCampaign(campaignId, {
+        status: CampaignStatus.IN_PROGRESS,
+    } as UpdateCampaignDto);
+    logger.info('Campaign resumed successfully', { campaignId });
+}
+
 export async function isCampaignActive(campaignId: string): Promise<boolean> {
     const campaignService = new CampaignService();
     const campaign = await campaignService.getCampaignById(campaignId);
@@ -752,7 +766,7 @@ export async function check_connection_status(accountId: string, identifier: str
     };
 }
 
-export async function updateCampaignStep(campaignId: string, stepType: EWorkflowNodeType, config: WorkflowNodeConfig, success: boolean, results: Record<string, any>, stepIndex: number, organizationId: string, leadId: string): Promise<ActivityResult> {
+export async function updateCampaignStep(campaignId: string, stepType: EWorkflowNodeType, config: WorkflowNodeConfig, success: boolean, results: Record<string, unknown>, stepIndex: number, organizationId: string, leadId: string): Promise<{ success: boolean; message: string; data?: { stepIndex: number } }> {
     logger.info('updateCampaignStep', { campaignId, stepType, success, stepIndex });
 
     try {
