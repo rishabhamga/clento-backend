@@ -6,6 +6,7 @@ import { ReporterLeadRepository } from '../../../repositories/reporterRepositori
 import ClentoAPI, { CheckNever } from '../../../utils/apiUtil';
 import '../../../utils/expressExtensions';
 import { CreateReporterLeadDto } from '../../../dto/reporterDtos/leads.dto';
+import { ReporterConnectedAccountService } from '../../../services/ReporterConnectedAccountService';
 
 enum ECommand {
     UPLOAD = 'UPLOAD',
@@ -21,6 +22,7 @@ class API extends ClentoAPI {
     private leadService = new ReporterLeadService();
     private monitorService = new ReporterLeadMonitorService();
     private leadRepository = new ReporterLeadRepository();
+    private connectedAccountService = new ReporterConnectedAccountService();
 
     private handlePauseCampaign = async (req: Request, res: Response) => {
         const userId = req.reporter?.id;
@@ -55,6 +57,12 @@ class API extends ClentoAPI {
         const userId = req.reporter?.id;
         if (!userId) {
             throw new ValidationError('User ID is required');
+        }
+
+        const accounts = await this.connectedAccountService.getUserAccounts(userId);
+
+        if(accounts.length === 0) {
+            throw new DisplayError('You need to connect your LinkedIn account first to resume lead monitoring');
         }
 
         const body = req.getBody();

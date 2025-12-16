@@ -17,8 +17,8 @@ class ReporterAccountConnectAPI extends ClentoAPI {
     public POST = async (req: Request, res: Response): Promise<Response> => {
         const reporterUserId = req.reporter.id;
         const provider = 'linkedin';
-        const successRedirectUrl = 'https://reporter.clento.ai/dashboard/accounts';
-        const failureRedirectUrl = 'https://reporter.clento.ai/dashboard/accounts';
+        const successRedirectUrl = 'https://reporter.clento.ai/dashboard';
+        const failureRedirectUrl = 'https://reporter.clento.ai/dashboard';
         const notifyUrl = 'https://api-staging.clento.ai/api/reporter/accounts/webhook';
 
         const accounts = await this.connectedAccountService.getUserAccounts(reporterUserId, provider);
