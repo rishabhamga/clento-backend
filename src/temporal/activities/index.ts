@@ -1,3 +1,4 @@
+import { ApplicationFailure } from '@temporalio/common';
 import env from '../../config/env';
 import { CampaignResponseDto, CampaignStatus, CampaignStepResponseDto, CreateCampaignStepDto, UpdateCampaignDto } from '../../dto/campaigns.dto';
 import { LeadInsertDto, LeadListResponseDto, LeadUpdateDto } from '../../dto/leads.dto';
@@ -9,6 +10,7 @@ import { CsvLead, CsvParseResult, CsvService } from '../../services/CsvService';
 import { LeadListService } from '../../services/LeadListService';
 import { LeadService } from '../../services/LeadService';
 import { UnipileError, UnipileService } from '../../services/UnipileService';
+import { ProfileVisitResult, ConnectionRequestResult, ConnectionStatusResult, LikePostResult, CommentPostResult, FollowUpResult, WithdrawRequestResult, WebhookResult } from '../../types/activity.types';
 import { EWorkflowNodeType, WorkflowJson, WorkflowNodeConfig } from '../../types/workflow.types';
 import logger from '../../utils/logger';
 import { ActivityResult } from '../workflows/leadWorkflow';
@@ -55,18 +57,84 @@ export enum EProviderError {
  * Extract error information from Unipile SDK error following UnipileError interface structure
  * Interface structure: error.error.body.{status, type, detail}
  */
-function extractUnipileError(error: any): {
+function extractUnipileError(error: unknown): {
     errorStatus?: number;
     errorType?: EProviderError;
     errorDetail?: string;
 } {
     // Follow UnipileError interface structure: error.error.body.{status, type, detail}
-    const unipileError = error;
-    const errorStatus = unipileError?.body?.status;
-    const errorType = unipileError?.body?.type as EProviderError;
-    const errorDetail = unipileError?.body?.detail;
+    const unipileError = error as UnipileError;
+    // Handle both error structures: error.error.body or error.body
+    const errorStatus = (unipileError as { error?: { body?: { status?: number } }; body?: { status?: number } })?.error?.body?.status ||
+                        (unipileError as { error?: { body?: { status?: number } }; body?: { status?: number } })?.body?.status;
+    const errorType = ((unipileError as { error?: { body?: { type?: string } }; body?: { type?: string } })?.error?.body?.type ||
+                       (unipileError as { error?: { body?: { type?: string } }; body?: { type?: string } })?.body?.type) as EProviderError;
+    const errorDetail = (unipileError as { error?: { body?: { detail?: string } }; body?: { detail?: string } })?.error?.body?.detail ||
+                        (unipileError as { error?: { body?: { detail?: string } }; body?: { detail?: string } })?.body?.detail;
 
     return { errorStatus, errorType, errorDetail };
+}
+
+/**
+ * Classify Unipile errors and throw appropriate ApplicationFailure
+ * 422 errors = permanent failures (non-retryable)
+ * All other errors = transient failures (retryable)
+ * 401/403 errors = authentication failures (non-retryable, but workflow handles pausing)
+ */
+function handleUnipileError(error: unknown, accountId: string, identifier: string, campaignId: string): never {
+    const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
+
+    // 422 errors are permanent failures - don't retry
+    if (errorStatus === 422) {
+        logger.warn('Unipile 422 error - permanent failure', {
+            accountId,
+            identifier,
+            campaignId,
+            errorStatus,
+            errorType,
+            errorDetail,
+        });
+
+        throw ApplicationFailure.nonRetryable(
+            `Permanent failure: ${errorType || 'Unknown 422 error'}`,
+            'Unipile422Error',
+            { errorStatus, errorType, errorDetail, accountId, identifier, campaignId }
+        );
+    }
+
+    // 401/403 - authentication failures - pause campaign (workflow will handle)
+    if (errorStatus === 401 || errorStatus === 403) {
+        logger.error('Unipile authentication error - pausing campaign', {
+            accountId,
+            identifier,
+            campaignId,
+            errorStatus,
+            errorType,
+            errorDetail,
+        });
+
+        throw ApplicationFailure.nonRetryable(
+            `Authentication failed: ${errorType || 'Unknown auth error'}`,
+            'UnipileAuthError',
+            { errorStatus, errorType, errorDetail, accountId, identifier, campaignId }
+        );
+    }
+
+    // Everything else is retryable - let Temporal handle retries
+    logger.info('Unipile transient error - will retry', {
+        accountId,
+        identifier,
+        campaignId,
+        errorStatus,
+        errorType,
+        errorDetail,
+    });
+
+    throw ApplicationFailure.retryable(
+        `Transient error: ${errorType || 'Unknown error'}`,
+        'UnipileTransientError',
+        { errorStatus, errorType, errorDetail, accountId, identifier, campaignId }
+    );
 }
 
 export async function testActivity(input: { message: string; delay?: number }): Promise<{ success: boolean; data: any; timestamp: string }> {
@@ -93,7 +161,7 @@ export async function testActivity(input: { message: string; delay?: number }): 
     return result;
 }
 
-export async function test(input: any): Promise<any> {
+export async function test(input: Record<string, unknown>): Promise<{ success: boolean; data: { skipped: boolean; reason: string } }> {
     return { success: true, data: { skipped: true, reason: 'Not implemented yet' } };
 }
 
@@ -172,128 +240,101 @@ export async function verifyUnipileAccount(sender_account: string) {
 // LINKEDIN ACTIONS
 // These activities return ActivityResult to support conditional workflow paths
 
-export async function profile_visit(accountId: string, identifier: string, campaignId: string): Promise<ActivityResult> {
-    logger.info('profile_visit');
-    console.log('identifier', identifier, 'accountId', accountId, 'campaignId', campaignId);
+export async function profile_visit(accountId: string, identifier: string, campaignId: string): Promise<ProfileVisitResult> {
+    logger.info('profile_visit', { identifier, accountId, campaignId });
     const unipileService = new UnipileService();
     try {
-        const result: any = await unipileService.visitLinkedInProfile({
+        const result = await unipileService.visitLinkedInProfile({
             accountId: accountId,
             identifier: identifier,
             notify: false,
         });
-        const lead_data = {
-            first_name: result?.first_name as string,
-            last_name: result?.last_name as string,
-            company: result?.work_experience?.[0]?.company ?? undefined,
-        };
-        return { success: true, message: 'Profile visit completed', data: null, providerId: result?.provider_id, lead_data };
-    } catch (error: any) {
-        // Unipile SDK error structure: error.error.body.{status, type, detail}
-        const errorStatus = error?.error?.body?.status || error?.error?.status;
-        const errorType = (error?.error?.body?.type || error?.error?.type) as EProviderError;
-        const errorDetail = error?.error?.body?.detail || error?.error?.detail;
 
-        // Check for 422 errors (profile not found, recipient cannot be reached, etc.)
-        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
-        if (!result) {
-            return {
-                success: false,
-                message: errorDetail,
-                data: {
-                    error: {
-                        type: errorType,
-                        message: errorDetail || 'Unknown',
-                        statusCode: errorStatus,
-                    },
-                },
-            };
+        // Type guard to check if result has LinkedIn profile structure
+        const linkedInResult = result as { provider_id?: string; first_name?: string; last_name?: string; work_experience?: Array<{ company?: string }> };
+
+        if (!linkedInResult?.provider_id) {
+            throw ApplicationFailure.nonRetryable(
+                'Profile visit succeeded but no provider_id returned',
+                'MissingProviderId',
+                { accountId, identifier, campaignId }
+            );
         }
-        return result;
+
+        const lead_data = {
+            first_name: linkedInResult.first_name || '',
+            last_name: linkedInResult.last_name || '',
+            company: linkedInResult.work_experience?.[0]?.company ?? undefined,
+        };
+
+        return {
+            providerId: linkedInResult.provider_id,
+            lead_data,
+        };
+    } catch (error: unknown) {
+        // If it's already an ApplicationFailure, rethrow it
+        if (error instanceof ApplicationFailure) {
+            throw error;
+        }
+
+        // Handle Unipile errors
+        handleUnipileError(error, accountId, identifier, campaignId);
     }
 }
 
-export async function like_post(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<ActivityResult> {
-    logger.info('like_post');
+export async function like_post(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<LikePostResult> {
+    logger.info('like_post', { accountId, identifier, campaignId });
     const unipileService = new UnipileService();
 
     const leadAccount = await profile_visit(accountId, identifier, campaignId);
 
-    console.log(leadAccount.providerId);
-    if (!leadAccount.providerId) {
-        return { success: false, message: 'Lead LinkedIn Urn not found' };
-    }
     try {
-        const result = await unipileService.likeLinkedInPost({
+        await unipileService.likeLinkedInPost({
             accountId: accountId,
             linkedInUrn: leadAccount.providerId,
             lastDays: config?.recentPostDays || 7,
             reactionType: 'like',
         });
-    } catch (error: any) {
-        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
-        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
-        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
-        if (!result) {
-            return {
-                success: false,
-                message: errorDetail,
-                data: {
-                    error: {
-                        type: errorType,
-                        message: errorDetail || 'Unknown',
-                        statusCode: errorStatus,
-                    },
-                },
-            };
+
+        return { success: true, message: 'Post liked successfully' };
+    } catch (error: unknown) {
+        // If it's already an ApplicationFailure, rethrow it
+        if (error instanceof ApplicationFailure) {
+            throw error;
         }
-        return result;
+
+        // Handle Unipile errors
+        handleUnipileError(error, accountId, identifier, campaignId);
     }
-    return { success: true, message: 'Post liked successfully' };
 }
 
-export async function comment_post(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<ActivityResult> {
-    logger.info('comment_post');
+export async function comment_post(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<CommentPostResult> {
+    logger.info('comment_post', { accountId, identifier, campaignId });
     const unipileService = new UnipileService();
     const leadAccount = await profile_visit(accountId, identifier, campaignId);
-    if (!leadAccount.providerId) {
-        return { success: false, message: 'Lead LinkedIn Urn not found' };
-    }
+
     try {
-        const result = await unipileService.commentLinkedInPost({
+        await unipileService.commentLinkedInPost({
             accountId: accountId,
             linkedInUrn: leadAccount.providerId,
             config: config,
         });
         return { success: true, message: 'Comment posted successfully' };
-    } catch (error: any) {
-        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
-        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
-        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
-        if (!result) {
-            return {
-                success: false,
-                message: errorDetail,
-                data: {
-                    error: {
-                        type: errorType,
-                        message: errorDetail || 'Unknown',
-                        statusCode: errorStatus,
-                    },
-                },
-            };
+    } catch (error: unknown) {
+        // If it's already an ApplicationFailure, rethrow it
+        if (error instanceof ApplicationFailure) {
+            throw error;
         }
-        return result;
+
+        // Handle Unipile errors
+        handleUnipileError(error, accountId, identifier, campaignId);
     }
 }
 
-export async function send_followup(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string, leadData?: { first_name?: string | null; last_name?: string | null; company?: string | null }): Promise<ActivityResult> {
-    logger.info('send_followup');
+export async function send_followup(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string, leadData?: { first_name?: string | null; last_name?: string | null; company?: string | null }): Promise<FollowUpResult> {
+    logger.info('send_followup', { accountId, identifier, campaignId });
     const unipileService = new UnipileService();
     const leadAccount = await profile_visit(accountId, identifier, campaignId);
-    if (!leadAccount.providerId) {
-        return { success: false, message: 'Lead LinkedIn Urn not found', data: leadAccount };
-    }
 
     // Prepare template data from lead data - only first_name, last_name, and company
     const templateData = {
@@ -310,202 +351,86 @@ export async function send_followup(accountId: string, identifier: string, confi
             templateData: templateData,
         });
         return { success: true, message: 'Follow-up message sent', data: result };
-    } catch (error: any) {
-        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
-        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
-        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
-        if (!result) {
-            return {
-                success: false,
-                message: errorDetail,
-                data: {
-                    error: {
-                        type: errorType,
-                        message: errorDetail || 'Unknown',
-                        statusCode: errorStatus,
-                    },
-                },
-            };
+    } catch (error: unknown) {
+        // If it's already an ApplicationFailure, rethrow it
+        if (error instanceof ApplicationFailure) {
+            throw error;
         }
-        return result;
+
+        // Handle Unipile errors
+        handleUnipileError(error, accountId, identifier, campaignId);
     }
 }
 
-export async function send_inmail(): Promise<ActivityResult> {
+export async function send_inmail(): Promise<{ success: true; message: string }> {
     logger.info('send_inmail');
     // FOR NOW JUST LOG THE THINGS, WE NEED TO ADD UNIPILE FUNCTIONALITY
     return { success: true, message: 'InMail sent successfully' };
 }
 
-export async function withdraw_request(accountId: string, identifier: string, campaignId: string): Promise<ActivityResult> {
-    logger.info('withdraw_request', { accountId, identifier });
+export async function withdraw_request(accountId: string, identifier: string, campaignId: string): Promise<WithdrawRequestResult> {
+    logger.info('withdraw_request', { accountId, identifier, campaignId });
     const unipileService = new UnipileService();
     try {
         const { providerId } = await profile_visit(accountId, identifier, campaignId);
-        if (!providerId) {
-            return { success: false, message: 'Provider ID not found' };
-        }
         await unipileService.withdrawLinkedInInvitationRequest({ accountId, providerId });
         return { success: true, message: 'Request withdrawn' };
-    } catch (error: any) {
-        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
-        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
-        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
-        if (!result) {
-            return {
-                success: false,
-                message: errorDetail,
-                data: {
-                    error: {
-                        type: errorType,
-                        message: errorDetail || 'Unknown',
-                        statusCode: errorStatus,
-                    },
-                },
-            };
+    } catch (error: unknown) {
+        // If it's already an ApplicationFailure, rethrow it
+        if (error instanceof ApplicationFailure) {
+            throw error;
         }
-        return result;
+
+        // Handle Unipile errors
+        handleUnipileError(error, accountId, identifier, campaignId);
     }
 }
 
-export async function isConnected(accountId: string, identifier: string, campaignId: string): Promise<ActivityResult> {
-    logger.info('isConnected', { accountId, identifier });
+export async function isConnected(accountId: string, identifier: string, campaignId: string): Promise<{ connected: boolean }> {
+    logger.info('isConnected', { accountId, identifier, campaignId });
     const unipileService = new UnipileService();
     try {
         const result = await unipileService.isConnected({ accountId, identifier });
-        return { success: true, message: 'Connection status checked', data: { connected: result } };
-    } catch (error: any) {
-        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
-        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
-        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
-        if (!result) {
-            return {
-                success: false,
-                message: errorDetail,
-                data: {
-                    error: {
-                        type: errorType,
-                        message: errorDetail || 'Unknown',
-                        statusCode: errorStatus,
-                    },
-                },
-            };
+        return { connected: result };
+    } catch (error: unknown) {
+        // If it's already an ApplicationFailure, rethrow it
+        if (error instanceof ApplicationFailure) {
+            throw error;
         }
-        return result;
+
+        // Handle Unipile errors
+        handleUnipileError(error, accountId, identifier, campaignId);
     }
 }
 
-export async function send_connection_request(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<ActivityResult> {
+export async function send_connection_request(accountId: string, identifier: string, config: WorkflowNodeConfig, campaignId: string): Promise<ConnectionRequestResult> {
     logger.info('send_connection_request - Starting', { accountId, identifier, campaignId });
     const unipileService = new UnipileService();
 
     // Get provider ID from profile visit
-    let providerId: string | undefined;
-    try {
-        const profileVisitResult = await profile_visit(accountId, identifier, campaignId);
-
-        // If profile visit failed, return early without pausing campaign
-        if (!profileVisitResult.success) {
-            logger.warn('Profile visit failed - cannot send connection request', {
-                accountId,
-                identifier,
-                campaignId,
-                profileVisitResult,
-            });
-            return {
-                success: false,
-                message: profileVisitResult.message || 'Failed to visit profile before sending connection request',
-                data: profileVisitResult.data || {
-                    error: {
-                        type: 'profile_visit_failed',
-                        message: 'Profile visit failed, cannot send connection request',
-                    },
-                },
-            };
-        }
-
-        providerId = profileVisitResult.providerId;
-
-        if (!providerId) {
-            logger.warn('Provider ID not found after profile visit - marking lead as failed and continuing', {
-                accountId,
-                identifier,
-                campaignId,
-                profileVisitResult,
-            });
-            return {
-                success: false,
-                message: 'Provider ID not found',
-                data: {
-                    error: {
-                        type: 'provider_id_not_found',
-                        message: 'Failed to extract provider ID from LinkedIn profile',
-                        accountId,
-                        identifier,
-                    },
-                },
-            };
-        }
-
-        logger.info('Profile visit successful, provider ID extracted', {
-            accountId,
-            identifier,
-            providerId,
-        });
-    } catch (error: any) {
-        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
-        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
-
-        // Check for 422 errors (profile not found, recipient cannot be reached, etc.)
-        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
-        if (!result) {
-            return {
-                success: false,
-                message: errorDetail,
-                data: {
-                    error: {
-                        type: errorType,
-                        message: errorDetail || 'Unknown',
-                        statusCode: errorStatus,
-                    },
-                },
-            };
-        }
-        return result;
-    }
+    const profileVisitResult = await profile_visit(accountId, identifier, campaignId);
+    const providerId = profileVisitResult.providerId;
 
     try {
         // Check if already connected
         let alreadyConnected = false;
         try {
-            alreadyConnected = await unipileService.isConnected({ accountId, identifier });
+            const connectionStatus = await isConnected(accountId, identifier, campaignId);
+            alreadyConnected = connectionStatus.connected;
             logger.info('Connection status checked', {
                 accountId,
                 identifier,
                 providerId,
                 alreadyConnected,
             });
-        } catch (error: any) {
-            // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
-            const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
-
-            // Check for 422 errors (profile not found, recipient cannot be reached, etc.)
-            const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId });
-            if (!result) {
-                return {
-                    success: false,
-                    message: errorDetail,
-                    data: {
-                        error: {
-                            type: errorType,
-                            message: errorDetail || 'Unknown',
-                            statusCode: errorStatus,
-                        },
-                    },
-                };
-            }
-            return result;
-            // Continue with sending request even if connection check fails
+        } catch (error: unknown) {
+            // If connection check fails, log but continue - might be transient error
+            logger.warn('Connection check failed, continuing with invitation', {
+                accountId,
+                identifier,
+                providerId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
         }
 
         if (alreadyConnected) {
@@ -515,9 +440,8 @@ export async function send_connection_request(accountId: string, identifier: str
                 providerId,
             });
             return {
-                success: true,
-                message: 'User is already connected',
-                data: { connected: true, alreadyConnected: true, providerId },
+                providerId,
+                alreadyConnected: true,
             };
         }
 
@@ -533,9 +457,8 @@ export async function send_connection_request(accountId: string, identifier: str
             },
         });
 
-        let invitationResult: any;
         try {
-            invitationResult = await unipileService.sendLinkedInInvitation({
+            await unipileService.sendLinkedInInvitation({
                 accountId: accountId,
                 providerId: providerId,
                 config: config,
@@ -546,27 +469,29 @@ export async function send_connection_request(accountId: string, identifier: str
                 identifier,
                 providerId,
                 campaignId,
-                invitationResult: invitationResult ? 'received' : 'null',
             });
-        } catch (invitationError: any) {
-            const invitationErrorBody = invitationError as UnipileError;
-            logger.error('Failed to send LinkedIn invitation', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                error: invitationError.message,
-                errorStack: invitationError.stack,
-                errorBody: invitationErrorBody?.error?.body,
-                errorStatus: invitationErrorBody?.error?.body?.status,
-                errorType: invitationErrorBody?.error?.body?.type,
-                errorDetail: invitationErrorBody?.error?.body?.detail,
-                fullError: invitationError,
-            });
-            throw invitationError; // Re-throw to be caught by outer catch
+        } catch (invitationError: unknown) {
+            // Check for already_invited_recently error - this is a special case
+            const { errorStatus, errorType } = extractUnipileError(invitationError);
+            if (errorType === EProviderError.AlreadyInvitedRecently) {
+                logger.info('Connection request already sent recently', {
+                    accountId,
+                    identifier,
+                    providerId,
+                    campaignId,
+                });
+                // Return success with alreadyInvited flag - workflow will handle polling
+                return {
+                    providerId,
+                    alreadyInvited: true,
+                };
+            }
+
+            // For all other errors, let handleUnipileError throw appropriate ApplicationFailure
+            handleUnipileError(invitationError, accountId, identifier, campaignId);
         }
 
-        // Increment connection request counters for the campaign
+        // Increment connection request counters for the campaign (non-blocking)
         try {
             const campaignService = new CampaignService();
             const campaign = await campaignService.getCampaignById(campaignId);
@@ -583,65 +508,30 @@ export async function send_connection_request(accountId: string, identifier: str
                     campaignId,
                     dailyCount: currentDayCount,
                     weeklyCount: currentWeekCount,
-                    previousDailyCount: campaign.requests_sent_this_day,
-                    previousWeeklyCount: campaign.requests_sent_this_week,
-                });
-            } else {
-                logger.warn('Campaign not found when updating connection request counters', {
-                    campaignId,
                 });
             }
-        } catch (counterError: any) {
+        } catch (counterError: unknown) {
             logger.error('Failed to increment campaign connection request counters', {
                 accountId,
                 identifier,
                 providerId,
                 campaignId,
-                error: counterError.message,
-                errorStack: counterError.stack,
-                errorType: counterError.constructor?.name,
+                error: counterError instanceof Error ? counterError.message : 'Unknown error',
             });
             // Don't fail the request if counter update fails
         }
 
         return {
-            success: true,
-            message: 'Connection request sent',
-            data: { providerId, invitationSent: true },
-        };
-    } catch (error: any) {
-        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
-        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
-
-        // Log extracted values for debugging
-        logger.info('Extracted error from send_connection_request', {
-            accountId,
-            identifier,
-            campaignId,
             providerId,
-            errorStatus,
-            errorType,
-            errorDetail,
-            hasError: !!error,
-            hasErrorError: !!error?.error,
-            hasErrorErrorBody: !!error?.error?.body,
-        });
-
-        const result = await handleProviderErrors({ errorStatus, errorType, errorDetail, accountId, identifier, campaignId, providerId });
-        if (!result) {
-            return {
-                success: false,
-                message: errorDetail,
-                data: {
-                    error: {
-                        type: errorType,
-                        message: errorDetail || 'Unknown',
-                        statusCode: errorStatus,
-                    },
-                },
-            };
+        };
+    } catch (error: unknown) {
+        // If it's already an ApplicationFailure, rethrow it
+        if (error instanceof ApplicationFailure) {
+            throw error;
         }
-        return result;
+
+        // Handle Unipile errors
+        handleUnipileError(error, accountId, identifier, campaignId);
     }
 }
 
@@ -691,7 +581,12 @@ export async function checkConnectionRequestLimits(campaignId: string): Promise<
     const lastDailyReset = campaign.last_daily_requests_reset ? new Date(campaign.last_daily_requests_reset) : null;
     const lastWeeklyReset = campaign.last_weekly_requests_reset ? new Date(campaign.last_weekly_requests_reset) : null;
 
-    const updateData: any = {};
+    const updateData: {
+        requests_sent_this_day?: number;
+        last_daily_requests_reset?: string;
+        requests_sent_this_week?: number;
+        last_weekly_requests_reset?: string;
+    } = {};
 
     // Reset daily counter if needed
     if (!lastDailyReset || isNewDay(lastDailyReset, now)) {
@@ -764,7 +659,7 @@ function getNextWeekReset(now: Date): Date {
     return next;
 }
 
-export async function check_connection_status(accountId: string, identifier: string, providerId: string, campaignId: string): Promise<ActivityResult> {
+export async function check_connection_status(accountId: string, identifier: string, providerId: string, campaignId: string): Promise<ConnectionStatusResult> {
     logger.info('check_connection_status - Starting', {
         accountId,
         identifier,
@@ -772,192 +667,89 @@ export async function check_connection_status(accountId: string, identifier: str
         campaignId,
     });
 
+    const unipileService = new UnipileService();
+
+    // Check if connected (accepted)
+    let connected = false;
     try {
-        const unipileService = new UnipileService();
+        connected = await unipileService.isConnected({ accountId, identifier });
+        logger.info('Connection status checked (isConnected)', {
+            accountId,
+            identifier,
+            providerId,
+            connected,
+        });
+    } catch (error: unknown) {
+        // If connection check fails, log but continue - might be transient
+        // We'll check invitation status below
+        logger.warn('Failed to check if user is connected, continuing with invitation check', {
+            accountId,
+            identifier,
+            providerId,
+            campaignId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+    }
 
-        // Check if connected (accepted)
-        let connected = false;
-        try {
-            connected = await unipileService.isConnected({ accountId, identifier });
-            logger.info('Connection status checked (isConnected)', {
-                accountId,
-                identifier,
-                providerId,
-                connected,
-            });
-        } catch (error: any) {
-            const errorBody = error as UnipileError;
-            logger.error('Failed to check if user is connected', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                error: error.message,
-                errorStack: error.stack,
-                errorBody: errorBody?.error?.body,
-                errorStatus: errorBody?.error?.body?.status,
-                errorType: errorBody?.error?.body?.type,
-            });
-            // Continue to check invitation status even if connection check fails
-        }
-
-        if (connected) {
-            logger.info('User is CONNECTED (request accepted)', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-            });
-            return {
-                success: true,
-                message: 'User is connected',
-                data: { connected: true, status: 'accepted' },
-            };
-        }
-
-        // Check if invitation still pending or was rejected
-        let invitationStillExists = false;
-        try {
-            invitationStillExists = await unipileService.isInvitationPending({
-                accountId,
-                providerId,
-            });
-            logger.info('Invitation status checked (isInvitationPending)', {
-                accountId,
-                identifier,
-                providerId,
-                invitationStillExists,
-            });
-        } catch (error: any) {
-            const errorBody = error as UnipileError;
-            logger.error('Failed to check if invitation is pending', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                error: error.message,
-                errorStack: error.stack,
-                errorBody: errorBody?.error?.body,
-                errorStatus: errorBody?.error?.body?.status,
-                errorType: errorBody?.error?.body?.type,
-            });
-            // If we can't check invitation status, assume it's still pending
-            // This allows polling to continue
-            invitationStillExists = true;
-        }
-
-        if (!invitationStillExists) {
-            logger.warn('Invitation not found (request rejected)', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-            });
-            return {
-                success: false,
-                message: 'Connection request was rejected',
-                data: { connected: false, status: 'rejected' },
-            };
-        }
-
-        // Still pending
-        logger.info('Connection request still pending', {
+    if (connected) {
+        logger.info('User is CONNECTED (request accepted)', {
             accountId,
             identifier,
             providerId,
             campaignId,
         });
         return {
-            success: false,
-            message: 'Connection request still pending',
-            data: { connected: false, status: 'pending' },
+            status: 'accepted',
+            providerId,
         };
-    } catch (error: any) {
-        // Extract error following UnipileError interface structure: error.error.body.{status, type, detail}
-        const { errorStatus, errorType, errorDetail } = extractUnipileError(error);
-
-        if (errorStatus === 422) {
-            logger.error('Profile not found while checking connection status (422)', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                errorStatus,
-                errorType,
-                errorDetail,
-                errorMessage: error.message,
-                fullError: error,
-            });
-            return {
-                success: false,
-                message: 'Profile not found',
-                data: {
-                    connected: false,
-                    status: 'error',
-                    error: {
-                        type: 'profile_not_found',
-                        message: 'Profile not found during connection status check',
-                        statusCode: 422,
-                        errorType: errorType,
-                        errorDetail: errorDetail,
-                    },
-                },
-            };
-        } else if (errorStatus === 429) {
-            logger.error('Rate limit exceeded while checking connection status (429)', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                errorStatus,
-                errorType,
-                errorDetail,
-                errorMessage: error.message,
-            });
-            // Don't pause campaign for rate limits during status checks - just return error
-            return {
-                success: false,
-                message: 'Rate limit exceeded while checking connection status',
-                data: {
-                    connected: false,
-                    status: 'error',
-                    error: {
-                        type: 'rate_limit_exceeded',
-                        message: 'Too many status check requests',
-                        statusCode: 429,
-                    },
-                },
-            };
-        } else {
-            logger.error('Error checking connection status - unexpected error', {
-                accountId,
-                identifier,
-                providerId,
-                campaignId,
-                errorStatus,
-                errorType,
-                errorDetail,
-                errorMessage: error.message,
-                errorStack: error.stack,
-                fullError: error,
-            });
-            await pauseCampaign(campaignId);
-            return {
-                success: false,
-                message: `Error checking connection status: ${error.message}`,
-                data: {
-                    campaignPaused: true,
-                    error: {
-                        type: 'check_connection_status_failed',
-                        message: error.message || 'Failed to check connection status',
-                        statusCode: errorStatus,
-                        errorType: errorType,
-                        details: errorDetail || {},
-                    },
-                },
-            };
-        }
     }
+
+    // Check if invitation still pending or was rejected
+    let invitationStillExists = false;
+    try {
+        invitationStillExists = await unipileService.isInvitationPending({
+            accountId,
+            providerId,
+        });
+        logger.info('Invitation status checked (isInvitationPending)', {
+            accountId,
+            identifier,
+            providerId,
+            invitationStillExists,
+        });
+    } catch (error: unknown) {
+        // If we can't check invitation status, throw error - let Temporal retry
+        // This is a transient error that should be retried
+        if (error instanceof ApplicationFailure) {
+            throw error;
+        }
+        handleUnipileError(error, accountId, identifier, campaignId);
+    }
+
+    if (!invitationStillExists) {
+        logger.warn('Invitation not found (request rejected)', {
+            accountId,
+            identifier,
+            providerId,
+            campaignId,
+        });
+        return {
+            status: 'rejected',
+            providerId,
+        };
+    }
+
+    // Still pending - return pending status so workflow can continue polling
+    logger.info('Connection request still pending', {
+        accountId,
+        identifier,
+        providerId,
+        campaignId,
+    });
+    return {
+        status: 'pending',
+        providerId,
+    };
 }
 
 export async function updateCampaignStep(campaignId: string, stepType: EWorkflowNodeType, config: WorkflowNodeConfig, success: boolean, results: Record<string, any>, stepIndex: number, organizationId: string, leadId: string): Promise<ActivityResult> {
@@ -1004,16 +796,16 @@ export async function updateCampaignStep(campaignId: string, stepType: EWorkflow
             message: 'Campaign step updated successfully',
             data: { stepIndex },
         };
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('Error updating campaign step', {
-            error: error.message,
+            error: error instanceof Error ? error.message : 'Unknown error',
             campaignId,
             stepIndex,
             stepType,
         });
         return {
             success: false,
-            message: `Failed to update campaign step: ${error.message}`,
+            message: `Failed to update campaign step: ${error instanceof Error ? error.message : 'Unknown error'}`,
         };
     }
 }
@@ -1022,7 +814,7 @@ export function CheckNever(value: never): never {
     throw new Error(`Unhandled case: ${value}`);
 }
 
-export const isNullOrUndefined = (it: any) => it === null || it === undefined;
+export const isNullOrUndefined = (it: unknown): it is null | undefined => it === null || it === undefined;
 
 export async function extractLinkedInPublicIdentifier(url: string): Promise<string | null> {
     return CsvService.extractLinkedInPublicIdentifier(url);
@@ -1172,505 +964,11 @@ export async function checkTimeWindow(startTime: string | null | undefined, endT
     }
 }
 
-export const handleProviderErrors = async ({ errorType, errorStatus, errorDetail, accountId, identifier, campaignId, providerId }: { errorType?: EProviderError; errorStatus?: number; errorDetail?: string; accountId: string; identifier: string; campaignId: string; providerId?: string }): Promise<ActivityResult | undefined> => {
-    if (errorStatus === 422 && errorType) {
-        switch (errorType) {
-            case EProviderError.InvalidAccount:
-                logger.warn('Invalid Account', {
-                    accountId,
-                    identifier,
-                    campaignId,
-                    errorType,
-                });
-                return {
-                    success: false,
-                    message: 'Invalid Account',
-                    data: {
-                        error: {
-                            type: EProviderError.InvalidAccount,
-                            message: errorDetail || 'The Unipile Account is invalid',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.InvalidRecipient:
-                return {
-                    success: false,
-                    message: 'Recipient cannot be reached',
-                    data: {
-                        error: {
-                            type: 'recipient_unreachable',
-                            message: errorDetail || 'The recipient cannot be reached. Profile may be locked or invalid.',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.NoConnectionWithRecipient:
-                return {
-                    success: false,
-                    message: 'Recipient cannot be reached',
-                    data: {
-                        error: {
-                            type: 'recipient_unreachable',
-                            message: errorDetail || 'The recipient cannot be reached. Because no connections with recipient.',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.BlockedRecipient:
-                return {
-                    success: false,
-                    message: 'Blocked Recipient',
-                    data: {
-                        error: {
-                            type: EProviderError.BlockedRecipient,
-                            message: errorDetail || 'Blocked Recipient',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.UserUnreachable:
-                await pauseCampaign(campaignId);
-                return {
-                    success: false,
-                    message: 'user unreachable',
-                    data: {
-                        error: {
-                            type: EProviderError.UserUnreachable,
-                            message: errorDetail || 'Unreachable',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.UnprocessableEntity:
-                return {
-                    success: false,
-                    message: 'Unprocessable Entity',
-                    data: {
-                        error: {
-                            type: EProviderError.UnprocessableEntity,
-                            message: errorDetail || 'Unprocessable Entity',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.PaymentError:
-                return {
-                    success: false,
-                    message: 'Payment Error',
-                    data: {
-                        error: {
-                            type: EProviderError.PaymentError,
-                            message: errorDetail || 'Payment Error',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.ActionAlreadyPerformed:
-                return {
-                    success: false,
-                    message: 'Action Already Performed',
-                    data: {
-                        error: {
-                            type: EProviderError.ActionAlreadyPerformed,
-                            message: errorDetail || 'Action Already Performed',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.InvalidMessage:
-                return {
-                    success: false,
-                    message: 'Invalid Message',
-                    data: {
-                        error: {
-                            type: EProviderError.InvalidMessage,
-                            message: errorDetail || 'Invalid Message',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.InvalidPost:
-                return {
-                    success: false,
-                    message: 'Invalid Post',
-                    data: {
-                        error: {
-                            type: EProviderError.InvalidPost,
-                            message: errorDetail || 'Invalid Post',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.NotAllowedInmail:
-                return {
-                    success: false,
-                    message: 'Inmail Not Allowed',
-                    data: {
-                        error: {
-                            type: EProviderError.NotAllowedInmail,
-                            message: errorDetail || 'Inmail Now Allowed',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.InsufficientCredits:
-                return {
-                    success: false,
-                    message: 'Insufficient Credits',
-                    data: {
-                        error: {
-                            type: EProviderError.InsufficientCredits,
-                            message: errorDetail || 'Insufficient Credits',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.CannotResendYet:
-                return {
-                    success: false,
-                    message: 'Cannot Resent Yet',
-                    data: {
-                        error: {
-                            type: EProviderError.CannotResendYet,
-                            message: errorDetail || 'Cannot Resend Yet',
-                            statusCode: 422,
-                            retryAfterHours: 24,
-                            shouldRetry: true,
-                        },
-                    },
-                };
-            case EProviderError.CannotResendWithin24hrs:
-                return {
-                    success: false,
-                    message: 'Cannot Resent in 24 hours',
-                    data: {
-                        error: {
-                            type: EProviderError.CannotResendWithin24hrs,
-                            message: errorDetail || 'Cannot Resent in 24 hours',
-                            statusCode: 422,
-                            retryAfterHours: 24,
-                            shouldRetry: true,
-                        },
-                    },
-                };
-            case EProviderError.LimitExceeded:
-                return {
-                    success: false,
-                    message: 'Provider Limit Execeeded',
-                    data: {
-                        error: {
-                            type: EProviderError.LimitExceeded,
-                            message: errorDetail || 'Provider Limit Exceeded',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.AlreadyInvitedRecently:
-                return {
-                    success: false,
-                    message: 'Alread Invited',
-                    data: {
-                        error: {
-                            type: EProviderError.AlreadyInvitedRecently,
-                            message: errorDetail || 'Alread Invited',
-                            statusCode: 422,
-                        },
-                        providerId: providerId, // Include providerId so workflow can start polling
-                        alreadyInvited: true,
-                    },
-                };
-            case EProviderError.AlreadyConnected:
-                return {
-                    success: false,
-                    message: 'Recipient cannot be reached',
-                    data: {
-                        error: {
-                            type: 'recipient_unreachable',
-                            message: errorDetail || 'The recipient cannot be reached. Profile may be locked or invalid.',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.CannotInviteAttendee:
-                return {
-                    success: false,
-                    message: 'Cannot Invite',
-                    data: {
-                        error: {
-                            type: EProviderError.CannotInviteAttendee,
-                            message: errorDetail || 'Cannot Invite',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.ParentMailNotFound:
-                return {
-                    success: false,
-                    message: 'Parent Mail Not Found',
-                    data: {
-                        error: {
-                            type: EProviderError.ParentMailNotFound,
-                            message: errorDetail || 'Parent Mail Not Found',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.InvalidReplySubject:
-                return {
-                    success: false,
-                    message: 'Invalid Reply Subject',
-                    data: {
-                        error: {
-                            type: EProviderError.InvalidReplySubject,
-                            message: errorDetail || 'Invalid Reply Subject',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.InvalidHeaders:
-                return {
-                    success: false,
-                    message: 'Invalid Headers',
-                    data: {
-                        error: {
-                            type: EProviderError.InvalidHeaders,
-                            message: errorDetail || 'Invalid Headers',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.SendAsDenied:
-                return {
-                    success: false,
-                    message: 'Denied',
-                    data: {
-                        error: {
-                            type: EProviderError.SendAsDenied,
-                            message: errorDetail || 'Denied',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.InvalidFolder:
-                return {
-                    success: false,
-                    message: 'Invalid Folder',
-                    data: {
-                        error: {
-                            type: EProviderError.InvalidFolder,
-                            message: errorDetail || 'Invalid Folder',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.InvalidThread:
-                return {
-                    success: false,
-                    message: 'Invalid thread',
-                    data: {
-                        error: {
-                            type: EProviderError.InvalidThread,
-                            message: errorDetail || 'Invalid Thread',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.LimitTooHigh:
-                return {
-                    success: false,
-                    message: 'Limit too high',
-                    data: {
-                        error: {
-                            type: EProviderError.LimitTooHigh,
-                            message: errorDetail || 'Limit too high',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.Unauthorized:
-                return {
-                    success: false,
-                    message: 'Unauthorized',
-                    data: {
-                        error: {
-                            type: EProviderError.Unauthorized,
-                            message: errorDetail || 'Unauthorized',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.SenderRejected:
-                return {
-                    success: false,
-                    message: 'Sender Rejected',
-                    data: {
-                        error: {
-                            type: EProviderError.SenderRejected,
-                            message: errorDetail || 'Sender Rejected',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.RecipientRejected:
-                return {
-                    success: false,
-                    message: 'Recipient Rejected',
-                    data: {
-                        error: {
-                            type: EProviderError.RecipientRejected,
-                            message: errorDetail || 'Recipient Rejected',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.IpRejectedByServer:
-                return {
-                    success: false,
-                    message: 'Ip Rejected By Server',
-                    data: {
-                        error: {
-                            type: EProviderError.IpRejectedByServer,
-                            message: errorDetail || 'Ip Rejected By Server',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true, //very serious error
-                };
-            case EProviderError.ProviderUnreachable:
-                await pauseCampaign(campaignId);
-                return {
-                    success: false,
-                    message: 'Provider Unreachable',
-                    data: {
-                        error: {
-                            type: EProviderError.ProviderUnreachable,
-                            message: errorDetail || 'Provider Unreachable',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.AccountConfigurationError:
-                await pauseCampaign(campaignId);
-                return {
-                    success: false,
-                    message: 'Account Config Error',
-                    data: {
-                        error: {
-                            type: EProviderError.AccountConfigurationError,
-                            message: errorDetail || 'Account Config Error',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.CantSendMessage:
-                return {
-                    success: false,
-                    message: 'Cannot Sent Message',
-                    data: {
-                        error: {
-                            type: EProviderError.CantSendMessage,
-                            message: errorDetail || 'Cannot Sent Message',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.RealtimeClientNotInitialized:
-                return {
-                    success: false,
-                    message: 'Realtime Client Not Initialized',
-                    data: {
-                        error: {
-                            type: EProviderError.RealtimeClientNotInitialized,
-                            message: errorDetail || 'Realtime Client Not Initialized',
-                            statusCode: 422,
-                        },
-                    },
-                    criticalError: true,
-                };
-            case EProviderError.CommentsDisabled:
-                return {
-                    success: false,
-                    message: 'Comments Disabled',
-                    data: {
-                        error: {
-                            type: EProviderError.CommentsDisabled,
-                            message: errorDetail || 'Comments Disabled',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            case EProviderError.InsufficientJobSlot:
-                return {
-                    success: false,
-                    message: 'Insufficient Job slots',
-                    data: {
-                        error: {
-                            type: EProviderError.InsufficientJobSlot,
-                            message: errorDetail || 'Insufficient Job slots',
-                            statusCode: 422,
-                        },
-                    },
-                };
-            default:
-                CheckNever(errorType);
-        }
-    }
-    if (errorStatus === 401 || errorStatus === 403) {
-        logger.error('Authentication/authorization failed - pausing campaign', {
-            accountId,
-            identifier,
-            campaignId,
-            errorStatus,
-            errorType,
-            errorDetail,
-        });
-        await pauseCampaign(campaignId);
-        return {
-            success: false,
-            message: 'Account authentication failed',
-            data: {
-                campaignPaused: true,
-                error: {
-                    type: 'account_verification_failed',
-                    message: errorDetail || 'Failed to verify Unipile account',
-                    statusCode: errorStatus,
-                },
-            },
-        };
-    }
-    if (errorStatus === 429) {
-        await pauseCampaign(campaignId);
-        return {
-            success: false,
-            message: 'Rate limit exceeded',
-            data: {
-                campaignPaused: true,
-                error: {
-                    type: 'rate_limit_exceeded',
-                    message: errorDetail || 'Rate Limit Exceeded',
-                    statusCode: 429,
-                },
-            },
-        };
-    }
-};
+// REMOVED: handleProviderErrors - replaced with handleUnipileError which throws ApplicationFailure
+// This function is no longer used. All activities now use handleUnipileError() which throws
+// ApplicationFailure.retryable() or ApplicationFailure.nonRetryable() instead of returning ActivityResult.
 
-export const callWebhook = async (webhookId: string, leadId: string): Promise<ActivityResult> => {
+export const callWebhook = async (webhookId: string, leadId: string): Promise<WebhookResult> => {
     const webhookRepository = new WebhookRepository();
     const leadRepository = new LeadRepository();
     const campaignService = new CampaignService();
@@ -1686,13 +984,7 @@ export const callWebhook = async (webhookId: string, leadId: string): Promise<Ac
             return {
                 success: false,
                 message: 'Webhook not found',
-                data: {
-                    error: {
-                        type: 'webhook_not_found',
-                        message: 'Webhook not found',
-                        statusCode: 404,
-                    },
-                },
+                webhookId: undefined,
             };
         }
         const response = await fetch(webhook.url, {
@@ -1703,33 +995,20 @@ export const callWebhook = async (webhookId: string, leadId: string): Promise<Ac
             return {
                 success: false,
                 message: 'Failed to call webhook',
-                data: {
-                    error: {
-                        type: 'webhook_failed',
-                        message: 'Failed to call webhook',
-                        statusCode: response.status,
-                    },
-                },
+                webhookId: undefined,
             };
         }
         return {
             success: true,
             message: 'Webhook called successfully',
-            data: {
-                webhookId,
-            },
+            webhookId,
         };
     } catch (err) {
         logger.error('Failed to call webhook', { error: err, webhookId, leadId });
         return {
             success: false,
             message: 'Failed to call webhook',
-            data: {
-                error: {
-                    type: 'webhook_failed',
-                    message: err instanceof Error ? err.message : 'Failed to call webhook',
-                },
-            },
+            webhookId: undefined,
         };
     }
 };

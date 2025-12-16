@@ -1,16 +1,16 @@
-import { log, proxyActivities, sleep, startChild } from '@temporalio/workflow';
+import { log, proxyActivities, sleep, startChild, condition, defineSignal, setHandler } from '@temporalio/workflow';
 import type * as activities from '../activities';
-import { ActivityResult, leadWorkflow } from './leadWorkflow';
+import { leadWorkflow } from './leadWorkflow';
 import { CampaignStatus } from '../../dto/campaigns.dto';
 // IMPORTANT DO NOT IMPORT ANYTHING ELSE HERE EVERY ACTIVITY IS TO BE DONE VIA ACTIVITIES
 
 // Create activity proxies with timeout configuration
-const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkflowByCampaignId, verifyUnipileAccount, pauseCampaign, isCampaignActive } = proxyActivities<typeof activities>({
+const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkflowByCampaignId, verifyUnipileAccount, pauseCampaign } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
         initialInterval: '1s',
         maximumInterval: '30s',
-        maximumAttempts: 3,
+        maximumAttempts: 10, // Increased for transient errors
     },
 });
 
@@ -19,38 +19,23 @@ export interface CampaignInput {
     organizationId: string;
 }
 
+// Signal definitions for pause/resume functionality
+const pauseSignal = defineSignal('pause-campaign');
+const resumeSignal = defineSignal('resume-campaign');
+
 /**
- * Helper function to wait for campaign to be unpaused
- * Keeps checking campaign status until it's no longer paused
+ * Check if campaign should continue processing
+ * Returns true if campaign is active and not paused/deleted/completed/failed
  */
-async function waitForCampaignResume(campaignId: string): Promise<void> {
-    while (true) {
-        const campaign = await getCampaignById(campaignId);
-        if (!campaign) {
-            log.error('Campaign not found while waiting for resume', { campaignId });
-            return;
-        }
-
-        // If campaign is deleted, completed, or failed, exit
-        if (campaign.is_deleted || campaign.status === CampaignStatus.COMPLETED || campaign.status === CampaignStatus.FAILED) {
-            log.warn('Campaign is deleted, completed, or failed - stopping wait', {
-                campaignId,
-                status: campaign.status,
-                is_deleted: campaign.is_deleted,
-            });
-            return;
-        }
-
-        // If campaign is not paused, resume execution
-        if (campaign.status !== CampaignStatus.PAUSED) {
-            log.info('Campaign is no longer paused - resuming execution', { campaignId, status: campaign.status });
-            return;
-        }
-
-        // Campaign is still paused, wait and check again
-        log.info('Campaign is paused - waiting before checking again', { campaignId });
-        await sleep('1 hour'); // Check every 1 hour
+async function shouldContinueCampaign(campaignId: string): Promise<boolean> {
+    const campaign = await getCampaignById(campaignId);
+    if (!campaign) {
+        return false;
     }
+    return !campaign.is_deleted &&
+           campaign.status !== CampaignStatus.PAUSED &&
+           campaign.status !== CampaignStatus.COMPLETED &&
+           campaign.status !== CampaignStatus.FAILED;
 }
 
 /**
@@ -61,6 +46,19 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
     const { campaignId, organizationId } = input;
 
     log.info('Starting campaign workflow', { campaignId, organizationId });
+
+    let isPaused = false;
+
+    // Set up signal handlers for pause/resume
+    setHandler(pauseSignal, () => {
+        isPaused = true;
+        log.info('Campaign paused via signal', { campaignId });
+    });
+
+    setHandler(resumeSignal, () => {
+        isPaused = false;
+        log.info('Campaign resumed via signal', { campaignId });
+    });
 
     // Get initial campaign data
     const campaign = await getCampaignById(campaignId);
@@ -86,10 +84,7 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
     }
 
     await entryLeadsIntoDb(leads, input.organizationId, input.campaignId);
-
     const dbLeads = await getDBLeads(input.campaignId);
-
-    // Use dbLeads.length instead of leads.length to avoid infinite loop if DB has fewer leads
     const totalLeadsToProcess = dbLeads.length;
 
     log.info('Campaign initialized', {
@@ -99,90 +94,58 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
         leadsPerDay: campaign.leads_per_day,
     });
 
-    // Safety check: if no leads in database, exit early
     if (totalLeadsToProcess === 0) {
-        log.warn('No leads found in database - ending workflow', {
-            campaignId,
-            csvLeadsCount: leads.length,
-        });
+        log.warn('No leads found in database - ending workflow', { campaignId });
         return;
     }
 
-    // Start all daily batches concurrently with delays
-    const allChildWorkflowHandles: Promise<any>[] = [];
+    const allChildWorkflowHandles: Promise<{ result: () => Promise<void> }>[] = [];
     let processedLeads = 0;
-    // Track which lead IDs have been processed to avoid duplicates
     const processedLeadIds = new Set<string>();
 
     while (processedLeads < totalLeadsToProcess) {
-        // Get campaign Everyday To Catch Any Update
+        // Wait if paused
+        if (isPaused) {
+            log.info('Campaign is paused, waiting for resume signal', { campaignId });
+            await condition(() => !isPaused);
+            log.info('Campaign resumed, continuing', { campaignId });
+        }
+
+        // Check if campaign should continue
+        if (!(await shouldContinueCampaign(campaignId))) {
+            log.warn('Campaign should not continue - stopping', { campaignId });
+            break;
+        }
+
         const campaignFetch = await getCampaignById(campaignId);
-
-        if (!campaignFetch) {
-            log.error('No Campaign Found');
+        if (!campaignFetch?.sender_account) {
+            log.error('Campaign or sender account not found', { campaignId });
             return;
         }
 
-        // Check if campaign is paused - wait until it's unpaused
-        if (campaignFetch.status === CampaignStatus.PAUSED) {
-            log.warn('Campaign is paused - waiting for resume', { campaignId });
-            await waitForCampaignResume(campaignId);
-            // After resume, continue to next iteration to re-check campaign status
-            continue;
-        }
-
-        if (campaignFetch.is_deleted) {
-            log.warn('Campaign is deleted', { campaignId });
-            await pauseCampaign(campaignId);
-            return;
-        }
-        if (!campaignFetch.sender_account) {
-            log.error('No Sender Found');
-            return;
-        }
         const unipileAccount = await verifyUnipileAccount(campaignFetch.sender_account);
-
         if (!unipileAccount) {
-            log.error('No Unipile Account Found');
+            log.error('Unipile account not found - pausing campaign', { campaignId });
             await pauseCampaign(campaignId);
             return;
         }
 
         const workflowJson = await getWorkflowByCampaignId(campaignFetch);
-
         const leadsPerDay = campaignFetch.leads_per_day || 10;
-        // Get today's batch of leads (don't exceed remaining leads)
-        // Use totalLeadsToProcess (dbLeads.length) instead of leads.length to avoid mismatch
         const remainingLeads = totalLeadsToProcess - processedLeads;
 
-        // Safety check: if no more leads to process, break out of loop
         if (remainingLeads <= 0) {
-            log.info('All leads have been processed - ending workflow', {
-                campaignId,
-                processedLeads,
-                totalLeadsToProcess,
-            });
             break;
         }
 
-        // Filter out already processed leads
+        // Get unprocessed leads
         const unprocessedLeads = dbLeads.filter(lead => !processedLeadIds.has(lead.id));
-
-        // Safety check: if no unprocessed leads remain, break
         if (unprocessedLeads.length === 0) {
-            log.info('All leads have been processed - ending workflow', {
-                campaignId,
-                processedLeads,
-                totalLeadsToProcess,
-                processedLeadIdsCount: processedLeadIds.size,
-            });
             break;
         }
 
-        // Shuffle the unprocessed leads to randomize batch selection
-        // Create a copy to avoid mutating the original array
+        // Shuffle leads for randomization
         const shuffledLeads = [...unprocessedLeads];
-        // Fisher-Yates shuffle algorithm
         for (let i = shuffledLeads.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [shuffledLeads[i], shuffledLeads[j]] = [shuffledLeads[j], shuffledLeads[i]];
@@ -196,82 +159,54 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
             batchSize: todaysLeads.length,
             processedSoFar: processedLeads,
             totalLeadsToProcess,
-            dayNumber: Math.floor(processedLeads / leadsPerDay) + 1,
-            shuffledBatch: true,
         });
 
-        // Mark these leads as processed before starting workflows
         todaysLeads.forEach(lead => processedLeadIds.add(lead.id));
 
-        // Start child workflows for this batch with random delays between each lead
+        // Start child workflows with delays
         for (let i = 0; i < todaysLeads.length; i++) {
             const lead = todaysLeads[i];
 
-            // Add random delay between 10-30 minutes before starting each lead (except the first one)
             if (i > 0) {
-                const randomMinutes = Math.floor(Math.random() * 21); // Random between 10-30 minutes
-                log.info('Waiting before starting next lead', {
-                    leadId: lead.id,
-                    delayMinutes: randomMinutes,
-                    leadNumber: i + 1,
-                    totalInBatch: todaysLeads.length,
-                });
+                const randomMinutes = 10 + Math.floor(Math.random() * 21); // 10-30 minutes
                 await sleep(`${randomMinutes} minutes`);
             }
 
             const childHandle = startChild(leadWorkflow, {
-                args: [
-                    {
-                        leadId: lead.id,
-                        workflow: workflowJson,
-                        accountId: campaignFetch.sender_account!,
-                        campaignId: campaignFetch.id,
-                        organizationId: organizationId,
-                        startTime: campaignFetch.start_time,
-                        endTime: campaignFetch.end_time,
-                        timezone: campaignFetch.timezone,
-                    },
-                ],
+                args: [{
+                    leadId: lead.id,
+                    workflow: workflowJson,
+                    accountId: campaignFetch.sender_account!,
+                    campaignId: campaignFetch.id,
+                    organizationId: organizationId,
+                    startTime: campaignFetch.start_time,
+                    endTime: campaignFetch.end_time,
+                    timezone: campaignFetch.timezone,
+                }],
                 workflowId: `lead-${lead.id}-day-${Math.floor(processedLeads / leadsPerDay) + 1}`,
                 taskQueue: 'campaign-task-queue',
             });
 
-            // Add handle to the collection for later awaiting
             allChildWorkflowHandles.push(childHandle);
         }
 
         processedLeads += todaysLeads.length;
 
-        // If there are more leads, schedule the next batch for tomorrow
+        // Wait for next day if more leads remain
         if (processedLeads < totalLeadsToProcess) {
-            log.info('Scheduling next batch for tomorrow', {
-                campaignId,
-                nextBatchStartsAt: `Day ${Math.floor(processedLeads / leadsPerDay) + 1}`,
-            });
+            log.info('Scheduling next batch for tomorrow', { campaignId });
 
-            // Sleep in smaller intervals and check campaign status periodically
-            // This allows the workflow to respond quickly if campaign is paused
-            const sleepInterval = '1 hour';
+            // Sleep in chunks and check pause status
             const totalSleepHours = 24;
             for (let hour = 0; hour < totalSleepHours; hour++) {
-                await sleep(sleepInterval);
+                await sleep('1 hour');
 
-                // Check campaign status every hour
-                const campaignCheck = await getCampaignById(campaignId);
-                if (campaignCheck?.status === CampaignStatus.PAUSED) {
-                    log.warn('Campaign paused during daily sleep - waiting for resume', { campaignId });
-                    await waitForCampaignResume(campaignId);
-                    // Break out of sleep loop and continue to next batch
-                    break;
+                // Check if paused or should stop
+                if (isPaused) {
+                    await condition(() => !isPaused);
                 }
 
-                // If campaign is deleted, completed, or failed, stop
-                if (campaignCheck?.is_deleted || campaignCheck?.status === CampaignStatus.COMPLETED || campaignCheck?.status === CampaignStatus.FAILED) {
-                    log.warn('Campaign ended during daily sleep', {
-                        campaignId,
-                        status: campaignCheck.status,
-                        is_deleted: campaignCheck.is_deleted,
-                    });
+                if (!(await shouldContinueCampaign(campaignId))) {
                     return;
                 }
             }
@@ -281,10 +216,9 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
     log.info('All batches started, waiting for completion', {
         campaignId,
         totalBatches: allChildWorkflowHandles.length,
-        totalLeadsToProcess,
     });
 
-    // Wait for ALL child workflows to complete at the end
+    // Wait for all child workflows to complete
     await Promise.all(allChildWorkflowHandles.map(async handle => (await handle).result()));
 
     log.info('Campaign workflow completed', {

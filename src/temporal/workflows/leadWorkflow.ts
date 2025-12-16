@@ -1,21 +1,21 @@
-import { log, proxyActivities, sleep } from '@temporalio/workflow';
+import { log, proxyActivities, sleep, ApplicationFailure } from '@temporalio/workflow';
 import { LeadResponseDto, LeadUpdateDto } from '../../dto/leads.dto';
 import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from '../../types/workflow.types';
 import type * as activities from '../activities';
+import { ProfileVisitResult, ConnectionRequestResult, ConnectionStatusResult, NodeResult } from '../../types/activity.types';
 import { Duration } from '@temporalio/common';
 
-// Import ActivityResult type
+// ActivityResult type for workflow compatibility - activities now throw ApplicationFailure instead
 export type ActivityResult = {
     success: boolean;
     message?: string;
-    data?: any;
+    data?: unknown;
     providerId?: string;
     lead_data?: {
         first_name: string;
         last_name: string;
         company?: string;
     };
-    criticalError?: boolean;
 };
 
 const { profile_visit, like_post, comment_post, send_followup, withdraw_request, send_inmail, send_connection_request, check_connection_status, callWebhook, updateLead, verifyUnipileAccount, updateCampaignStep, extractLinkedInPublicIdentifier, checkTimeWindow, checkConnectionRequestLimits } = proxyActivities<typeof activities>({
@@ -23,7 +23,7 @@ const { profile_visit, like_post, comment_post, send_followup, withdraw_request,
     retry: {
         initialInterval: '1s',
         maximumInterval: '30s',
-        maximumAttempts: 3,
+        maximumAttempts: 10, // Increased for transient errors - Temporal will retry automatically
     },
 });
 
@@ -151,637 +151,280 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
     await waitForTimeWindow(startTime, endTime, timezone);
     const type = node.data.type;
     const config = node.data.config ?? {};
-    let identifier: string;
 
-
-    try {
-        const extractedIdentifier = await extractLinkedInPublicIdentifier(lead.linkedin_url!);
-        if (!extractedIdentifier) {
-            return { success: false, message: 'Invalid linkedin_url: Could not extract identifier' };
-        }
-        identifier = extractedIdentifier as string;
-        identifier = 'abas-hersi-14b11a16b';
-    } catch (error) {
-        log.error('Failed to extract public identifier from linkedin_url', { linkedin_url: lead.linkedin_url, error });
-        return { success: false, message: 'Invalid linkedin_url: Failed to extract identifier' };
+    // Extract LinkedIn identifier
+    const identifier = await extractLinkedInPublicIdentifier(lead.linkedin_url!);
+    if (!identifier) {
+        return { success: false, message: 'Invalid linkedin_url: Could not extract identifier' };
     }
 
     let result: ActivityResult | null = null;
 
-    switch (type) {
-        case EWorkflowNodeType.profile_visit:
-            result = await profile_visit(accountId, identifier, lead.campaign_id);
-            break;
-        case EWorkflowNodeType.like_post:
-            result = await like_post(accountId, identifier, config || {}, lead.campaign_id);
-            break;
-        case EWorkflowNodeType.comment_post:
-            result = await comment_post(accountId, identifier, config, lead.campaign_id);
-            break;
-        case EWorkflowNodeType.send_followup:
-            result = await send_followup(accountId, identifier, config, lead.campaign_id, {
-                first_name: lead.first_name,
-                last_name: lead.last_name,
-                company: lead.company,
-            });
-            break;
-        case EWorkflowNodeType.withdraw_request:
-            result = await withdraw_request(accountId, identifier, lead.campaign_id);
-            break;
-        case EWorkflowNodeType.send_inmail:
-            result = await send_inmail();
-            break;
-        case EWorkflowNodeType.send_connection_request: {
-            log.info('Executing send_connection_request node', {
-                accountId,
-                identifier,
-                campaignId: lead.campaign_id,
-                leadId: lead.id,
-            });
-
-            // Check limits and wait if exceeded
-            let limitsCheck;
-            try {
-                limitsCheck = await checkConnectionRequestLimits(campaignId);
-            } catch (error: any) {
-                log.error('Failed to check connection request limits', {
-                    accountId,
-                    identifier,
-                    campaignId,
-                    leadId: lead.id,
-                    error: error.message,
-                    errorStack: error.stack,
-                });
+    try {
+        switch (type) {
+            case EWorkflowNodeType.profile_visit: {
+                const visitResult = await profile_visit(accountId, identifier, lead.campaign_id);
                 result = {
-                    success: false,
-                    message: 'Failed to check connection request limits',
-                    data: {
-                        error: {
-                            type: 'limits_check_failed',
-                            message: error.message || 'Failed to check connection request limits',
-                        },
-                    },
+                    success: true,
+                    message: 'Profile visit completed',
+                    providerId: visitResult.providerId,
+                    lead_data: visitResult.lead_data,
                 };
                 break;
             }
-
-            if (!limitsCheck.canProceed && limitsCheck.waitUntilMs) {
-                const waitMs = limitsCheck.waitUntilMs;
-                const hours = Math.floor(waitMs / 3600000);
-                const minutes = Math.floor((waitMs % 3600000) / 60000);
-                const seconds = Math.floor((waitMs % 60000) / 1000);
-
-                const sleepParts: string[] = [];
-                if (hours > 0) sleepParts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
-                if (minutes > 0) sleepParts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
-                if (seconds > 0 && hours === 0) sleepParts.push(`${seconds} second${seconds > 1 ? 's' : ''}`);
-
-                const sleepDuration = sleepParts.length > 0 ? sleepParts.join(' ') : '1 second';
-
-                log.info('Connection request limit exceeded, waiting until reset', {
-                    campaignId,
-                    leadId: lead.id,
-                    waitMs,
-                    sleepDuration,
+            case EWorkflowNodeType.like_post: {
+                await like_post(accountId, identifier, config || {}, lead.campaign_id);
+                result = { success: true, message: 'Post liked successfully' };
+                break;
+            }
+            case EWorkflowNodeType.comment_post: {
+                await comment_post(accountId, identifier, config, lead.campaign_id);
+                result = { success: true, message: 'Comment posted successfully' };
+                break;
+            }
+            case EWorkflowNodeType.send_followup: {
+                await send_followup(accountId, identifier, config, lead.campaign_id, {
+                    first_name: lead.first_name,
+                    last_name: lead.last_name,
+                    company: lead.company,
+                });
+                result = { success: true, message: 'Follow-up message sent' };
+                break;
+            }
+            case EWorkflowNodeType.withdraw_request: {
+                await withdraw_request(accountId, identifier, lead.campaign_id);
+                result = { success: true, message: 'Request withdrawn' };
+                break;
+            }
+            case EWorkflowNodeType.send_inmail: {
+                await send_inmail();
+                result = { success: true, message: 'InMail sent successfully' };
+                break;
+            }
+            case EWorkflowNodeType.send_connection_request: {
+                log.info('Executing send_connection_request node', {
                     accountId,
                     identifier,
+                    campaignId: lead.campaign_id,
+                    leadId: lead.id,
                 });
 
-                try {
+                // Check limits - if exceeded, wait and retry (Temporal will handle retries)
+                const limitsCheck = await checkConnectionRequestLimits(campaignId);
+                if (!limitsCheck.canProceed && limitsCheck.waitUntilMs) {
+                    const waitMs = limitsCheck.waitUntilMs;
+                    const hours = Math.floor(waitMs / 3600000);
+                    const minutes = Math.floor((waitMs % 3600000) / 60000);
+                    const sleepParts: string[] = [];
+                    if (hours > 0) sleepParts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
+                    if (minutes > 0) sleepParts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
+                    const sleepDuration = sleepParts.length > 0 ? sleepParts.join(' ') : '1 second';
+                    log.info('Connection request limit exceeded, waiting until reset', {
+                        campaignId,
+                        leadId: lead.id,
+                        waitMs,
+                        sleepDuration,
+                    });
                     await sleep(sleepDuration as Duration);
-                    limitsCheck = await checkConnectionRequestLimits(campaignId);
-                } catch (error: any) {
-                    log.error('Error while waiting for connection request limit reset', {
-                        accountId,
-                        identifier,
-                        campaignId,
-                        leadId: lead.id,
-                        error: error.message,
-                        errorStack: error.stack,
-                    });
                 }
-            }
 
-            if (!limitsCheck.canProceed) {
-                log.error('Connection request limit exceeded after waiting', {
-                    accountId,
-                    identifier,
-                    campaignId,
-                    leadId: lead.id,
-                });
-                result = {
-                    success: false,
-                    message: 'Connection request limit exceeded',
-                    data: {
-                        error: {
-                            type: 'connection_request_limit_exceeded',
-                            message: 'Daily or weekly connection request limit has been exceeded',
-                        },
-                    },
-                };
-                break;
-            }
+                // Send connection request - activities throw ApplicationFailure on errors
+                const sendResult = await send_connection_request(accountId, identifier, config || {}, lead.campaign_id);
 
-            let sendResult: ActivityResult;
-            try {
-                sendResult = await send_connection_request(accountId, identifier, config || {}, lead.campaign_id);
-            } catch (error: any) {
-                log.error('Exception thrown while sending connection request', {
-                    accountId,
-                    identifier,
-                    campaignId,
-                    leadId: lead.id,
-                    error: error.message,
-                    errorStack: error.stack,
-                    errorType: error.constructor?.name,
-                    errorName: error.name,
-                });
-                result = {
-                    success: false,
-                    message: 'Exception occurred while sending connection request',
-                    data: {
-                        error: {
-                            type: 'connection_request_exception',
-                            message: error.message || 'Unexpected error occurred',
-                            errorType: error.constructor?.name,
-                            errorName: error.name,
-                        },
-                    },
-                };
-                break;
-            }
-
-            // If request failed to send or user already connected, return immediately
-            if (!sendResult.success) {
-                // Check if this is an "already_invited_recently" error - invitation exists, start polling
-                const errorType = sendResult.data?.error?.type;
-                const alreadyInvited = sendResult.data?.alreadyInvited;
-                const providerIdFromError = sendResult.data?.providerId;
-
-                if (errorType === 'already_invited_recently' && alreadyInvited && providerIdFromError) {
-                    log.info('Connection request already sent recently - starting polling for existing invitation', {
-                        accountId,
-                        identifier,
-                        campaignId,
-                        leadId: lead.id,
-                        providerId: providerIdFromError,
-                        errorMessage: sendResult.message,
-                    });
-                    // Use the providerId from the error response and continue to polling logic below
-                    // We'll set sendResult.success to true temporarily to bypass the early return
-                    // and use providerIdFromError instead of sendResult.data.providerId
-                    sendResult = {
+                // If already connected, return success immediately
+                if (sendResult.alreadyConnected) {
+                    log.info('User already connected, no polling needed', { accountId, identifier });
+                    result = {
                         success: true,
-                        message: 'Connection request already exists - polling for status',
-                        data: {
-                            providerId: providerIdFromError,
-                            alreadyInvited: true,
-                        },
+                        message: 'User is already connected',
+                        providerId: sendResult.providerId,
                     };
-                    // Continue to polling logic below
-                } else {
-                    // Check if this is a provider limit error that requires 24-hour wait
-                    const shouldRetry = sendResult.data?.error?.shouldRetry;
-                    const retryAfterHours = sendResult.data?.error?.retryAfterHours || 24;
-                    const isProviderLimitError =
-                        errorType === 'errors/cannot_resend_yet' ||
-                        errorType === 'errors/cannot_resend_within_24hrs' ||
-                        errorType === 'errors/limit_exceeded';
+                    break;
+                }
 
-                    // Log for debugging
-                    log.info('Checking for retry conditions', {
-                        accountId,
-                        identifier,
-                        campaignId,
-                        leadId: lead.id,
-                        errorType,
-                        shouldRetry,
-                        isProviderLimitError,
-                        retryAfterHours,
-                        sendResultData: sendResult.data,
-                        sendResultDataError: sendResult.data?.error,
-                    });
+                const providerId = sendResult.providerId;
+                if (!providerId) {
+                    return {
+                        success: false,
+                        message: 'Provider ID not found in send result',
+                    };
+                }
 
-                    // Retry if shouldRetry flag is set (set by handleProviderErrors for retryable errors)
-                    // or if it's a known provider limit error type
-                    if (shouldRetry || isProviderLimitError) {
-                        log.warn('LinkedIn provider limit reached - waiting 24 hours before retry', {
-                            accountId,
-                            identifier,
-                            campaignId,
-                            leadId: lead.id,
-                            retryAfterHours,
-                            errorMessage: sendResult.message,
-                            errorDetails: sendResult.data?.error,
-                            errorType,
-                        });
+                // Get polling configuration from workflow edges
+                const outgoingEdges = workflow.edges.filter((edge: WorkflowEdge) => edge.source === node.id);
+                const rejectedEdge = outgoingEdges.find((edge: WorkflowEdge) => edge.data?.isConditionalPath === true && edge.data?.isPositive === false);
 
-                        try {
-                            // Sleep for 24 hours (24 * 60 * 60 = 86400 seconds)
-                            const sleepDuration = `${retryAfterHours} hours` as Duration;
-                            log.info('Sleeping before retry', {
-                                accountId,
-                                identifier,
-                                campaignId,
-                                leadId: lead.id,
-                                sleepDuration,
-                                retryAfterHours,
-                            });
-                            await sleep(sleepDuration);
+                // Default: 10 days, poll every hour
+                let totalWaitDurationMs = 10 * 24 * 60 * 60 * 1000;
+                let pollInterval = '1 hour' as Duration;
 
-                            // Retry sending the connection request after waiting
-                            log.info('Retrying connection request after 24-hour wait', {
-                                accountId,
-                                identifier,
-                                campaignId,
-                                leadId: lead.id,
-                            });
-                            sendResult = await send_connection_request(accountId, identifier, config || {}, lead.campaign_id);
-
-                            // If retry also failed, return the result
-                            if (!sendResult.success) {
-                                log.error('Connection request failed after 24-hour retry', {
-                                    accountId,
-                                    identifier,
-                                    campaignId,
-                                    leadId: lead.id,
-                                    result: sendResult,
-                                    errorType: sendResult.data?.error?.type,
-                                    errorMessage: sendResult.message,
-                                });
-                                result = sendResult;
-                                break;
-                            }
-
-                            // If retry succeeded, continue with normal flow
-                            log.info('Connection request succeeded after 24-hour retry', {
-                                accountId,
-                                identifier,
-                                campaignId,
-                                leadId: lead.id,
-                            });
-                        } catch (retryError: any) {
-                            log.error('Error during 24-hour retry wait or retry attempt', {
-                                accountId,
-                                identifier,
-                                campaignId,
-                                leadId: lead.id,
-                                error: retryError.message,
-                                errorStack: retryError.stack,
-                            });
-                            result = {
-                                success: false,
-                                message: 'Failed to retry connection request after waiting',
-                                data: {
-                                    error: {
-                                        type: 'retry_failed',
-                                        message: retryError.message || 'Error during retry attempt',
-                                        originalError: sendResult.data?.error,
-                                    },
-                                },
-                            };
-                            break;
+                // Use edge delay if specified
+                if (rejectedEdge?.data?.delayData?.delay && rejectedEdge?.data?.delayData?.unit) {
+                    const edgeDelayMs = getDelayMs(rejectedEdge);
+                    if (edgeDelayMs > 0) {
+                        totalWaitDurationMs = edgeDelayMs;
+                        // Adjust poll interval based on total wait time
+                        if (totalWaitDurationMs < 24 * 60 * 60 * 1000) {
+                            pollInterval = '15 minutes' as Duration;
+                        } else if (totalWaitDurationMs < 7 * 24 * 60 * 60 * 1000) {
+                            pollInterval = '30 minutes' as Duration;
                         }
-                    } else {
-                        // For other errors, return immediately without retry
-                        log.error('Failed to send connection request', {
-                            accountId,
-                            identifier,
-                            campaignId,
-                            leadId: lead.id,
-                            result: JSON.stringify(sendResult),
-                            errorType: sendResult.data?.error?.type,
-                            errorMessage: sendResult.message,
-                            errorDetails: sendResult.data?.error,
-                        });
-                        result = sendResult;
-                        break;
                     }
                 }
-            }
 
-            // If already connected, return success
-            if (sendResult.data?.alreadyConnected) {
-                log.info('User already connected, no polling needed', { accountId, identifier });
-                result = sendResult;
-                break;
-            }
-
-            // Get providerId from the send result
-            const providerId = sendResult.data?.providerId;
-            if (!providerId) {
-                log.error('No providerId in send result', {
-                    accountId,
-                    identifier,
-                    campaignId,
-                    leadId: lead.id,
-                    sendResult,
-                    sendResultData: sendResult.data,
-                    sendResultSuccess: sendResult.success,
-                    sendResultMessage: sendResult.message,
-                });
-                result = {
-                    success: false,
-                    message: 'Provider ID not found in send result',
-                    data: {
-                        error: {
-                            type: 'provider_id_missing',
-                            message: 'Connection request was sent but provider ID was not returned',
-                            sendResult: sendResult,
-                        },
-                    },
-                };
-                break;
-            }
-
-            // Get polling configuration from workflow edges
-            const outgoingEdges = workflow.edges.filter((edge: WorkflowEdge) => edge.source === node.id);
-            const rejectedEdge = outgoingEdges.find((edge: WorkflowEdge) => edge.data?.isConditionalPath === true && edge.data?.isPositive === false);
-
-            // Default values: 10 days = 240 hours, check every hour
-            let totalWaitDurationMs = 10 * 24 * 60 * 60 * 1000; // 10 days in milliseconds (default)
-            let pollIntervalMs = 60 * 60 * 1000; // 1 hour in milliseconds (default)
-            let pollInterval = '1 hour'; // Temporal sleep format
-
-            // If edge has delayData, use it to calculate total wait time
-            if (rejectedEdge?.data?.delayData?.delay && rejectedEdge?.data?.delayData?.unit) {
-                const edgeDelayMs = getDelayMs(rejectedEdge);
-                if (edgeDelayMs > 0) {
-                    totalWaitDurationMs = edgeDelayMs;
-
-                    // Calculate polling interval based on total wait time
-                    // Poll every hour, but if total wait is less than a day, poll more frequently
-                    if (totalWaitDurationMs < 24 * 60 * 60 * 1000) {
-                        // Less than 1 day: poll every 15 minutes
-                        pollIntervalMs = 15 * 60 * 1000;
-                        pollInterval = '15 minutes';
-                    } else if (totalWaitDurationMs < 7 * 24 * 60 * 60 * 1000) {
-                        // Less than 7 days: poll every 30 minutes
-                        pollIntervalMs = 30 * 60 * 1000;
-                        pollInterval = '30 minutes';
-                    } else {
-                        // 7+ days: poll every hour
-                        pollIntervalMs = 60 * 60 * 1000;
-                        pollInterval = '1 hour';
-                    }
-                }
-            }
-
-            // Calculate number of polling attempts needed
-            const maxAttempts = Math.ceil(totalWaitDurationMs / pollIntervalMs);
-            const totalDays = totalWaitDurationMs / (24 * 60 * 60 * 1000);
-            const isExistingInvitation = sendResult.data?.alreadyInvited === true;
-
-            log.info(isExistingInvitation ? 'Connection request already exists, starting polling' : 'Connection request sent, starting polling', {
-                accountId,
-                identifier,
-                providerId,
-                totalWaitDurationMs,
-                totalWaitDays: totalDays,
-                pollIntervalMs,
-                pollInterval,
-                maxAttempts,
-                delayFromEdge: rejectedEdge?.data?.delayData,
-                isExistingInvitation,
-            });
-
-            // Wait and poll for connection status
-            let attempt = 0;
-            let elapsedTimeMs = 0;
-
-            while (elapsedTimeMs < totalWaitDurationMs) {
-                attempt++;
-
-                // Calculate remaining wait time
-                const remainingTimeMs = totalWaitDurationMs - elapsedTimeMs;
-                const waitTimeMs = Math.min(pollIntervalMs, remainingTimeMs);
-
-                // Convert to Temporal sleep format
-                let sleepDuration: Duration;
-                if (waitTimeMs >= 3600000) {
-                    // Hours
-                    sleepDuration = `${Math.floor(waitTimeMs / 3600000)} hours` as Duration;
-                } else if (waitTimeMs >= 60000) {
-                    // Minutes
-                    sleepDuration = `${Math.floor(waitTimeMs / 60000)} minutes` as Duration;
-                } else if (waitTimeMs >= 1000) {
-                    // Seconds
-                    sleepDuration = `${Math.floor(waitTimeMs / 1000)} seconds` as Duration;
-                } else {
-                    // Less than 1 second, skip to status check
-                    sleepDuration = '0 seconds' as Duration;
-                }
-
-                if (waitTimeMs > 0) {
-                    log.info('Waiting before next status check', {
-                        attempt,
-                        maxAttempts,
-                        waitTime: sleepDuration,
-                        elapsedTimeMs,
-                        elapsedDays: elapsedTimeMs / (24 * 60 * 60 * 1000),
-                        remainingTimeMs,
-                        remainingDays: remainingTimeMs / (24 * 60 * 60 * 1000),
-                    });
-                    await sleep(sleepDuration as Duration);
-                    elapsedTimeMs += waitTimeMs;
-                }
-
-                // Only check status if we haven't exceeded total wait time
-                if (elapsedTimeMs >= totalWaitDurationMs) {
-                    log.info('Total wait time elapsed, performing final status check', {
-                        accountId,
-                        identifier,
-                        totalWaitDurationMs,
-                        totalWaitDays: totalDays,
-                        elapsedTimeMs,
-                    });
-                }
-
-                log.info('Checking connection status (activity call)', {
+                const totalDays = totalWaitDurationMs / (24 * 60 * 60 * 1000);
+                log.info('Starting connection status polling', {
                     accountId,
                     identifier,
                     providerId,
-                    attempt,
-                    maxAttempts,
-                    elapsedTimeMs,
-                    elapsedDays: elapsedTimeMs / (24 * 60 * 60 * 1000),
-                    remainingTimeMs: totalWaitDurationMs - elapsedTimeMs,
-                    remainingDays: (totalWaitDurationMs - elapsedTimeMs) / (24 * 60 * 60 * 1000),
+                    totalWaitDays: totalDays,
+                    pollInterval,
                 });
 
-                // Call activity to check status
-                let statusResult: ActivityResult;
-                try {
-                    statusResult = await check_connection_status(accountId, identifier, providerId, lead.campaign_id);
-                } catch (error: any) {
-                    log.error('Exception thrown while checking connection status', {
-                        accountId,
-                        identifier,
-                        providerId,
-                        campaignId,
-                        leadId: lead.id,
-                        attempt,
-                        maxAttempts,
-                        elapsedTimeMs,
-                        error: error.message,
-                        errorStack: error.stack,
-                        errorType: error.constructor?.name,
-                        errorName: error.name,
-                    });
-                    // Continue polling on error - don't break the loop
-                    continue;
+                // Poll for connection status until accepted/rejected or timeout
+                let elapsedTimeMs = 0;
+                const pollIntervalMs = pollInterval === '15 minutes' ? 15 * 60 * 1000 :
+                                      pollInterval === '30 minutes' ? 30 * 60 * 1000 :
+                                      60 * 60 * 1000; // 1 hour default
+
+                while (elapsedTimeMs < totalWaitDurationMs) {
+                    await sleep(pollInterval);
+                    elapsedTimeMs += pollIntervalMs;
+
+                    try {
+                        const statusResult = await check_connection_status(accountId, identifier, providerId, lead.campaign_id);
+
+                        if (statusResult.status === 'accepted') {
+                            const elapsedDays = elapsedTimeMs / (24 * 60 * 60 * 1000);
+                            log.info('Connection request ACCEPTED!', { accountId, identifier, providerId, elapsedDays });
+                            result = {
+                                success: true,
+                                message: `Connection request accepted after ${elapsedDays.toFixed(1)} day(s)`,
+                                data: { status: 'accepted', daysWaited: elapsedDays },
+                            };
+                            break;
+                        }
+
+                        if (statusResult.status === 'rejected') {
+                            const elapsedDays = elapsedTimeMs / (24 * 60 * 60 * 1000);
+                            log.warn('Connection request REJECTED!', { accountId, identifier, providerId, elapsedDays });
+                            result = {
+                                success: false,
+                                message: `Connection request rejected after ${elapsedDays.toFixed(1)} day(s)`,
+                                data: { status: 'rejected', daysWaited: elapsedDays },
+                            };
+                            break;
+                        }
+
+                        // Still pending - continue polling
+                        log.info('Connection request still pending, continuing to poll', {
+                            accountId,
+                            identifier,
+                            elapsedDays: elapsedTimeMs / (24 * 60 * 60 * 1000),
+                        });
+                    } catch (error: unknown) {
+                        // If ApplicationFailure with non-retryable type (422 error), stop polling
+                        if (error instanceof ApplicationFailure) {
+                            const errorDetails = error.details as { errorType?: string } | undefined;
+                            const isNonRetryable = errorDetails?.errorType === 'Unipile422Error' || error.type === 'Unipile422Error';
+
+                            if (isNonRetryable) {
+                                log.error('Permanent error while checking connection status', {
+                                    accountId,
+                                    identifier,
+                                    providerId,
+                                    error: error.message,
+                                });
+                                result = {
+                                    success: false,
+                                    message: `Connection status check failed: ${error.message}`,
+                                };
+                                break;
+                            }
+                        }
+                        // For retryable errors, continue polling - Temporal will retry the activity
+                        log.warn('Transient error while checking connection status, continuing to poll', {
+                            accountId,
+                            identifier,
+                            providerId,
+                            error: error instanceof Error ? error.message : 'Unknown error',
+                        });
+                    }
                 }
 
-                // Check if status check failed
-                if (!statusResult.success) {
-                    log.error('Connection status check failed', {
-                        accountId,
-                        identifier,
-                        providerId,
-                        campaignId,
-                        leadId: lead.id,
-                        attempt,
-                        maxAttempts,
-                        elapsedTimeMs,
-                        statusResult,
-                        errorType: statusResult.data?.error?.type,
-                        errorMessage: statusResult.message,
-                        errorDetails: statusResult.data?.error,
-                    });
-                    // Continue polling on status check failure - don't break the loop
-                    continue;
-                }
-
-                // Check if accepted
-                if (statusResult.success && statusResult.data?.status === 'accepted') {
-                    const elapsedHours = elapsedTimeMs / (60 * 60 * 1000);
-                    const elapsedDays = elapsedTimeMs / (24 * 60 * 60 * 1000);
-                    log.info('Connection request ACCEPTED!', {
-                        accountId,
-                        identifier,
-                        providerId,
-                        campaignId,
-                        leadId: lead.id,
-                        attemptNumber: attempt,
-                        elapsedTimeMs,
-                        elapsedHours,
-                        elapsedDays,
-                    });
-                    result = {
-                        success: true,
-                        message: `Connection request accepted after ${elapsedDays.toFixed(1)} day(s)`,
-                        data: {
-                            connected: true,
-                            hoursWaited: elapsedHours,
-                            daysWaited: elapsedDays,
-                            status: 'accepted',
-                        },
-                    };
-                    break;
-                }
-
-                // Check if rejected
-                if (statusResult.data?.status === 'rejected') {
-                    const elapsedHours = elapsedTimeMs / (60 * 60 * 1000);
-                    const elapsedDays = elapsedTimeMs / (24 * 60 * 60 * 1000);
-                    log.warn('Connection request REJECTED!', {
-                        accountId,
-                        identifier,
-                        providerId,
-                        campaignId,
-                        leadId: lead.id,
-                        attemptNumber: attempt,
-                        elapsedTimeMs,
-                        elapsedHours,
-                        elapsedDays,
-                    });
+                // Timeout if no result set
+                if (!result) {
+                    log.warn('Connection request TIMEOUT', { accountId, identifier, totalDays });
                     result = {
                         success: false,
-                        message: `Connection request rejected after ${elapsedDays.toFixed(1)} day(s)`,
-                        data: {
-                            connected: false,
-                            hoursWaited: elapsedHours,
-                            daysWaited: elapsedDays,
-                            status: 'rejected',
-                        },
+                        message: `Connection request not accepted within ${totalDays.toFixed(1)} day(s) (timeout)`,
+                        data: { status: 'timeout', daysWaited: totalDays },
                     };
-                    break;
                 }
-
-                // Still pending, continue polling if we haven't exceeded total wait time
-                if (elapsedTimeMs >= totalWaitDurationMs) {
-                    log.info('Total wait time reached, connection still pending', {
-                        accountId,
-                        identifier,
-                        totalWaitDurationMs,
-                        totalWaitDays: totalDays,
-                        elapsedTimeMs,
-                    });
-                    break;
-                }
-
-                log.info('Connection request still pending, continuing to poll', {
-                    accountId,
-                    identifier,
-                    attempt,
-                    maxAttempts,
-                    elapsedTimeMs,
-                    elapsedDays: elapsedTimeMs / (24 * 60 * 60 * 1000),
-                    remainingTimeMs: totalWaitDurationMs - elapsedTimeMs,
-                    remainingDays: (totalWaitDurationMs - elapsedTimeMs) / (24 * 60 * 60 * 1000),
-                });
+                break;
             }
+            case EWorkflowNodeType.webhook: {
+                if (!config.webhookId) {
+                    return {
+                        success: false,
+                        message: 'Webhook ID is required',
+                    };
+                }
+                const webhookResult = await callWebhook(config.webhookId, lead.id);
+                result = {
+                    success: webhookResult.success,
+                    message: webhookResult.message,
+                };
+                break;
+            }
+            case null:
+            case undefined:
+                return null;
+            default:
+                CheckNever(type);
+                return null;
+        }
+    } catch (error: unknown) {
+        // Handle ApplicationFailure errors from activities
+        if (error instanceof ApplicationFailure) {
+            const errorDetails = error.details as { errorType?: string } | undefined;
+            const isNonRetryable = errorDetails?.errorType === 'Unipile422Error' || error.type === 'Unipile422Error';
 
-            // Timeout after total wait duration if result not set
-            if (!result) {
-                log.warn('Connection request TIMEOUT - total wait time elapsed', {
-                    accountId,
-                    identifier,
-                    totalWaitDurationMs,
-                    totalWaitDays: totalDays,
-                    totalAttempts: attempt,
-                    elapsedTimeMs,
+            // Non-retryable errors (422) = permanent failure
+            if (isNonRetryable) {
+                log.error('Permanent error in node execution', {
+                    nodeId: node.id,
+                    nodeType: type,
+                    error: error.message,
+                    errorType: error.type,
                 });
                 result = {
                     success: false,
-                    message: `Connection request not accepted within ${totalDays.toFixed(1)} day(s) (timeout)`,
-                    data: {
-                        connected: false,
-                        timeoutReached: true,
-                        status: 'timeout',
-                        daysWaited: totalDays,
-                        hoursWaited: totalDays * 24,
-                    },
+                    message: error.message || 'Permanent error occurred',
+                    data: { errorType: error.type },
                 };
+            } else {
+                // Retryable errors - rethrow so Temporal can retry
+                throw error;
             }
-            break;
+        } else {
+            // Unexpected error - log and return failure
+            log.error('Unexpected error in node execution', {
+                nodeId: node.id,
+                nodeType: type,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+            result = {
+                success: false,
+                message: error instanceof Error ? error.message : 'Unexpected error occurred',
+            };
         }
-        case EWorkflowNodeType.webhook:
-            if (!config.webhookId) {
-                log.error('Webhook ID is required', {
-                    leadId: lead.id,
-                    webhookId: config.webhookId,
-                });
-                return {
-                    success: false,
-                    message: 'Webhook ID is required',
-                };
-            }
-            return await callWebhook(config.webhookId, lead.id);
-        case null:
-            return null;
-        case undefined:
-            return null;
-        default:
-            CheckNever(type);
-            return null;
     }
 
     // Record step execution in database
     if (result && type) {
         log.info('Recording step execution', { step: `step-${index}`, nodeId: node.id, type, success: result.success });
-
-        await updateCampaignStep(campaignId, type, config, result.success, result.data, index, lead.organization_id, lead.id);
+        await updateCampaignStep(campaignId, type, config, result.success, result.data || {}, index, lead.organization_id, lead.id);
     }
 
     return result;
@@ -834,19 +477,24 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
         // Execute the current node and store the result
         const result = await executeNode(currentNode, unipileAccountId, lead, campaignId, workflow, stepIndex, startTime, endTime, timezone);
 
-        // Stop the lead if a critical error is thrown
-        if (result && result.criticalError === true) {
-            log.error('Critical error occurred - stopping lead execution and marking as failed', {
-                leadId,
-                accountId,
-                campaignId,
-                nodeId: currentNode.id,
-                nodeType: currentNode.data.type,
-                errorMessage: result.message,
-                errorData: result.data,
-            });
-            await updateLead(leadId, { status: 'Failed' });
-            return; // Stop workflow execution for this lead
+        // If node execution failed with permanent error, mark lead as failed and stop
+        if (result && !result.success) {
+            const errorData = result.data as { errorType?: string } | undefined;
+            const isPermanentError = errorData?.errorType === 'Unipile422Error';
+
+            if (isPermanentError) {
+                log.error('Permanent error occurred - stopping lead execution and marking as failed', {
+                    leadId,
+                    accountId,
+                    campaignId,
+                    nodeId: currentNode.id,
+                    nodeType: currentNode.data.type,
+                    errorMessage: result.message,
+                    errorData: result.data,
+                });
+                await updateLead(leadId, { status: 'Failed' });
+                return; // Stop workflow execution for this lead
+            }
         }
 
         // Get outgoing edges from this node
