@@ -208,11 +208,11 @@ export class ReporterConnectedAccountService {
                 throw new ForbiddenError('Access denied to this account');
             }
 
-            // Note: We don't delete from Unipile as the same account may be used by other services
-            // We only remove the reporter's reference to the account
+            //Delete from unipile
+            await this.unipileService.deleteAccount(account.provider_account_id);
 
             // Delete from our database
-            await this.repository.delete(id);
+            await this.repository.update(id, {is_deleted: true, updated_at: new Date().toISOString()});
 
             logger.info('Reporter account disconnected', { accountId: id, reporterUserId, provider: account.provider });
         } catch (error) {
@@ -260,7 +260,7 @@ export class ReporterConnectedAccountService {
                 status: unipileAccount?.sources?.[0]?.status === 'OK' ? 'connected' : 'error',
                 metadata: {
                     ...account.metadata,
-                    connection_quality: unipileAccount?.sources?.[0]?.status === 'OK' ? 'good' : 'error',
+                    connection_quality: unipileAccount.status === 'active' ? 'good' : 'error',
                     last_synced_at: new Date().toISOString(),
                     unipile_account_data: unipileAccount,
                     profile_data: profileData,

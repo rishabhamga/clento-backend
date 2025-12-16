@@ -11,6 +11,7 @@ export const CreateReporterConnectedAccountDto = z.object({
     capabilities: z.array(z.string()).default([]),
     metadata: z.record(z.any()).default({}),
     last_synced_at: z.string().datetime().nullable().optional(),
+    is_deleted: z.boolean().default(false).optional(),
     created_at: z.string().datetime().default(new Date().toISOString()).optional(),
     updated_at: z.string().datetime().default(new Date().toISOString()).optional(),
 });
@@ -24,6 +25,7 @@ export const UpdateReporterConnectedAccountDto = z.object({
     capabilities: z.array(z.string()).optional(),
     metadata: z.record(z.any()).optional(),
     last_synced_at: z.string().datetime().nullable().optional(),
+    is_deleted: z.boolean().default(false).optional(),
     updated_at: z.string().datetime(),
 });
 
@@ -40,6 +42,7 @@ export const ReporterConnectedAccountResponseDto = z.object({
     last_synced_at: z.string().datetime().nullable(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime(),
+    is_deleted: z.boolean(),
 });
 
 // Type exports

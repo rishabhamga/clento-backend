@@ -1,8 +1,4 @@
-import {
-    CreateReporterConnectedAccountDto,
-    UpdateReporterConnectedAccountDto,
-    ReporterConnectedAccountResponseDto,
-} from '../../dto/reporterDtos/accounts.dto';
+import { CreateReporterConnectedAccountDto, UpdateReporterConnectedAccountDto, ReporterConnectedAccountResponseDto } from '../../dto/reporterDtos/accounts.dto';
 import { DatabaseError } from '../../errors/AppError';
 import logger from '../../utils/logger';
 import { BaseRepository } from '../BaseRepository';
@@ -11,11 +7,7 @@ import { BaseRepository } from '../BaseRepository';
  * Repository for reporter connected account database operations
  * Stores accounts in a separate table from the main service
  */
-export class ReporterConnectedAccountRepository extends BaseRepository<
-    ReporterConnectedAccountResponseDto,
-    CreateReporterConnectedAccountDto,
-    UpdateReporterConnectedAccountDto
-> {
+export class ReporterConnectedAccountRepository extends BaseRepository<ReporterConnectedAccountResponseDto, CreateReporterConnectedAccountDto, UpdateReporterConnectedAccountDto> {
     constructor() {
         super('reporter_connected_accounts');
     }
@@ -47,8 +39,7 @@ export class ReporterConnectedAccountRepository extends BaseRepository<
 
             // Filter for pending/incomplete accounts
             const pendingAccounts = (data || []).filter((account: ReporterConnectedAccountResponseDto) => {
-                const isPending =
-                    account.provider_account_id?.startsWith('pending-');
+                const isPending = account.provider_account_id?.startsWith('pending-');
 
                 const metadata = account.metadata as any;
                 const connectionStatus = metadata?.connection_status;
@@ -76,14 +67,16 @@ export class ReporterConnectedAccountRepository extends BaseRepository<
         try {
             logger.info('Getting reporter user connected accounts', { reporterUserId });
 
-            const data = await this.findByField('reporter_user_id' as keyof ReporterConnectedAccountResponseDto, reporterUserId);
+            const { data, error } = await this.client.from(this.tableName).select('*').eq('reporter_user_id', reporterUserId).neq('is_deleted', true).order('created_at', { ascending: false });
+
+            if (error) {
+                logger.error('Error getting reporter user connected accounts', { error, reporterUserId });
+                throw new DatabaseError('Failed to get user connected accounts');
+            }
 
             // Filter out pending/incomplete accounts
             const connectedAccounts = (data || []).filter((account: ReporterConnectedAccountResponseDto) => {
-                const isConnected =
-                    account.status === 'connected' &&
-                    account.provider_account_id &&
-                    !account.provider_account_id.startsWith('pending-');
+                const isConnected = account.status === 'connected' && account.provider_account_id && !account.provider_account_id.startsWith('pending-');
 
                 return isConnected;
             });
@@ -105,10 +98,7 @@ export class ReporterConnectedAccountRepository extends BaseRepository<
     /**
      * Get accounts by provider
      */
-    public async getAccountsByProvider(
-        provider: string,
-        reporterUserId: string
-    ): Promise<ReporterConnectedAccountResponseDto[]> {
+    public async getAccountsByProvider(provider: string, reporterUserId: string): Promise<ReporterConnectedAccountResponseDto[]> {
         try {
             const data = await this.findByMultipleFields({
                 provider,
@@ -125,11 +115,7 @@ export class ReporterConnectedAccountRepository extends BaseRepository<
     /**
      * Update account sync status
      */
-    public async updateSyncStatus(
-        id: string,
-        status: 'connected' | 'disconnected' | 'error' | 'expired',
-        error?: string
-    ): Promise<ReporterConnectedAccountResponseDto> {
+    public async updateSyncStatus(id: string, status: 'connected' | 'disconnected' | 'error' | 'expired', error?: string): Promise<ReporterConnectedAccountResponseDto> {
         try {
             const updateData: UpdateReporterConnectedAccountDto = {
                 status,
@@ -168,10 +154,7 @@ export class ReporterConnectedAccountRepository extends BaseRepository<
     /**
      * Find account by reporter user ID and provider account ID
      */
-    public async findByUserAndProviderAccountId(
-        reporterUserId: string,
-        providerAccountId: string
-    ): Promise<ReporterConnectedAccountResponseDto | null> {
+    public async findByUserAndProviderAccountId(reporterUserId: string, providerAccountId: string): Promise<ReporterConnectedAccountResponseDto | null> {
         try {
             const data = await this.findOneByMultipleFields({
                 reporter_user_id: reporterUserId,
