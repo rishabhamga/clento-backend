@@ -29,7 +29,7 @@ declare module 'express-serve-static-core' {
 
     export interface ClentoAPIClass {
         path: string;
-        authType: 'NONE' | 'API' | 'DASHBOARD';
+        authType: 'NONE' | 'API' | 'DASHBOARD' | 'REPORTER';
     }
 
     export interface Request {
@@ -56,6 +56,16 @@ declare module 'express-serve-static-core' {
         getPathParams: () => ClentoRequestBody;
         getFiles: () => ClentoRequestBody;
         getIPAddress: () => string | null;
+        subscription: {
+            hasPlans: boolean;
+            hasAddons: boolean;
+            totalSeats: number;
+        };
+        reporter: {
+            id: string;
+            name: string;
+            email: string;
+        };
     }
 }
 

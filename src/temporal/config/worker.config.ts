@@ -8,6 +8,7 @@
 import { WorkerOptions } from '@temporalio/worker';
 import { getTemporalConfig } from './temporal.config';
 import logger from '../../utils/logger';
+import { Duration } from '@temporalio/common';
 
 export interface WorkerConfig {
     taskQueue: string;
@@ -73,7 +74,7 @@ export function getWorkerOptions(): Partial<WorkerOptions> {
         maxConcurrentWorkflowTaskPolls: config.maxConcurrentWorkflowTaskPolls,
         maxActivitiesPerSecond: config.maxActivitiesPerSecond,
         maxTaskQueueActivitiesPerSecond: config.maxTaskQueueActivitiesPerSecond,
-        stickyQueueScheduleToStartTimeout: config.stickyQueueScheduleToStartTimeout,
+        stickyQueueScheduleToStartTimeout: config.stickyQueueScheduleToStartTimeout as Duration,
 
         // Identity for worker registration
         identity: temporalConfig.identity,
@@ -83,7 +84,7 @@ export function getWorkerOptions(): Partial<WorkerOptions> {
         useVersioning: process.env.NODE_ENV === 'production',
 
         // Shutdown configuration
-        shutdownGraceTime: config.shutdownGraceTime,
+        shutdownGraceTime: config.shutdownGraceTime as Duration,
     };
 
     logger.info('Worker configuration initialized', {

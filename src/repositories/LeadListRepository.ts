@@ -118,7 +118,7 @@ export class LeadListRepository extends BaseRepository<LeadListResponseDto, Lead
             const totalLeads = await this.countByField('lead_list_id', leadListId, 'exact', true);
 
             // Get leads by status
-            const statusCounts = await this.findByField('lead_list_id', leadListId);
+            const statusCounts = await this.findByField('description', leadListId);
 
             // Count leads by status
             const statusMap = (statusCounts || []).reduce(

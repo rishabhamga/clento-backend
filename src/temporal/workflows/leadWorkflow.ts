@@ -2,6 +2,7 @@ import { log, proxyActivities, sleep } from '@temporalio/workflow';
 import { LeadResponseDto, LeadUpdateDto } from '../../dto/leads.dto';
 import { EAction, EWorkflowNodeType, WorkflowEdge, WorkflowJson, WorkflowNode } from '../../types/workflow.types';
 import type * as activities from '../activities';
+import { Duration } from '@temporalio/common';
 
 // Import ActivityResult type
 export type ActivityResult = {
@@ -88,16 +89,16 @@ async function waitForTimeWindow(startTime: string | null | undefined, endTime: 
     const waitMs = timeWindowCheck.waitMs;
 
     // Convert wait time to Temporal sleep format
-    let sleepDuration: string;
+    let sleepDuration: Duration;
     if (waitMs >= 3600000) {
         // Hours
         const hours = Math.floor(waitMs / 3600000);
         const remainingMs = waitMs % 3600000;
         if (remainingMs >= 60000) {
             const minutes = Math.floor(remainingMs / 60000);
-            sleepDuration = `${hours} hours ${minutes} minutes`;
+            sleepDuration = `${hours} hours ${minutes} minutes` as Duration;
         } else {
-            sleepDuration = `${hours} hours`;
+            sleepDuration = `${hours} hours` as Duration;
         }
     } else if (waitMs >= 60000) {
         // Minutes
@@ -105,13 +106,13 @@ async function waitForTimeWindow(startTime: string | null | undefined, endTime: 
         const remainingMs = waitMs % 60000;
         if (remainingMs >= 1000) {
             const seconds = Math.floor(remainingMs / 1000);
-            sleepDuration = `${minutes} minutes ${seconds} seconds`;
+            sleepDuration = `${minutes} minutes ${seconds} seconds` as Duration;
         } else {
-            sleepDuration = `${minutes} minutes`;
+            sleepDuration = `${minutes} minutes` as Duration;
         }
     } else if (waitMs >= 1000) {
         // Seconds
-        sleepDuration = `${Math.floor(waitMs / 1000)} seconds`;
+        sleepDuration = `${Math.floor(waitMs / 1000)} seconds` as Duration;
     } else {
         // Less than 1 second, proceed immediately
         return;
@@ -247,7 +248,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                 });
 
                 try {
-                    await sleep(sleepDuration);
+                    await sleep(sleepDuration as Duration);
                     limitsCheck = await checkConnectionRequestLimits(campaignId);
                 } catch (error: any) {
                     log.error('Error while waiting for connection request limit reset', {
@@ -377,7 +378,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
 
                         try {
                             // Sleep for 24 hours (24 * 60 * 60 = 86400 seconds)
-                            const sleepDuration = `${retryAfterHours} hours`;
+                            const sleepDuration = `${retryAfterHours} hours` as Duration;
                             log.info('Sleeping before retry', {
                                 accountId,
                                 identifier,
@@ -556,19 +557,19 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                 const waitTimeMs = Math.min(pollIntervalMs, remainingTimeMs);
 
                 // Convert to Temporal sleep format
-                let sleepDuration: string;
+                let sleepDuration: Duration;
                 if (waitTimeMs >= 3600000) {
                     // Hours
-                    sleepDuration = `${Math.floor(waitTimeMs / 3600000)} hours`;
+                    sleepDuration = `${Math.floor(waitTimeMs / 3600000)} hours` as Duration;
                 } else if (waitTimeMs >= 60000) {
                     // Minutes
-                    sleepDuration = `${Math.floor(waitTimeMs / 60000)} minutes`;
+                    sleepDuration = `${Math.floor(waitTimeMs / 60000)} minutes` as Duration;
                 } else if (waitTimeMs >= 1000) {
                     // Seconds
-                    sleepDuration = `${Math.floor(waitTimeMs / 1000)} seconds`;
+                    sleepDuration = `${Math.floor(waitTimeMs / 1000)} seconds` as Duration;
                 } else {
                     // Less than 1 second, skip to status check
-                    sleepDuration = '0 seconds';
+                    sleepDuration = '0 seconds' as Duration;
                 }
 
                 if (waitTimeMs > 0) {
@@ -581,7 +582,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                         remainingTimeMs,
                         remainingDays: remainingTimeMs / (24 * 60 * 60 * 1000),
                     });
-                    await sleep(sleepDuration);
+                    await sleep(sleepDuration as Duration);
                     elapsedTimeMs += waitTimeMs;
                 }
 
@@ -876,7 +877,7 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
             if (delay > 0) {
                 // Convert delay to Temporal sleep format and wait
                 // Note: Once a lead starts, it continues regardless of campaign state
-                let sleepDuration: string;
+                let sleepDuration: Duration;
                 if (delay >= 3600000) {
                     // Hours
                     sleepDuration = `${Math.floor(delay / 3600000)} hours`;

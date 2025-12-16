@@ -47,8 +47,8 @@ export abstract class BaseRepository<T, InsertT, UpdateT> {
     /**
      * Find records by a specific field value
      */
-    public async findByField(field: string, value: any): Promise<T[]> {
-        const { data, error } = await this.client.from(this.tableName).select('*').eq(field, value);
+    public async findByField(field: keyof T, value: any): Promise<T[]> {
+        const { data, error } = await this.client.from(this.tableName).select('*').eq(field as string, value);
 
         if (error) {
             throw error;

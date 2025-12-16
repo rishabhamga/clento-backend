@@ -1,4 +1,5 @@
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import express from 'express';
 import 'express-async-errors';
 import helmet from 'helmet';
@@ -7,13 +8,14 @@ import multer from 'multer';
 import path from 'path';
 import env from './config/env';
 import supabase from './config/supabase';
+import sessions from 'client-sessions';
 import { setupSwagger } from './config/swagger';
 import { errorHandler } from './middleware/errorHandler';
 import { TemporalService } from './services/TemporalService';
 import { WorkerManager } from './temporal/worker';
 import './utils/expressExtensions'; // Import express extensions
 import './utils/arrayExtensions'; // Import array extensions globally
-import './utils/mapExtensions' // Import map extensions globally
+import './utils/mapExtensions'; // Import map extensions globally
 import logger from './utils/logger';
 import registerAllRoutes from './utils/registerRoutes';
 import { rawBodyCapture } from './middleware/validation';
@@ -43,6 +45,36 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use(cookieParser());
+
+app.use((req, res, next) => {
+    const isLocalhost = req.headers['origin']?.toString()?.includes('localhost') || req.headers['referer']?.toString()?.includes('localhost') || req.headers['host']?.toString()?.includes('localhost');
+    if (isLocalhost) {
+        sessions({
+            cookieName: 'reporter',
+            secret: env.JWT_SECRET,
+            duration: 72 * 60 * 60 * 1000,
+            activeDuration: 60 * 60 * 1000,
+            cookie: {
+                httpOnly: false,
+                sameSite: 'lax',
+                // domain: '.clento.ai',
+            },
+        })(req, res, next);
+    } else {
+        sessions({
+            cookieName: 'reporter',
+            secret: env.JWT_SECRET,
+            duration: 72 * 60 * 60 * 1000,
+            activeDuration: 60 * 60 * 1000,
+            cookie: {
+                httpOnly: false,
+                sameSite: 'lax',
+                domain: '.clento.ai',
+            },
+        })(req, res, next);
+    }
+});
 app.use(express.json({ verify: rawBodyCapture }));
 app.use(express.urlencoded({ extended: true }));
 

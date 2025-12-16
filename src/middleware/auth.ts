@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ClerkExpressRequireAuth, ClerkExpressWithAuth } from '@clerk/clerk-sdk-node';
+import jwt from 'jsonwebtoken';
 import { UnauthorizedError, ForbiddenError } from '../errors/AppError';
 import { UserRepository } from '../repositories/UserRepository';
 import { OrganizationRepository } from '../repositories/OrganizationRepository';
@@ -42,10 +43,15 @@ declare global {
                 status: string;
             };
             subscription: {
-                hasPlans: boolean
-                hasAddons: boolean,
+                hasPlans: boolean;
+                hasAddons: boolean;
                 totalSeats: number;
-            }
+            };
+            reporter: {
+                id: string;
+                name: string;
+                email: string;
+            };
         }
     }
 }
