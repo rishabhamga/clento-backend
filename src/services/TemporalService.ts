@@ -2,6 +2,7 @@ import { CampaignOrchestratorInput, TemporalClientService } from '../temporal/se
 import { UnipileWrapperService } from '../temporal/services/unipile-wrapper.service';
 import logger from '../utils/logger';
 import { testWorkflow } from '../temporal/workflows/testWorkflow';
+import { parentWorkflow } from '../temporal/workflows/parentWorkflow';
 import { CampaignService } from './CampaignService';
 import { DisplayError } from '../errors/AppError';
 
@@ -158,5 +159,265 @@ export class TemporalService {
                 status: wf.status,
             })),
         };
+    }
+
+    /**
+     * Get workflow ID for a campaign
+     */
+    private getWorkflowIdForCampaign(campaignId: string): string {
+        return `campaign-${campaignId}`;
+    }
+
+    /**
+     * Check if workflow exists and is running for a campaign
+     */
+    private async checkWorkflowExists(campaignId: string): Promise<boolean> {
+        try {
+            const client = this.temporalClient.getClient();
+            const workflowId = this.getWorkflowIdForCampaign(campaignId);
+
+            try {
+                const handle = client.workflow.getHandle(workflowId);
+                const description = await handle.describe();
+                return description.status.name === 'RUNNING';
+            } catch (error: any) {
+                // Workflow doesn't exist or is not running
+                return false;
+            }
+        } catch (error: any) {
+            logger.error('Failed to check workflow existence', {
+                error: error.message,
+                campaignId,
+            });
+            return false;
+        }
+    }
+
+    /**
+     * Pause a campaign workflow
+     * Sends a pause signal to the workflow
+     * If no workflow exists, starts a new one first
+     */
+    public async pauseCampaign(campaignId: string): Promise<void> {
+        try {
+            logger.info('Pausing campaign workflow', { campaignId });
+
+            // Verify campaign exists
+            const campaign = await this.campaignService.getCampaignById(campaignId);
+            if (!campaign) {
+                throw new DisplayError(`Campaign not found: ${campaignId}`);
+            }
+
+            const client = this.temporalClient.getClient();
+            const workflowId = this.getWorkflowIdForCampaign(campaignId);
+
+            // Check if workflow exists
+            const workflowExists = await this.checkWorkflowExists(campaignId);
+
+            // If workflow doesn't exist, start it first
+            if (!workflowExists) {
+                logger.info('No active workflow found, starting new workflow before pausing', { campaignId });
+
+                // Ensure temporal client is initialized
+                await this.temporalClient.initialize();
+
+                if (!campaign.organization_id) {
+                    throw new DisplayError('Organization not found');
+                }
+                if (!campaign.sender_account) {
+                    throw new DisplayError('Sender account not found');
+                }
+                if (!campaign.prospect_list) {
+                    throw new DisplayError('Prospect list not found');
+                }
+
+                const campaignInput: CampaignOrchestratorInput = {
+                    campaignId,
+                    organizationId: campaign.organization_id,
+                    accountId: campaign.sender_account,
+                    leadListId: campaign.prospect_list,
+                    maxConcurrentLeads: campaign.leads_per_day || 0,
+                };
+
+                const handle = await client.workflow.start(parentWorkflow, {
+                    args: [campaignInput],
+                    taskQueue: 'campaign-task-queue',
+                    workflowId,
+                });
+
+                logger.info('Workflow started, now pausing it', {
+                    workflowId: handle.workflowId,
+                    campaignId,
+                });
+
+                // Use the handle from start to send signal
+                await handle.signal('pause-campaign');
+
+                logger.info('Pause signal sent to newly started workflow', {
+                    workflowId: handle.workflowId,
+                    campaignId,
+                });
+                return;
+            }
+
+            // Get workflow handle and send pause signal
+            const handle = client.workflow.getHandle(workflowId);
+            await handle.signal('pause-campaign');
+
+            logger.info('Pause signal sent to workflow', {
+                workflowId,
+                campaignId,
+            });
+        } catch (error: any) {
+            logger.error('Failed to pause campaign workflow', {
+                error: error.message,
+                stack: error.stack,
+                campaignId,
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Resume a campaign workflow
+     * Sends a resume signal to the workflow
+     * If no workflow exists, starts a new one first
+     */
+    public async resumeCampaign(campaignId: string): Promise<void> {
+        try {
+            logger.info('Resuming campaign workflow', { campaignId });
+
+            // Verify campaign exists
+            const campaign = await this.campaignService.getCampaignById(campaignId);
+            if (!campaign) {
+                throw new DisplayError(`Campaign not found: ${campaignId}`);
+            }
+
+            const client = this.temporalClient.getClient();
+            const workflowId = this.getWorkflowIdForCampaign(campaignId);
+
+            // Check if workflow exists
+            const workflowExists = await this.checkWorkflowExists(campaignId);
+
+            // If workflow doesn't exist, start it first
+            if (!workflowExists) {
+                logger.info('No active workflow found, starting new workflow', { campaignId });
+
+                // Ensure temporal client is initialized
+                await this.temporalClient.initialize();
+
+                if (!campaign.organization_id) {
+                    throw new DisplayError('Organization not found');
+                }
+                if (!campaign.sender_account) {
+                    throw new DisplayError('Sender account not found');
+                }
+                if (!campaign.prospect_list) {
+                    throw new DisplayError('Prospect list not found');
+                }
+
+                const campaignInput: CampaignOrchestratorInput = {
+                    campaignId,
+                    organizationId: campaign.organization_id,
+                    accountId: campaign.sender_account,
+                    leadListId: campaign.prospect_list,
+                    maxConcurrentLeads: campaign.leads_per_day || 0,
+                };
+
+                const handle = await client.workflow.start(parentWorkflow, {
+                    args: [campaignInput],
+                    taskQueue: 'campaign-task-queue',
+                    workflowId,
+                });
+
+                logger.info('Workflow started successfully', {
+                    workflowId: handle.workflowId,
+                    campaignId,
+                });
+                // Workflow starts unpaused by default, so no need to send resume signal
+                return;
+            }
+
+            // Get workflow handle and send resume signal
+            const handle = client.workflow.getHandle(workflowId);
+            await handle.signal('resume-campaign');
+
+            logger.info('Resume signal sent to workflow', {
+                workflowId,
+                campaignId,
+            });
+        } catch (error: any) {
+            logger.error('Failed to resume campaign workflow', {
+                error: error.message,
+                stack: error.stack,
+                campaignId,
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Get campaign workflow status
+     * Uses deterministic workflow ID to check status and queries internal pause state
+     */
+    public async getCampaignStatus(campaignId: string): Promise<{
+        isRunning: boolean;
+        isPaused?: boolean;
+        workflowId?: string;
+        runId?: string;
+        status?: string;
+    }> {
+        try {
+            const client = this.temporalClient.getClient();
+            const workflowId = this.getWorkflowIdForCampaign(campaignId);
+
+            try {
+                const handle = client.workflow.getHandle(workflowId);
+                const description = await handle.describe();
+
+                // Check if workflow is running
+                const isRunning = description.status.name === 'RUNNING';
+
+                // If workflow is running, query its internal state to check if it's paused
+                let isPaused = false;
+                if (isRunning) {
+                    try {
+                        const status = await handle.query('get-campaign-status');
+                        isPaused = (status as { isPaused: boolean })?.isPaused ?? false;
+                    } catch (queryError: any) {
+                        // Query might fail if workflow hasn't registered the query handler yet
+                        // This can happen during workflow initialization
+                        logger.warn('Failed to query workflow status, assuming not paused', {
+                            error: queryError.message,
+                            campaignId,
+                            workflowId,
+                        });
+                        // Default to not paused if query fails
+                        isPaused = false;
+                    }
+                }
+
+                return {
+                    isRunning,
+                    isPaused: isRunning ? isPaused : undefined,
+                    workflowId: description.workflowId,
+                    runId: description.runId,
+                    status: description.status.name,
+                };
+            } catch (error: any) {
+                // Workflow doesn't exist or is not accessible
+                return {
+                    isRunning: false,
+                };
+            }
+        } catch (error: any) {
+            logger.error('Failed to get campaign status', {
+                error: error.message,
+                campaignId,
+            });
+            return {
+                isRunning: false,
+            };
+        }
     }
 }

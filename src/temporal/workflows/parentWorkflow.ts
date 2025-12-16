@@ -1,11 +1,11 @@
-import { log, proxyActivities, sleep, startChild, condition, defineSignal, setHandler } from '@temporalio/workflow';
+import { log, proxyActivities, sleep, startChild, condition, defineSignal, defineQuery, setHandler } from '@temporalio/workflow';
 import type * as activities from '../activities';
 import { leadWorkflow } from './leadWorkflow';
 import { CampaignStatus } from '../../dto/campaigns.dto';
 // IMPORTANT DO NOT IMPORT ANYTHING ELSE HERE EVERY ACTIVITY IS TO BE DONE VIA ACTIVITIES
 
 // Create activity proxies with timeout configuration
-const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkflowByCampaignId, verifyUnipileAccount, pauseCampaign } = proxyActivities<typeof activities>({
+const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkflowByCampaignId, verifyUnipileAccount, pauseCampaign, resumeCampaign } = proxyActivities<typeof activities>({
     startToCloseTimeout: '5 minutes',
     retry: {
         initialInterval: '1s',
@@ -17,11 +17,21 @@ const { getCampaignById, getLeadListData, entryLeadsIntoDb, getDBLeads, getWorkf
 export interface CampaignInput {
     campaignId: string;
     organizationId: string;
+    accountId?: string;
+    leadListId?: string;
+    maxConcurrentLeads?: number;
+    leadProcessingDelay?: number;
 }
+
+// Type alias for compatibility with CampaignOrchestratorInput
+export type CampaignOrchestratorInput = CampaignInput;
 
 // Signal definitions for pause/resume functionality
 const pauseSignal = defineSignal('pause-campaign');
 const resumeSignal = defineSignal('resume-campaign');
+
+// Query definition to check campaign status
+const campaignStatusQuery = defineQuery<{ isPaused: boolean; campaignId: string }>('get-campaign-status');
 
 /**
  * Check if campaign should continue processing
@@ -50,14 +60,24 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
     let isPaused = false;
 
     // Set up signal handlers for pause/resume
-    setHandler(pauseSignal, () => {
+    setHandler(pauseSignal, async () => {
         isPaused = true;
         log.info('Campaign paused via signal', { campaignId });
+        await pauseCampaign(campaignId);
     });
 
-    setHandler(resumeSignal, () => {
+    setHandler(resumeSignal, async () => {
         isPaused = false;
         log.info('Campaign resumed via signal', { campaignId });
+        await resumeCampaign(campaignId);
+    });
+
+    // Set up query handler for campaign status
+    setHandler(campaignStatusQuery, () => {
+        return {
+            isPaused,
+            campaignId,
+        };
     });
 
     // Get initial campaign data
