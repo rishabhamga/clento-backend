@@ -17,12 +17,12 @@ class ReporterAccountConnectAPI extends ClentoAPI {
     public POST = async (req: Request, res: Response): Promise<Response> => {
         const reporterUserId = req.reporter.id;
         const provider = 'linkedin';
-        const successRedirectUrl = 'http://localhost:3000/dashboard/accounts';
-        const failureRedirectUrl = 'http://localhost:3000/dashboard/accounts';
-        const notifyUrl = 'https://34c8c9603e64.ngrok-free.app/api/reporter/accounts/webhook';
+        const successRedirectUrl = 'https://reporter.clento.ai/dashboard/accounts';
+        const failureRedirectUrl = 'https://reporter.clento.ai/dashboard/accounts';
+        const notifyUrl = 'https://api-staging.clento.ai/api/reporter/accounts/webhook';
 
         const accounts = await this.connectedAccountService.getUserAccounts(reporterUserId, provider);
-        if(accounts.length > 0) {
+        if (accounts.length > 0) {
             throw new DisplayError('You already have a linkedin account connected');
         }
 
