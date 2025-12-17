@@ -7,6 +7,7 @@ import ClentoAPI, { CheckNever } from '../../../utils/apiUtil';
 import '../../../utils/expressExtensions';
 import { CreateReporterLeadDto } from '../../../dto/reporterDtos/leads.dto';
 import { ReporterConnectedAccountService } from '../../../services/ReporterConnectedAccountService';
+import logger from '../../../utils/logger';
 
 enum ECommand {
     UPLOAD = 'UPLOAD',
@@ -165,11 +166,30 @@ class API extends ClentoAPI {
                     last_company_name: null,
                     last_company_id: null,
                 }));
-                await this.leadRepository.bulkCreate(leads);
+                const createdLeads = await this.leadRepository.bulkCreate(leads);
+
+                // Automatically start monitoring workflows for all newly created leads
+                const monitoringPromises = createdLeads.map(async (lead) => {
+                    try {
+                        await this.monitorService.startMonitoring({ leadId: lead.id });
+                    } catch (monitorError: any) {
+                        // Log error but don't fail the upload if monitoring fails to start
+                        logger.error('Failed to start monitoring for lead', {
+                            leadId: lead.id,
+                            error: monitorError.message,
+                        });
+                    }
+                });
+
+                // Start all monitoring workflows in parallel (don't await to avoid blocking response)
+                Promise.all(monitoringPromises).catch((error) => {
+                    logger.error('Error starting monitoring workflows', { error });
+                });
+
                 return res.sendOKResponse({
                     success: true,
                     message: 'Leads uploaded successfully',
-                    data: leads,
+                    data: createdLeads,
                 });
             case ECommand.DELETE:
                 return await this.handleDeleteLead(req, res);
