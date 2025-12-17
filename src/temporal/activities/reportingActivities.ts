@@ -220,6 +220,43 @@ export async function getReporterConnectedAccount(userId: string): Promise<strin
 }
 
 /**
+ * Get any connected LinkedIn account (across all users)
+ * Throws ApplicationFailure.retryable() on errors to allow Temporal retries
+ * This allows workflows to use any available account, not just the lead's user account
+ */
+export async function getAnyReporterConnectedAccount(): Promise<string> {
+    try {
+        logger.info('Getting any reporter connected LinkedIn account');
+
+        const accountService = new ReporterConnectedAccountService();
+        const account = await accountService.getAnyConnectedLinkedInAccount();
+
+        if (!account) {
+            throw ApplicationFailure.retryable('No connected LinkedIn account found in the system', 'NoConnectedAccount');
+        }
+
+        logger.info('Reporter connected account found', {
+            accountId: account.provider_account_id,
+            reporterUserId: account.reporter_user_id,
+        });
+
+        return account.provider_account_id;
+    } catch (error: any) {
+        logger.error('Error getting any reporter connected account', {
+            error: error.message,
+        });
+
+        // If it's already an ApplicationFailure, rethrow it
+        if (error instanceof ApplicationFailure) {
+            throw error;
+        }
+
+        // Convert to retryable Temporal error
+        throw ApplicationFailure.retryable(`Failed to get any connected account: ${error.message || 'Unknown error'}`, 'GetAnyConnectedAccountError');
+    }
+}
+
+/**
  * Find or create reporter lead
  * Throws ApplicationFailure.retryable() on errors to allow Temporal retries
  * This activity is idempotent - same userId + linkedinUrl always returns same lead

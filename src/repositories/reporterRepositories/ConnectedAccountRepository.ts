@@ -170,4 +170,43 @@ export class ReporterConnectedAccountRepository extends BaseRepository<ReporterC
             return null;
         }
     }
+
+    /**
+     * Get all connected accounts for a specific provider (across all users)
+     */
+    public async getAllConnectedAccountsByProvider(provider: string): Promise<ReporterConnectedAccountResponseDto[]> {
+        try {
+            logger.info('Getting all connected accounts by provider', { provider });
+
+            const { data, error } = await this.client
+                .from(this.tableName)
+                .select('*')
+                .eq('provider', provider)
+                .eq('status', 'connected')
+                .neq('is_deleted', true)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                logger.error('Error getting all connected accounts by provider', { error, provider });
+                throw new DatabaseError('Failed to get all connected accounts by provider');
+            }
+
+            // Filter out pending/incomplete accounts
+            const connectedAccounts = (data || []).filter((account: ReporterConnectedAccountResponseDto) => {
+                const isConnected = account.status === 'connected' && account.provider_account_id && !account.provider_account_id.startsWith('pending-');
+                return isConnected;
+            });
+
+            logger.info('Successfully retrieved all connected accounts by provider', {
+                provider,
+                totalAccounts: data?.length || 0,
+                connectedAccounts: connectedAccounts.length,
+            });
+
+            return connectedAccounts as ReporterConnectedAccountResponseDto[];
+        } catch (error) {
+            logger.error('Error getting all connected accounts by provider', { error, provider });
+            throw new DatabaseError('Failed to get all connected accounts by provider');
+        }
+    }
 }

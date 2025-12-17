@@ -178,6 +178,34 @@ export class ReporterConnectedAccountService {
     }
 
     /**
+     * Get any connected LinkedIn account (across all users)
+     * Returns the first available connected LinkedIn account
+     */
+    async getAnyConnectedLinkedInAccount(): Promise<ReporterConnectedAccountResponseDto | null> {
+        try {
+            const accounts = await this.repository.getAllConnectedAccountsByProvider('linkedin');
+
+            if (accounts.length === 0) {
+                logger.warn('No connected LinkedIn accounts found');
+                return null;
+            }
+
+            // Return the first available account
+            const account = accounts.getRandom();
+            logger.info('Found connected LinkedIn account', {
+                accountId: account.id,
+                providerAccountId: account.provider_account_id,
+                reporterUserId: account.reporter_user_id,
+            });
+
+            return account;
+        } catch (error) {
+            logger.error('Error getting any connected LinkedIn account', { error });
+            throw error;
+        }
+    }
+
+    /**
      * Get user's pending accounts
      */
     async getPendingAccounts(reporterUserId: string, provider?: string): Promise<ReporterConnectedAccountResponseDto[]> {
