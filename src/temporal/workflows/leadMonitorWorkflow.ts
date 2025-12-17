@@ -5,7 +5,7 @@ import type * as reportingActivities from '../activities/reportingActivities';
 const {
     fetchReporterLeadProfile,
     updateReporterLeadProfile,
-    getReporterConnectedAccount,
+    getAnyReporterConnectedAccount,
     getReporterLeadById,
 } = proxyActivities<typeof reportingActivities>({
     startToCloseTimeout: '1 minute',
@@ -61,9 +61,9 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
     const lead = await getReporterLeadById(leadId);
     log.info('Lead details retrieved', { leadId, userId: lead.user_id, linkedinUrl: lead.linkedin_url });
 
-    // Step 2: Get connected account
-    const accountId = await getReporterConnectedAccount(lead.user_id);
-    log.info('Connected account retrieved', { userId: lead.user_id, accountId });
+    // Step 2: Get any connected account (not tied to specific user)
+    const accountId = await getAnyReporterConnectedAccount();
+    log.info('Connected account retrieved', { leadId, accountId });
 
     // Step 3: Initial fetch to establish baseline
     log.info('Performing initial profile fetch', { leadId, accountId, linkedinUrl: lead.linkedin_url });

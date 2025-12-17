@@ -59,9 +59,9 @@ class API extends ClentoAPI {
             throw new ValidationError('User ID is required');
         }
 
-        const accounts = await this.connectedAccountService.getUserAccounts(userId);
+        const accounts = await this.connectedAccountService.getAnyConnectedLinkedInAccount();
 
-        if(accounts.length === 0) {
+        if(!accounts) {
             throw new DisplayError('You need to connect your LinkedIn account first to resume lead monitoring');
         }
 
@@ -113,7 +113,6 @@ class API extends ClentoAPI {
 
         const leadsWithStatus = await leads.mapAsyncOneByOne(async lead => {
             const status = await this.monitorService.getMonitoringStatus(lead.id);
-            console.log(status);
             return {
                 ...lead,
                 status: status.status !== 'CANCELLED' ? status : null,
