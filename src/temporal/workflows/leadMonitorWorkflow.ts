@@ -62,13 +62,13 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
     log.info('Lead details retrieved', { leadId, userId: lead.user_id, linkedinUrl: lead.linkedin_url });
 
     // Step 2: Get any connected account (not tied to specific user)
-    const accountId = await getAnyReporterConnectedAccount();
-    log.info('Connected account retrieved', { leadId, accountId });
+    const initialAccountId = await getAnyReporterConnectedAccount();
+    log.info('Connected account retrieved', { leadId, accountId: initialAccountId });
 
     // Step 3: Initial fetch to establish baseline
-    log.info('Performing initial profile fetch', { leadId, accountId, linkedinUrl: lead.linkedin_url });
+    log.info('Performing initial profile fetch', { leadId, accountId: initialAccountId, linkedinUrl: lead.linkedin_url });
 
-    const initialProfile = await fetchReporterLeadProfile(accountId, lead.linkedin_url);
+    const initialProfile = await fetchReporterLeadProfile(initialAccountId, lead.linkedin_url);
 
     const initialUpdateResult = await updateReporterLeadProfile(leadId, initialProfile);
 
@@ -87,6 +87,7 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
 
             log.info('Workflow resumed, continuing immediately', { leadId });
         }
+        const accountId = await getAnyReporterConnectedAccount();
 
         log.info('Waiting 24 hours before next profile fetch', { leadId });
 
