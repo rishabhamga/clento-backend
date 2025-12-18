@@ -2,12 +2,7 @@ import { log, proxyActivities, sleep, defineSignal, defineQuery, condition, setH
 import { Duration } from '@temporalio/common';
 import type * as reportingActivities from '../activities/reportingActivities';
 
-const {
-    fetchReporterLeadProfile,
-    updateReporterLeadProfile,
-    getAnyReporterConnectedAccount,
-    getReporterLeadById,
-} = proxyActivities<typeof reportingActivities>({
+const { fetchReporterLeadProfile, updateReporterLeadProfile, getAnyReporterConnectedAccount, getReporterLeadById } = proxyActivities<typeof reportingActivities>({
     startToCloseTimeout: '1 minute',
     retry: {
         maximumAttempts: 10,
@@ -61,14 +56,10 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
     const lead = await getReporterLeadById(leadId);
     log.info('Lead details retrieved', { leadId, userId: lead.user_id, linkedinUrl: lead.linkedin_url });
 
-    // Step 2: Get any connected account (not tied to specific user)
-    const accountId = await getAnyReporterConnectedAccount();
-    log.info('Connected account retrieved', { leadId, accountId });
+    // Step 2: Initial fetch to establish baseline
+    log.info('Performing initial profile fetch', { leadId, linkedinUrl: lead.linkedin_url });
 
-    // Step 3: Initial fetch to establish baseline
-    log.info('Performing initial profile fetch', { leadId, accountId, linkedinUrl: lead.linkedin_url });
-
-    const initialProfile = await fetchReporterLeadProfile(accountId, lead.linkedin_url);
+    const initialProfile = await fetchReporterLeadProfile(lead.linkedin_url);
 
     const initialUpdateResult = await updateReporterLeadProfile(leadId, initialProfile);
 
@@ -92,7 +83,6 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
 
         const totalMs = 24 * 60 * 60 * 1000; // Total wait before the repeat
         const checkMs = 60 * 60 * 1000; // Wait before checking the pause status
-
 
         let remainingMs = totalMs;
 
@@ -127,8 +117,8 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
         }
 
         // Fetch profile
-        log.info('Fetching profile for daily check', { leadId, accountId, linkedinUrl: lead.linkedin_url });
-        const profile = await fetchReporterLeadProfile(accountId, lead.linkedin_url);
+        log.info('Fetching profile for daily check', { leadId, linkedinUrl: lead.linkedin_url });
+        const profile = await fetchReporterLeadProfile(lead.linkedin_url);
 
         if (isPaused) {
             log.info('Workflow paused after profile fetch, waiting for resume', { leadId });

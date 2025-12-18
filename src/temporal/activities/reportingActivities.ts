@@ -15,9 +15,11 @@ import { isDeepStrictEqual } from 'node:util';
  * Throws ApplicationFailure.retryable() on errors to allow Temporal retries
  * This activity is idempotent - same accountId + linkedinUrl always returns same profile
  */
-export async function fetchReporterLeadProfile(accountId: string, linkedinUrl: string): Promise<any> {
+export async function fetchReporterLeadProfile(linkedinUrl: string): Promise<any> {
     try {
         const unipileService = new UnipileService();
+
+        const accountId = await getAnyReporterConnectedAccount();
 
         const identifier = CsvService.extractLinkedInPublicIdentifier(linkedinUrl);
         if (!identifier) {
@@ -95,7 +97,6 @@ export async function updateReporterLeadProfile(
             experience: lastExperience,
         });
 
-
         let changes: Partial<Record<keyof ReporterLeadResponseDto, boolean>> = {};
 
         if (currentLead.full_name !== fullName) {
@@ -107,34 +108,34 @@ export async function updateReporterLeadProfile(
         if (currentLead.headline !== headline) {
             changes.headline = true;
         }
-        if(currentLead.location !== location) {
+        if (currentLead.location !== location) {
             changes.location = true;
         }
-        if(currentLead.last_job_title !== lastJobTitle) {
+        if (currentLead.last_job_title !== lastJobTitle) {
             changes.last_job_title = true;
         }
-        if(currentLead.last_company_name !== lastCompanyName) {
+        if (currentLead.last_company_name !== lastCompanyName) {
             changes.last_company_name = true;
         }
-        if(currentLead.last_company_id !== lastCompanyId) {
+        if (currentLead.last_company_id !== lastCompanyId) {
             changes.last_company_id = true;
         }
-        if(!isDeepStrictEqual(currentLead.last_experience, lastExperience)) {
+        if (!isDeepStrictEqual(currentLead.last_experience, lastExperience)) {
             changes.last_experience = true;
         }
-        if(!isDeepStrictEqual(currentLead.last_education, lastEducation)) {
+        if (!isDeepStrictEqual(currentLead.last_education, lastEducation)) {
             changes.last_education = true;
         }
-        if(currentLead.last_profile_hash !== profileHash) {
+        if (currentLead.last_profile_hash !== profileHash) {
             changes.last_profile_hash = true;
         }
-        if(currentLead.last_company_domain !== lastCompanyDomain) {
+        if (currentLead.last_company_domain !== lastCompanyDomain) {
             changes.last_company_domain = true;
         }
-        if(currentLead.last_company_size !== lastCompanySize) {
+        if (currentLead.last_company_size !== lastCompanySize) {
             changes.last_company_size = true;
         }
-        if(currentLead.last_company_industry !== lastCompanyIndustry) {
+        if (currentLead.last_company_industry !== lastCompanyIndustry) {
             changes.last_company_industry = true;
         }
 
@@ -162,7 +163,7 @@ export async function updateReporterLeadProfile(
 
         return {
             lead: updatedLead,
-            changes
+            changes,
         };
     } catch (error: any) {
         logger.error('Error updating reporter lead profile', {
