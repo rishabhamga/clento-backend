@@ -87,7 +87,7 @@ async function waitForTimeWindow(startTime: string | null | undefined, endTime: 
     // Need to wait until the window opens
     const waitMs = timeWindowCheck.waitMs;
 
-    // Convert wait time to Temporal sleep format
+    // Convert wait time to Temporal sleep format (compact format: "11h43m", "30s", etc.)
     let sleepDuration: Duration;
     if (waitMs >= 3600000) {
         // Hours
@@ -95,9 +95,9 @@ async function waitForTimeWindow(startTime: string | null | undefined, endTime: 
         const remainingMs = waitMs % 3600000;
         if (remainingMs >= 60000) {
             const minutes = Math.floor(remainingMs / 60000);
-            sleepDuration = `${hours} hours ${minutes} minutes` as Duration;
+            sleepDuration = `${hours}h${minutes}m` as Duration;
         } else {
-            sleepDuration = `${hours} hours` as Duration;
+            sleepDuration = `${hours}h` as Duration;
         }
     } else if (waitMs >= 60000) {
         // Minutes
@@ -105,13 +105,13 @@ async function waitForTimeWindow(startTime: string | null | undefined, endTime: 
         const remainingMs = waitMs % 60000;
         if (remainingMs >= 1000) {
             const seconds = Math.floor(remainingMs / 1000);
-            sleepDuration = `${minutes} minutes ${seconds} seconds` as Duration;
+            sleepDuration = `${minutes}m${seconds}s` as Duration;
         } else {
-            sleepDuration = `${minutes} minutes` as Duration;
+            sleepDuration = `${minutes}m` as Duration;
         }
     } else if (waitMs >= 1000) {
         // Seconds
-        sleepDuration = `${Math.floor(waitMs / 1000)} seconds` as Duration;
+        sleepDuration = `${Math.floor(waitMs / 1000)}s` as Duration;
     } else {
         // Less than 1 second, proceed immediately
         return;
@@ -140,7 +140,7 @@ async function waitForTimeWindow(startTime: string | null | undefined, endTime: 
         // Wait a bit more if still not in window (shouldn't happen, but safety check)
         if (verifyCheck.waitMs > 0) {
             const additionalWaitSeconds = Math.ceil(verifyCheck.waitMs / 1000);
-            await sleep(`${additionalWaitSeconds} seconds`);
+            await sleep(`${additionalWaitSeconds}s` as Duration);
         }
     }
 }
@@ -215,16 +215,16 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                     const hours = Math.floor(waitMs / 3600000);
                     const minutes = Math.floor((waitMs % 3600000) / 60000);
                     const sleepParts: string[] = [];
-                    if (hours > 0) sleepParts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
-                    if (minutes > 0) sleepParts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
-                    const sleepDuration = sleepParts.length > 0 ? sleepParts.join(' ') : '1 second';
+                    if (hours > 0) sleepParts.push(`${hours}h`);
+                    if (minutes > 0) sleepParts.push(`${minutes}m`);
+                    const sleepDuration = sleepParts.length > 0 ? (sleepParts.join('') as Duration) : ('1s' as Duration);
                     log.info('Connection request limit exceeded, waiting until reset', {
                         campaignId,
                         leadId: lead.id,
                         waitMs,
                         sleepDuration,
                     });
-                    await sleep(sleepDuration as Duration);
+                    await sleep(sleepDuration);
                 }
 
                 // Send connection request - activities throw ApplicationFailure on errors
@@ -255,7 +255,7 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
 
                 // Default: 10 days, poll every hour
                 let totalWaitDurationMs = 10 * 24 * 60 * 60 * 1000;
-                let pollInterval: Duration = '1 hour';
+                let pollInterval: Duration = '1h';
                 let pollIntervalMs = 60 * 60 * 1000; // 1 hour in milliseconds
 
                 // Use edge delay if specified
@@ -265,10 +265,10 @@ async function executeNode(node: WorkflowNode, accountId: string, lead: LeadResp
                         totalWaitDurationMs = edgeDelayMs;
                         // Adjust poll interval based on total wait time
                         if (totalWaitDurationMs < 24 * 60 * 60 * 1000) {
-                            pollInterval = '15 minutes';
+                            pollInterval = '15m';
                             pollIntervalMs = 15 * 60 * 1000;
                         } else if (totalWaitDurationMs < 7 * 24 * 60 * 60 * 1000) {
-                            pollInterval = '30 minutes';
+                            pollInterval = '30m';
                             pollIntervalMs = 30 * 60 * 1000;
                         }
                     }
@@ -521,21 +521,21 @@ export async function leadWorkflow(input: LeadWorkflowInput) {
             // Apply delay if specified
             const delay = getDelayMs(edge);
             if (delay > 0) {
-                // Convert delay to Temporal sleep format and wait
+                // Convert delay to Temporal sleep format and wait (compact format: "11h43m", "30s", etc.)
                 // Note: Once a lead starts, it continues regardless of campaign state
                 let sleepDuration: Duration;
                 if (delay >= 3600000) {
                     // Hours
-                    sleepDuration = `${Math.floor(delay / 3600000)} hours`;
+                    sleepDuration = `${Math.floor(delay / 3600000)}h` as Duration;
                 } else if (delay >= 60000) {
                     // Minutes
-                    sleepDuration = `${Math.floor(delay / 60000)} minutes`;
+                    sleepDuration = `${Math.floor(delay / 60000)}m` as Duration;
                 } else if (delay >= 1000) {
                     // Seconds
-                    sleepDuration = `${Math.floor(delay / 1000)} seconds`;
+                    sleepDuration = `${Math.floor(delay / 1000)}s` as Duration;
                 } else {
                     // Less than 1 second, use minimum 1 second
-                    sleepDuration = '1 second';
+                    sleepDuration = '1s' as Duration;
                 }
 
                 log.info('Waiting before next step', {

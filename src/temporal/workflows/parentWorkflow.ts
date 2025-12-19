@@ -1,4 +1,5 @@
 import { log, proxyActivities, sleep, startChild, condition, defineSignal, defineQuery, setHandler } from '@temporalio/workflow';
+import { Duration } from '@temporalio/common';
 import type * as activities from '../activities';
 import { leadWorkflow } from './leadWorkflow';
 import { CampaignStatus } from '../../dto/campaigns.dto';
@@ -189,7 +190,7 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
 
             if (i > 0) {
                 const randomMinutes = 10 + Math.floor(Math.random() * 21); // 10-30 minutes
-                await sleep(`${randomMinutes} minutes`);
+                await sleep(`${randomMinutes}m` as Duration);
             }
 
             const childHandle = startChild(leadWorkflow, {
@@ -219,7 +220,7 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
             // Sleep in chunks and check pause status
             const totalSleepHours = 24;
             for (let hour = 0; hour < totalSleepHours; hour++) {
-                await sleep('1 hour');
+                await sleep('1h' as Duration);
 
                 // Check if paused or should stop
                 if (isPaused) {

@@ -92,13 +92,13 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
             let sleepChunk: Duration;
             if (sleepMs >= 3600000) {
                 const hours = Math.floor(sleepMs / 3600000);
-                sleepChunk = `${hours} hour${hours > 1 ? 's' : ''}` as Duration;
+                sleepChunk = `${hours}h` as Duration;
             } else if (sleepMs >= 60000) {
                 const minutes = Math.floor(sleepMs / 60000);
-                sleepChunk = `${minutes} minute${minutes > 1 ? 's' : ''}` as Duration;
+                sleepChunk = `${minutes}m` as Duration;
             } else {
                 const seconds = Math.floor(sleepMs / 1000);
-                sleepChunk = `${seconds} second${seconds > 1 ? 's' : ''}` as Duration;
+                sleepChunk = `${seconds}s` as Duration;
             }
 
             await sleep(sleepChunk);

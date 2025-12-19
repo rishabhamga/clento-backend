@@ -269,8 +269,23 @@ export class UnipileService {
 
             logger.info('User profile retrieved via SDK', { accountId, identifier });
 
-            console.log(JSON.stringify(profile));
+            return profile;
+        } catch (error) {
+            logger.error('Error getting user profile via SDK', { error, accountId, identifier });
+            return null;
+        }
+    }
 
+    async getCompanyProfile(accountId: string, identifier: string) {
+        if (!UnipileService.client) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        try {
+            const profile = await UnipileService.client.users.getCompanyProfile({
+                account_id: accountId,
+                identifier: identifier,
+            });
+            logger.info('Compay profile retrieved via SDK', { accountId, identifier });
             return profile;
         } catch (error) {
             logger.error('Error getting user profile via SDK', { error, accountId, identifier });
