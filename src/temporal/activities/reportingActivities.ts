@@ -2,10 +2,13 @@
 
 import { ApplicationFailure } from '@temporalio/common';
 import { ReporterLeadResponseDto, UpdateReporterLeadDto } from '../../dto/reporterDtos/leads.dto';
+import { ReporterCompanyLeadResponseDto, UpdateReporterCompanyLeadDto } from '../../dto/reporterDtos/companies.dto';
 import { ReporterLeadRepository } from '../../repositories/reporterRepositories/LeadRepository';
+import { ReporterCompanyLeadRepository } from '../../repositories/reporterRepositories/CompanyRepository';
 import { CsvService } from '../../services/CsvService';
 import { ReporterConnectedAccountService } from '../../services/ReporterConnectedAccountService';
 import { ReporterLeadService } from '../../services/ReporterLeadService';
+import { ReporterCompanyLeadService } from '../../services/ReporterCompanyLeadService';
 import { UnipileService } from '../../services/UnipileService';
 import logger from '../../utils/logger';
 import { isDeepStrictEqual } from 'node:util';
@@ -337,5 +340,250 @@ export async function getReporterLeadById(leadId: string): Promise<{
 
         // Convert to retryable Temporal error
         throw ApplicationFailure.retryable(`Failed to get lead: ${error.message || 'Unknown error'}`, 'GetLeadError');
+    }
+}
+
+// REPORTER COMPANY MONITORING ACTIVITIES
+
+/**
+ * Fetch LinkedIn company profile for a reporter company
+ * Throws ApplicationFailure.retryable() on errors to allow Temporal retries
+ * This activity is idempotent - same accountId + linkedinUrl always returns same profile
+ */
+export async function fetchReporterCompanyProfile(linkedinUrl: string): Promise<any> {
+    try {
+        const unipileService = new UnipileService();
+
+        const accountId = await getAnyReporterConnectedAccount();
+
+        const identifier = CsvService.extractLinkedInCompanyIdentifier(linkedinUrl);
+        if (!identifier) {
+            throw ApplicationFailure.retryable('Invalid LinkedIn company URL format', 'InvalidLinkedInCompanyUrl');
+        }
+
+        const profile = await unipileService.getCompanyProfile(accountId, identifier);
+
+        if (!profile) {
+            throw ApplicationFailure.retryable('Failed to fetch company profile from Unipile', 'UnipileCompanyProfileFetchFailed');
+        }
+
+        return profile;
+    } catch (error: any) {
+        // If it's already an ApplicationFailure, rethrow it
+        if (error instanceof ApplicationFailure) {
+            throw error;
+        }
+
+        // Convert to retryable Temporal error
+        throw ApplicationFailure.retryable(`LinkedIn company profile fetch failed: ${error.message || 'Unknown error'}`, 'LinkedInCompanyProfileFetchError');
+    }
+}
+
+/**
+ * Update reporter company with profile data
+ * Throws ApplicationFailure.retryable() on errors to allow Temporal retries
+ * This activity is idempotent - multiple calls with same data produce same result
+ */
+export async function updateReporterCompanyProfile(
+    companyId: string,
+    profileData: any,
+): Promise<{
+    company: any;
+    changes: Partial<Record<keyof ReporterCompanyLeadResponseDto, boolean>>;
+}> {
+    try {
+        logger.info('Updating reporter company with profile data', { companyId });
+
+        const companyService = new ReporterCompanyLeadService();
+        const companyRepository = new ReporterCompanyLeadRepository();
+
+        // Get current company data
+        const currentCompany = await companyRepository.findById(companyId);
+        if (!currentCompany) {
+            throw ApplicationFailure.retryable(`Company not found: ${companyId}`, 'CompanyNotFound');
+        }
+
+        // Extract company information using exact field names from Unipile API
+        const name = profileData?.name || null;
+        const tagline = profileData?.tagline || null;
+        const description = profileData?.description || null;
+        const website = profileData?.website || null;
+        const industry = profileData?.industry || null;
+
+        // Extract location from locations array (first location if available)
+        const locations = profileData?.locations || [];
+        const firstLocation = locations.length > 0 ? locations[0] : null;
+        const hqCity = firstLocation?.city || null;
+        const hqCountry = firstLocation?.country || null;
+        const hqRegion = firstLocation?.region || null;
+
+        // Extract logo URLs
+        const logoUrl = profileData?.logo || null;
+        const logoLargeUrl = profileData?.logo_large || null;
+
+        // Extract employee count and range
+        const employeeCountCurrent = profileData?.employee_count || null;
+        const employeeRangeFrom = profileData?.employee_count_range?.from || null;
+        const employeeRangeTo = profileData?.employee_count_range?.to || null;
+
+        // Extract follower count
+        const followersCountCurrent = profileData?.followers_count || null;
+
+        // Calculate profile hash for change detection (idempotency)
+        const profileHash = JSON.stringify({
+            name,
+            tagline,
+            employeeCount: employeeCountCurrent,
+            followersCount: followersCountCurrent,
+            industry,
+        });
+
+        // Track changes
+        let changes: Partial<Record<keyof ReporterCompanyLeadResponseDto, boolean>> = {};
+
+        if (currentCompany.name !== name) {
+            changes.name = true;
+        }
+        if (currentCompany.tagline !== tagline) {
+            changes.tagline = true;
+        }
+        if (currentCompany.description !== description) {
+            changes.description = true;
+        }
+        if (currentCompany.website !== website) {
+            changes.website = true;
+        }
+        if (!isDeepStrictEqual(currentCompany.industry, industry)) {
+            changes.industry = true;
+        }
+        if (currentCompany.hq_city !== hqCity) {
+            changes.hq_city = true;
+        }
+        if (currentCompany.hq_country !== hqCountry) {
+            changes.hq_country = true;
+        }
+        if (currentCompany.hq_region !== hqRegion) {
+            changes.hq_region = true;
+        }
+        if (currentCompany.logo_url !== logoUrl) {
+            changes.logo_url = true;
+        }
+        if (currentCompany.logo_large_url !== logoLargeUrl) {
+            changes.logo_large_url = true;
+        }
+
+        // Employee count tracking
+        const employeeCountChanged = currentCompany.employee_count_current !== employeeCountCurrent;
+        if (employeeCountChanged) {
+            changes.employee_count_current = true;
+            changes.employee_count_previous = true;
+        }
+        if (currentCompany.employee_range_from !== employeeRangeFrom) {
+            changes.employee_range_from = true;
+        }
+        if (currentCompany.employee_range_to !== employeeRangeTo) {
+            changes.employee_range_to = true;
+        }
+
+        // Follower count tracking
+        const followersCountChanged = currentCompany.followers_count_current !== followersCountCurrent;
+        if (followersCountChanged) {
+            changes.followers_count_current = true;
+            changes.followers_count_previous = true;
+        }
+
+        if (currentCompany.last_profile_hash !== profileHash) {
+            changes.last_profile_hash = true;
+        }
+
+        // Prepare update data
+        const updateData: UpdateReporterCompanyLeadDto = {
+            name,
+            tagline,
+            description,
+            website,
+            industry: Array.isArray(industry) ? industry : (industry ? [industry] : null),
+            hq_city: hqCity,
+            hq_country: hqCountry,
+            hq_region: hqRegion,
+            logo_url: logoUrl,
+            logo_large_url: logoLargeUrl,
+            employee_count_current: employeeCountCurrent,
+            employee_count_previous: employeeCountChanged ? currentCompany.employee_count_current : currentCompany.employee_count_previous,
+            employee_count_last_checked_at: employeeCountChanged ? new Date().toISOString() : currentCompany.employee_count_last_checked_at,
+            employee_range_from: employeeRangeFrom,
+            employee_range_to: employeeRangeTo,
+            followers_count_current: followersCountCurrent,
+            followers_count_previous: followersCountChanged ? currentCompany.followers_count_current : currentCompany.followers_count_previous,
+            followers_count_last_checked_at: followersCountChanged ? new Date().toISOString() : currentCompany.followers_count_last_checked_at,
+            last_profile_hash: profileHash,
+            last_fetched_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        };
+
+        // Update company (idempotent operation)
+        const updatedCompany = await companyService.updateCompany(companyId, updateData, currentCompany.user_id);
+
+        return {
+            company: updatedCompany,
+            changes,
+        };
+    } catch (error: any) {
+        logger.error('Error updating reporter company profile', {
+            error: error.message,
+            companyId,
+        });
+
+        if (error instanceof ApplicationFailure) {
+            throw error;
+        }
+
+        throw ApplicationFailure.retryable(`Failed to update company profile: ${error.message || 'Unknown error'}`, 'UpdateCompanyProfileError');
+    }
+}
+
+/**
+ * Get reporter company details by companyId
+ * Throws ApplicationFailure.retryable() on errors to allow Temporal retries
+ * This activity is idempotent - same companyId always returns same company data
+ */
+export async function getReporterCompanyById(companyId: string): Promise<{
+    id: string;
+    user_id: string;
+    linkedin_url: string;
+}> {
+    try {
+        logger.info('Getting reporter company by ID', { companyId });
+
+        const companyRepository = new ReporterCompanyLeadRepository();
+        const company = await companyRepository.findById(companyId);
+
+        if (!company) {
+            throw ApplicationFailure.retryable(`Company not found: ${companyId}`, 'CompanyNotFound');
+        }
+
+        logger.info('Reporter company retrieved', {
+            companyId: company.id,
+            userId: company.user_id,
+            linkedinUrl: company.linkedin_url,
+        });
+
+        return {
+            id: company.id,
+            user_id: company.user_id,
+            linkedin_url: company.linkedin_url,
+        };
+    } catch (error: any) {
+        logger.error('Error getting reporter company by ID', {
+            error: error.message,
+            companyId,
+        });
+
+        // If it's already an ApplicationFailure, rethrow it
+        if (error instanceof ApplicationFailure) {
+            throw error;
+        }
+
+        throw ApplicationFailure.retryable(`Failed to get company: ${error.message || 'Unknown error'}`, 'GetCompanyError');
     }
 }

@@ -334,6 +334,37 @@ export class CsvService {
     }
 
     /**
+     * Extract LinkedIn company identifier from URL
+     * Handles URLs with and without trailing slashes
+     * Examples:
+     * - 'https://www.linkedin.com/company/acme-corp/' -> 'acme-corp'
+     * - 'https://www.linkedin.com/company/acme-corp' -> 'acme-corp'
+     */
+    public static extractLinkedInCompanyIdentifier(url: string): string | null {
+        try {
+            const urlObj = new URL(url);
+
+            // Check if it's a LinkedIn URL
+            if (!urlObj.hostname.includes('linkedin.com')) {
+                return null;
+            }
+
+            // Extract pathname and remove leading/trailing slashes
+            let pathname = urlObj.pathname.replace(/^\/+|\/+$/g, '');
+
+            // Handle /company/ pattern for company profiles
+            if (pathname.startsWith('company/')) {
+                const identifier = pathname.substring(8); // Remove 'company/' prefix
+                return identifier || null;
+            }
+
+            return null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * Validate email format
      */
     private static isValidEmail(email: string): boolean {
