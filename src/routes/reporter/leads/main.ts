@@ -116,7 +116,7 @@ class API extends ClentoAPI {
             const status = await this.monitorService.getMonitoringStatus(lead.id);
             return {
                 ...lead,
-                status: status.status !== 'CANCELLED' ? status : null,
+                status: status.status === 'RUNNING' ? status : null,
             };
         });
 

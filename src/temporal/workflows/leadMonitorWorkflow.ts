@@ -2,7 +2,7 @@ import { log, proxyActivities, sleep, defineSignal, defineQuery, condition, setH
 import { Duration } from '@temporalio/common';
 import type * as reportingActivities from '../activities/reportingActivities';
 
-const { fetchReporterLeadProfile, updateReporterLeadProfile, getAnyReporterConnectedAccount, getReporterLeadById } = proxyActivities<typeof reportingActivities>({
+const { fetchReporterLeadProfile, updateReporterLeadProfile, getReporterLeadById } = proxyActivities<typeof reportingActivities>({
     startToCloseTimeout: '1 minute',
     retry: {
         maximumAttempts: 10,
@@ -81,7 +81,9 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
 
         log.info('Waiting 24 hours before next profile fetch', { leadId });
 
-        const totalMs = 24 * 60 * 60 * 1000; // Total wait before the repeat
+        // const totalMs = 24 * 60 * 60 * 1000; // Total wait before the repeat
+        // TEST TOTAL MS
+        const totalMs = 10 * 1000; // 10 seconds
         const checkMs = 60 * 60 * 1000; // Wait before checking the pause status
 
         let remainingMs = totalMs;

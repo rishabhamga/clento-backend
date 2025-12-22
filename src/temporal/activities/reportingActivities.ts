@@ -55,6 +55,7 @@ export async function fetchReporterLeadProfile(linkedinUrl: string): Promise<any
 export async function updateReporterLeadProfile(
     leadId: string,
     profileData: any,
+    isInitialFetch: boolean = false,
 ): Promise<{
     lead: any;
     changes: Partial<Record<keyof ReporterLeadResponseDto, boolean>>;
@@ -162,10 +163,13 @@ export async function updateReporterLeadProfile(
         };
 
         // Update lead (idempotent operation)
-        const updatedLead = await leadService.updateLead(leadId, updateData, currentLead.user_id);
-
+        if(!isInitialFetch){
+            console.log('Changes:', changes);
+        }
+        // ABHI KE LIYE NOT UPDATING KYUNKI NEED TO KEEP TRACK OF CHANGES AND THEN UPDATE
+        // const updatedLead = await leadService.updateLead(leadId, updateData, currentLead.user_id);
         return {
-            lead: updatedLead,
+            lead: {},
             changes,
         };
     } catch (error: any) {

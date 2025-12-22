@@ -9,6 +9,10 @@ dist/
 build/
 *.tsbuildinfo
 
+# Generated files
+src/generated/
+dist/generated/
+
 # Environment
 .env
 .env.local

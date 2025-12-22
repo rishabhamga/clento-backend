@@ -25,7 +25,7 @@ class AccountAPI extends ClentoAPI {
             const query = req.getQuery();
             const provider = query.getParamAsString('provider', false);
             const status = query.getParamAsString('status', false);
-
+            
             logger.info('Getting user accounts', { organizationId, provider });
 
             // Get actual accounts from the service

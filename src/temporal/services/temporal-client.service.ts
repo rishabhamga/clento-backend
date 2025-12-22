@@ -2,6 +2,7 @@ import { Client, Connection, WorkflowClient, WorkflowHandle } from '@temporalio/
 import logger from '../../utils/logger';
 import { getTemporalConfig, getTemporalConnectionOptions } from '../config/temporal.config';
 import { parentWorkflow } from '../workflows/parentWorkflow';
+import { getCampaignTaskQueue } from '../../utils/queueUtil';
 
 export interface CampaignOrchestratorInput {
     campaignId: string;
@@ -10,6 +11,7 @@ export interface CampaignOrchestratorInput {
     leadListId: string;
     maxConcurrentLeads?: number;
     leadProcessingDelay?: number;
+    taskQueue?: string; // Task queue name for child workflows
 }
 
 export class TemporalClientService {
@@ -83,9 +85,15 @@ export class TemporalClientService {
                 await this.initialize();
             }
 
+            const campaignQueue = getCampaignTaskQueue();
+            const workflowInput = {
+                ...input,
+                taskQueue: campaignQueue,
+            };
+
             const handle = await this.client?.workflow.start(parentWorkflow, {
-                args: [input],
-                taskQueue: 'campaign-task-queue',
+                args: [workflowInput],
+                taskQueue: campaignQueue,
                 workflowId: `campaign-${input.campaignId}`,
             });
 

@@ -189,7 +189,6 @@ export class ReporterConnectedAccountService {
                 logger.warn('No connected LinkedIn accounts found');
                 return null;
             }
-
             // Return the first available account
             const account = accounts.getRandom();
             logger.info('Found connected LinkedIn account', {
