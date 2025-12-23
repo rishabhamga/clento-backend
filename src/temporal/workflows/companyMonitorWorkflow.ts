@@ -57,7 +57,7 @@ export async function companyMonitorWorkflow(input: CompanyMonitorWorkflowInput)
 
     const initialProfile = await fetchReporterCompanyProfile(company.linkedin_url);
 
-    const initialUpdateResult = await updateReporterCompanyProfile(companyId, initialProfile);
+    const initialUpdateResult = await updateReporterCompanyProfile(companyId, initialProfile, true, company.user_id);
 
     log.info('Initial profile fetch completed', {
         companyId,
@@ -122,7 +122,7 @@ export async function companyMonitorWorkflow(input: CompanyMonitorWorkflowInput)
             log.info('Workflow resumed, continuing with profile update', { companyId });
         }
 
-        const updateResult = await updateReporterCompanyProfile(companyId, profile);
+        const updateResult = await updateReporterCompanyProfile(companyId, profile, false, company.user_id);
 
         const hasChanges = Object.values(updateResult.changes).some(v => v);
         if (hasChanges) {
