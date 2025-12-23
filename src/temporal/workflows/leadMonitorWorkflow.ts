@@ -61,7 +61,7 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
 
     const initialProfile = await fetchReporterLeadProfile(lead.linkedin_url);
 
-    const initialUpdateResult = await updateReporterLeadProfile(leadId, initialProfile);
+    const initialUpdateResult = await updateReporterLeadProfile(leadId, initialProfile, true, lead.user_id);
 
     log.info('Initial profile fetch completed', {
         leadId,
@@ -81,9 +81,10 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
 
         log.info('Waiting 24 hours before next profile fetch', { leadId });
 
-        // const totalMs = 24 * 60 * 60 * 1000; // Total wait before the repeat
+        const totalMs = 24 * 60 * 60 * 1000; // Total wait before the repeat
         // TEST TOTAL MS
-        const totalMs = 10 * 1000; // 10 seconds
+        // const totalMs = 10 * 1000; // 10 seconds
+
         const checkMs = 60 * 60 * 1000; // Wait before checking the pause status
 
         let remainingMs = totalMs;
@@ -128,7 +129,7 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
             log.info('Workflow resumed, continuing with profile update', { leadId });
         }
 
-        const updateResult = await updateReporterLeadProfile(leadId, profile);
+        const updateResult = await updateReporterLeadProfile(leadId, profile, false, lead.user_id);
 
         const hasChanges = Object.values(updateResult.changes).some(v => v);
         if (hasChanges) {
