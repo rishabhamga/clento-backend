@@ -12,6 +12,8 @@ import { ReporterCompanyLeadService } from '../../services/ReporterCompanyLeadSe
 import { UnipileService } from '../../services/UnipileService';
 import logger from '../../utils/logger';
 import { isDeepStrictEqual } from 'node:util';
+import { ReporterLeadAlertRepository } from '../../repositories/reporterRepositories/LeadAlertRepository';
+import { EAlertPriority, CreateReporterLeadAlertDto } from '../../dto/reporterDtos/leadAlerts.dto';
 
 /**
  * Fetch LinkedIn profile for a reporter lead
@@ -52,9 +54,17 @@ export async function fetchReporterLeadProfile(linkedinUrl: string): Promise<any
  * Throws ApplicationFailure.retryable() on errors to allow Temporal retries
  * This activity is idempotent - multiple calls with same data produce same result
  */
+
+const AddAlert = async(leadId: string, title: string, description: string, userId: string, priority: EAlertPriority) => {
+    const alertRepository = new ReporterLeadAlertRepository();
+    const alert  = await alertRepository.create({lead_id: leadId, title, description, reporter_user_id: userId, priority})
+    return alert;
+}
 export async function updateReporterLeadProfile(
     leadId: string,
     profileData: any,
+    isInitialFetch: boolean = false,
+    userId: string,
 ): Promise<{
     lead: any;
     changes: Partial<Record<keyof ReporterLeadResponseDto, boolean>>;
@@ -162,8 +172,36 @@ export async function updateReporterLeadProfile(
         };
 
         // Update lead (idempotent operation)
+        if (!isInitialFetch) {
+            switch (true) {
+                case changes.full_name === true:
+                    await AddAlert(leadId, 'Full Name Changed', `Lead Full Name has changed from ${currentLead.full_name} to ${fullName}`, userId, EAlertPriority.MEDIUM);
+                case changes.profile_image_url === true:
+                    await AddAlert(leadId, 'Profile Photo Changed', `Lead Profile Photo has changed`, userId, EAlertPriority.LOW);
+                case changes.headline === true:
+                    await AddAlert(leadId, 'HeadLine Changed', `Lead HeadLine has changed`, userId, EAlertPriority.MEDIUM);
+                case changes.location === true:
+                    await AddAlert(leadId, 'Location Changed', `Lead Location has changed`, userId, EAlertPriority.HIGH);
+                case changes.last_job_title === true:
+                    await AddAlert(leadId, 'Job Title Changed', `Lead Job Title has changed`, userId, EAlertPriority.HIGH);
+                case changes.last_company_name === true:
+                    await AddAlert(leadId, 'Company Name Changed', `Lead Company Name has changed`, userId, EAlertPriority.HIGH);
+                case changes.last_company_id === true:
+                    await AddAlert(leadId, 'Company Id Changed', `Lead Company Id has changed Check for company changes`, userId, EAlertPriority.HIGH);
+                    case changes.last_experience === true:
+                    await AddAlert(leadId, 'Experience Changed', `Lead Experience has changed`, userId, EAlertPriority.HIGH);
+                case changes.last_education === true:
+                    await AddAlert(leadId, 'Education Changed', `Lead Education has changed`, userId, EAlertPriority.LOW);
+                case changes.last_company_domain === true:
+                    await AddAlert(leadId, 'Company Domain Changed', `Lead Company Domain has changed`, userId, EAlertPriority.MEDIUM);
+                case changes.last_company_size === true:
+                    await AddAlert(leadId, 'Company Size Changed', `Lead Company Size has changed`, userId, EAlertPriority.LOW);
+                case changes.last_company_industry === true:
+                    await AddAlert(leadId, 'Company Industry Changed', `Lead Company Industry has changed`, userId, EAlertPriority.LOW);
+            }
+        }
+        // ABHI KE LIYE NOT UPDATING KYUNKI NEED TO KEEP TRACK OF CHANGES AND THEN UPDATE
         const updatedLead = await leadService.updateLead(leadId, updateData, currentLead.user_id);
-
         return {
             lead: updatedLead,
             changes,

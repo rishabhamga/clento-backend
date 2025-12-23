@@ -2,6 +2,7 @@ import { TemporalClientService } from '../temporal/services/temporal-client.serv
 import { companyMonitorWorkflow, CompanyMonitorWorkflowInput } from '../temporal/workflows/leadMonitorWorkflows';
 import { ReporterCompanyLeadRepository } from '../repositories/reporterRepositories/CompanyRepository';
 import logger from '../utils/logger';
+import { getLeadMonitorTaskQueue } from '../utils/queueUtil';
 
 export interface StartCompanyMonitoringInput {
     companyId: string;
@@ -51,7 +52,7 @@ export class ReporterCompanyMonitorService {
 
             const handle = await client.workflow.start(companyMonitorWorkflow, {
                 args: [workflowInput],
-                taskQueue: 'lead-monitor-task-queue',
+                taskQueue: getLeadMonitorTaskQueue(),
                 workflowId,
             });
 
@@ -244,7 +245,7 @@ export class ReporterCompanyMonitorService {
 
                 const handle = await client.workflow.start(companyMonitorWorkflow, {
                     args: [workflowInput],
-                    taskQueue: 'lead-monitor-task-queue',
+                    taskQueue: getLeadMonitorTaskQueue(),
                     workflowId,
                 });
 
@@ -325,7 +326,7 @@ export class ReporterCompanyMonitorService {
 
                 const handle = await client.workflow.start(companyMonitorWorkflow, {
                     args: [workflowInput],
-                    taskQueue: 'lead-monitor-task-queue',
+                    taskQueue: getLeadMonitorTaskQueue(),
                     workflowId,
                 });
 

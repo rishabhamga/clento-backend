@@ -1,5 +1,6 @@
 import { ConnectionOptions, TLSConfig } from '@temporalio/client';
 import logger from '../../utils/logger';
+import { getCampaignTaskQueue } from '../../utils/queueUtil';
 
 export interface TemporalConfig {
     address: string;
@@ -35,7 +36,7 @@ export function getTemporalConfig(): TemporalConfig {
         address,
         namespace,
         identity: `clento-backend-${process.env.NODE_ENV}`,
-        taskQueue: 'campaign-task-queue', // ✅ Must match worker and client
+        taskQueue: getCampaignTaskQueue(), // ✅ Must match worker and client
         workflowExecutionTimeout: '30d', // Maximum campaign duration
         workflowRunTimeout: '30d',
         workflowTaskTimeout: '10s',

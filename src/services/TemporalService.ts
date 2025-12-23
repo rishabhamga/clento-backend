@@ -5,12 +5,33 @@ import { testWorkflow } from '../temporal/workflows/testWorkflow';
 import { parentWorkflow } from '../temporal/workflows/parentWorkflow';
 import { CampaignService } from './CampaignService';
 import { DisplayError } from '../errors/AppError';
+import { getCampaignTaskQueue } from '../utils/queueUtil';
+import { CheckNever } from '../utils/apiUtil';
 
 export class TemporalService {
     private static instance: TemporalService;
     private temporalClient = TemporalClientService.getInstance();
     private unipileService = UnipileWrapperService.getInstance();
     private campaignService = new CampaignService();
+
+    public static getQueueName(type: 'campaign' | 'leadMonitor'): string {
+        switch (type) {
+            case 'campaign':
+                if (process.env.USE_DEVELOPMENT_QUEUE) {
+                    return 'dev-campaign-task-queue';
+                } else {
+                    return 'campaign-task-queue';
+                }
+            case 'leadMonitor':
+                if (process.env.USE_DEVELOPMENT_QUEUE) {
+                    return 'dev-lead-monitor-task-queue';
+                } else {
+                    return 'lead-monitor-task-queue';
+                }
+            default:
+                return CheckNever(type);
+        }
+    }
 
     public static getInstance(): TemporalService {
         if (!TemporalService.instance) {
@@ -86,7 +107,7 @@ export class TemporalService {
 
             const handle = await client.workflow.start(testWorkflow, {
                 args: [input],
-                taskQueue: 'campaign-task-queue', // ✅ Must match worker
+                taskQueue: getCampaignTaskQueue(), // ✅ Must match worker
                 workflowId,
             });
 
@@ -127,7 +148,8 @@ export class TemporalService {
     public async getActiveCampaignWorkflows() {
         const client = this.temporalClient.getClient();
 
-        const query = `WorkflowType = 'parentWorkflow' AND TaskQueue = 'campaign-task-queue' AND ExecutionStatus = 'Running'`;
+        const campaignQueue = getCampaignTaskQueue();
+        const query = `WorkflowType = 'parentWorkflow' AND TaskQueue = '${campaignQueue}' AND ExecutionStatus = 'Running'`;
 
         const listIterable = client.workflow.list({ query });
 
@@ -239,9 +261,14 @@ export class TemporalService {
                     maxConcurrentLeads: campaign.leads_per_day || 0,
                 };
 
+                const campaignQueue = getCampaignTaskQueue();
+                const workflowInput = {
+                    ...campaignInput,
+                    taskQueue: campaignQueue,
+                };
                 const handle = await client.workflow.start(parentWorkflow, {
-                    args: [campaignInput],
-                    taskQueue: 'campaign-task-queue',
+                    args: [workflowInput],
+                    taskQueue: campaignQueue,
                     workflowId,
                 });
 
@@ -324,9 +351,14 @@ export class TemporalService {
                     maxConcurrentLeads: campaign.leads_per_day || 0,
                 };
 
+                const campaignQueue = getCampaignTaskQueue();
+                const workflowInput = {
+                    ...campaignInput,
+                    taskQueue: campaignQueue,
+                };
                 const handle = await client.workflow.start(parentWorkflow, {
-                    args: [campaignInput],
-                    taskQueue: 'campaign-task-queue',
+                    args: [workflowInput],
+                    taskQueue: campaignQueue,
                     workflowId,
                 });
 

@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import multer from 'multer';
 import path from 'path';
+import { execSync } from 'child_process';
 import env from './config/env';
 import supabase from './config/supabase';
 import sessions from 'client-sessions';
@@ -19,6 +20,8 @@ import './utils/mapExtensions'; // Import map extensions globally
 import logger from './utils/logger';
 import registerAllRoutes from './utils/registerRoutes';
 import { rawBodyCapture } from './middleware/validation';
+import { loggers } from 'winston';
+import { getCampaignTaskQueue, getLeadMonitorTaskQueue } from './utils/queueUtil';
 
 // Create Express application
 const app = express();
@@ -122,12 +125,55 @@ const startServer = async () => {
         // Initialize Supabase connection
         await supabase.initSupabase();
 
-        // Initialize Temporal service
+        // Check for existing processes on the port before starting and kill them FIRST
+        // This ensures old workers are stopped before new ones start
+        try {
+            const portCheck = execSync(`lsof -ti:${env.PORT}`, { encoding: 'utf-8', stdio: 'pipe' }).trim();
+            if (portCheck) {
+                const pids = portCheck.split('\n').filter(Boolean).map(pid => parseInt(pid, 10));
+                // Filter out our own process ID if it's somehow in the list
+                const otherPids = pids.filter(pid => pid !== process.pid);
+
+                // Kill existing processes on the port
+                if (otherPids.length > 0) {
+                    for (const pid of otherPids) {
+                        try {
+                            // Send SIGTERM first for graceful shutdown
+                            process.kill(pid, 'SIGTERM');
+
+                            // Wait a bit for graceful shutdown
+                            await new Promise(resolve => setTimeout(resolve, 500));
+
+                            // Check if process still exists, force kill if needed
+                            try {
+                                execSync(`kill -0 ${pid}`, { stdio: 'pipe' });
+                                // Process still exists, force kill
+                                process.kill(pid, 'SIGKILL');
+                            } catch {
+                                // Process already dead, good
+                            }
+                        } catch (killError) {
+                            // Process may already be dead, continue
+                        }
+                    }
+
+                    // Wait a bit more for port to be released
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        } catch (error) {
+            // Port is free (lsof returns error when no processes found)
+        }
+
+        // NOW initialize Temporal service and workers AFTER old process is killed
         let workerManager: WorkerManager | null = null;
         try {
             const temporalService = TemporalService.getInstance();
             await temporalService.initialize();
+            const campaignQueue = getCampaignTaskQueue();
+            const leadQueue = getLeadMonitorTaskQueue();
             logger.info('Temporal service initialized successfully');
+            logger.info('Using Queues', { campaignQueue, leadQueue });
 
             // Start Temporal worker if enabled
             if (env.ENABLE_TEMPORAL_WORKER) {
@@ -172,6 +218,18 @@ const startServer = async () => {
             }
         });
 
+        // Handle server errors (e.g., port already in use)
+        server.on('error', (error: NodeJS.ErrnoException) => {
+            if (error.code === 'EADDRINUSE') {
+                logger.error(`Port ${env.PORT} is already in use. Please kill the process using this port or use a different port.`);
+                logger.error(`To kill the process, run: lsof -ti:${env.PORT} | xargs kill -9`);
+                process.exit(1);
+            } else {
+                logger.error('Server error:', error);
+                process.exit(1);
+            }
+        });
+
         // Graceful shutdown handler
         const gracefulShutdown = async (signal: string) => {
             logger.info(`${signal} received, starting graceful shutdown...`);
@@ -180,7 +238,14 @@ const startServer = async () => {
                 // Stop accepting new connections
                 server.close(() => {
                     logger.info('HTTP server closed');
+                    process.exit(0);
                 });
+
+                // Force close after 10 seconds
+                setTimeout(() => {
+                    logger.warn('Forcing shutdown after timeout');
+                    process.exit(1);
+                }, 10000);
 
                 // Shutdown Temporal workers gracefully
                 if (workerManager) {
@@ -188,7 +253,6 @@ const startServer = async () => {
                 }
 
                 logger.info('✅ Graceful shutdown completed');
-                process.exit(0);
             } catch (error) {
                 logger.error('Error during graceful shutdown', { error });
                 process.exit(1);

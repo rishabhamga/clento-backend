@@ -4,6 +4,7 @@ import * as reportingActivities from './activities/reportingActivities';
 import { getWorkerOptions } from './config/worker.config';
 import { getTemporalConfig } from './config/temporal.config';
 import logger from '../utils/logger';
+import { getCampaignTaskQueue, getLeadMonitorTaskQueue } from '../utils/queueUtil';
 
 /**
  * WorkerManager - Manages Temporal worker lifecycle
@@ -74,17 +75,18 @@ export class WorkerManager {
         const workflowsPath = require.resolve('./workflows/index');
         logger.info('Resolved workflows path', { workflowsPath });
 
+        const campaignQueue = getCampaignTaskQueue();
         const worker = await Worker.create({
             connection,
             namespace: config.namespace,
             workflowsPath,
             activities,
             ...workerOptions,
-            taskQueue: 'campaign-task-queue', // Override taskQueue from workerOptions
+            taskQueue: campaignQueue, // Override taskQueue from workerOptions
         });
 
         logger.info('Campaign worker created successfully', {
-            taskQueue: 'campaign-task-queue',
+            taskQueue: campaignQueue,
             namespace: config.namespace,
             maxConcurrentWorkflows: workerOptions.maxConcurrentWorkflowTaskExecutions,
             maxConcurrentActivities: workerOptions.maxConcurrentActivityTaskExecutions,
@@ -109,17 +111,18 @@ export class WorkerManager {
         const workflowsPath = require.resolve('./workflows/leadMonitorWorkflows');
         logger.info('Resolved lead monitor workflows path', { workflowsPath });
 
+        const leadMonitorQueue = getLeadMonitorTaskQueue();
         const worker = await Worker.create({
             connection,
             namespace: config.namespace,
             workflowsPath,
             activities: reportingActivities,
             ...workerOptions,
-            taskQueue: 'lead-monitor-task-queue', // Override taskQueue from workerOptions
+            taskQueue: leadMonitorQueue, // Override taskQueue from workerOptions
         });
 
         logger.info('Lead monitor worker created successfully', {
-            taskQueue: 'lead-monitor-task-queue',
+            taskQueue: leadMonitorQueue,
             namespace: config.namespace,
             maxConcurrentWorkflows: workerOptions.maxConcurrentWorkflowTaskExecutions,
             maxConcurrentActivities: workerOptions.maxConcurrentActivityTaskExecutions,
@@ -144,19 +147,21 @@ export class WorkerManager {
 
             // Start campaign worker
             const campaignWorker = await this.createCampaignWorker();
+            const campaignQueue = getCampaignTaskQueue();
             this.workers.push(campaignWorker);
-            this.runWorkerInBackground(campaignWorker, 'campaign-task-queue');
+            this.runWorkerInBackground(campaignWorker, campaignQueue);
             logger.info('✅ Campaign worker started and running', {
-                taskQueue: 'campaign-task-queue',
+                taskQueue: campaignQueue,
                 workerCount: this.workers.length,
             });
 
             // Start lead monitor worker
             const leadMonitorWorker = await this.createLeadMonitorWorker();
+            const leadMonitorQueue = getLeadMonitorTaskQueue();
             this.workers.push(leadMonitorWorker);
-            this.runWorkerInBackground(leadMonitorWorker, 'lead-monitor-task-queue');
+            this.runWorkerInBackground(leadMonitorWorker, leadMonitorQueue);
             logger.info('✅ Lead monitor worker started and running', {
-                taskQueue: 'lead-monitor-task-queue',
+                taskQueue: leadMonitorQueue,
                 workerCount: this.workers.length,
             });
 
@@ -213,14 +218,17 @@ export class WorkerManager {
         logger.info(`Starting ${count} campaign worker instance(s) + 1 lead monitor worker...`);
 
         try {
+            const campaignQueue = getCampaignTaskQueue();
+            const leadMonitorQueue = getLeadMonitorTaskQueue();
+
             // Start multiple campaign workers
             for (let i = 0; i < count; i++) {
                 try {
                     const campaignWorker = await this.createCampaignWorker();
                     this.workers.push(campaignWorker);
-                    this.runWorkerInBackground(campaignWorker, 'campaign-task-queue');
+                    this.runWorkerInBackground(campaignWorker, campaignQueue);
                     logger.info(`Campaign worker ${i + 1}/${count} started`, {
-                        taskQueue: 'campaign-task-queue',
+                        taskQueue: campaignQueue,
                     });
                 } catch (error) {
                     logger.error(`Failed to start campaign worker ${i + 1}/${count}`, { error });
@@ -232,9 +240,9 @@ export class WorkerManager {
             try {
                 const leadMonitorWorker = await this.createLeadMonitorWorker();
                 this.workers.push(leadMonitorWorker);
-                this.runWorkerInBackground(leadMonitorWorker, 'lead-monitor-task-queue');
+                this.runWorkerInBackground(leadMonitorWorker, leadMonitorQueue);
                 logger.info('Lead monitor worker started', {
-                    taskQueue: 'lead-monitor-task-queue',
+                    taskQueue: leadMonitorQueue,
                 });
             } catch (error) {
                 logger.error('Failed to start lead monitor worker', { error });

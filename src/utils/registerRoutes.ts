@@ -4,60 +4,109 @@ import * as path from 'path';
 import ClentoAPI from './apiUtil';
 
 /**
- * Recursively require all route files from a folder.
- * @param folderPath absolute path (use path.join(__dirname, 'routes'))
+ * Recursively find all route files in a directory
+ * @param dir - Directory to search
+ * @param isProduction - Whether we're in production (looking for .js files) or dev (looking for .ts files)
+ * @returns Array of absolute file paths
  */
-export const requireDirectory = <T>(folderPath: string): { [key: string]: T } => {
-    const returningMap: { [key: string]: T } = {};
+function findRouteFiles(dir: string, isProduction: boolean): string[] {
+    const files: string[] = [];
 
-    fs.readdirSync(folderPath).forEach(file => {
-        const filePath = path.join(folderPath, file);
+    if (!fs.existsSync(dir)) {
+        return files;
+    }
 
-        // Load only runtime files: .js (compiled) or .ts (source), but never .d.ts
-        const isJs = file.endsWith('.js');
-        const isTs = file.endsWith('.ts') && !file.endsWith('.d.ts');
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const fileExtension = '.js';
 
-        if (isJs || isTs) {
-            const relativeFilePath = path.relative(__dirname, filePath);
-            const required = require(filePath).default;
-            returningMap[file.replace(/\.(ts|js)$/i, '')] = required;
-        } else if (fs.lstatSync(filePath).isDirectory()) {
-            const innerFiles = requireDirectory<T>(filePath);
-            Object.keys(innerFiles).forEach(innerKey => {
-                returningMap[`${file}/${innerKey}`] = innerFiles[innerKey];
-            });
+    for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+            // Skip node_modules, dist, .git, and other non-source directories
+            if (!['node_modules', 'dist', '.git', 'generated'].includes(entry.name)) {
+                files.push(...findRouteFiles(fullPath, isProduction));
+            }
+        } else if (entry.isFile() && entry.name.endsWith(fileExtension)) {
+            // Skip declaration files and source maps
+            if (!entry.name.endsWith('.d.ts') && !entry.name.endsWith('.d.js') && !entry.name.endsWith('.map')) {
+                files.push(fullPath);
+            }
         }
-    });
-
-    return returningMap;
-};
+    }
+    return files;
+}
 
 /**
- * Registers all routes automatically.
+ * Load a route file and extract the ClentoAPI instance
+ * @param filePath - Absolute path to the route file
+ * @returns ClentoAPI instance or null if file is not a valid route
  */
-const registerAllRoutes = (app: Application, routesFolder: string) => {
-    const routes = requireDirectory<ClentoAPI>(routesFolder);
-    const allPaths = new Set<string>();
+function loadRoute(filePath: string): ClentoAPI | null {
+    try {
+        // Require the route file directly
+        // In production: filePath points to dist/routes/*.js
+        // In development: filePath points to src/routes/*.ts (works with ts-node)
+        const routeModule = require(filePath);
+        const routeInstance = routeModule.default;
 
-    Object.values(routes).forEach(clentoAPI => {
-        if (!(clentoAPI instanceof ClentoAPI)) return;
-
-        if (allPaths.has(clentoAPI.path)) {
-            throw new Error(`Double registration of route with path = '${clentoAPI.path}'`);
+        // Validate it's a ClentoAPI instance
+        if (!routeInstance || !(routeInstance instanceof ClentoAPI)) {
+            return null; // Skip non-route files
         }
-        allPaths.add(clentoAPI.path);
 
-        app.get(clentoAPI.path, clentoAPI.wrapper);
-        app.post(clentoAPI.path, clentoAPI.wrapper);
-        app.put(clentoAPI.path, clentoAPI.wrapper);
-        app.delete(clentoAPI.path, clentoAPI.wrapper);
-        app.head(clentoAPI.path, clentoAPI.wrapper);
-        app.options(clentoAPI.path, clentoAPI.wrapper);
+        return routeInstance;
+    } catch (error) {
+        // Silently skip files that can't be loaded (might not be route files)
+        return null;
+    }
+}
 
-        console.log(`✅ Registered: ${clentoAPI.path}`);
-    });
+/**
+ * Register all routes automatically by scanning route files
+ * Routes are discovered at startup - no build-time generation needed
+ * @param app - Express application instance
+ * @param routesFolder - Path to the routes directory (dist/routes in production, src/routes in dev)
+ */
+const registerAllRoutes = (app: Application, routesFolder: string): void => {
+    // Determine if we're in production (dist) or development (src)
+    const isProduction = __dirname.includes('dist') || routesFolder.includes('dist');
 
-    console.log(`🚀 Total routes registered: ${allPaths.size}`);
+    // Find all route files (.js in production, .ts in development)
+    const routeFiles = findRouteFiles(routesFolder, isProduction);
+
+    const registeredPaths = new Set<string>();
+    const registeredRoutes: ClentoAPI[] = [];
+
+    // Load all route files
+    for (const filePath of routeFiles) {
+        const routeInstance = loadRoute(filePath);
+        if (!routeInstance) {
+            continue; // Skip non-route files
+        }
+
+        // Validate no duplicate paths
+        if (registeredPaths.has(routeInstance.path)) {
+            throw new Error(`Duplicate route path: ${routeInstance.path}`);
+        }
+
+        registeredPaths.add(routeInstance.path);
+        registeredRoutes.push(routeInstance);
+    }
+
+    // Register all routes to Express app
+    for (const routeInstance of registeredRoutes) {
+        // Register all HTTP methods that the route supports
+        // The wrapper method handles routing to the appropriate handler
+        app.get(routeInstance.path, routeInstance.wrapper);
+        app.post(routeInstance.path, routeInstance.wrapper);
+        app.put(routeInstance.path, routeInstance.wrapper);
+        app.delete(routeInstance.path, routeInstance.wrapper);
+        app.head(routeInstance.path, routeInstance.wrapper);
+        app.options(routeInstance.path, routeInstance.wrapper);
+    }
+
+    console.log(`✓ Registered ${registeredRoutes.length} route(s)`);
 };
 
 export default registerAllRoutes;

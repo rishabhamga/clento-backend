@@ -59,6 +59,11 @@ const envSchema = z.object({
 
     // JWT Token Authentication
     JWT_SECRET: z.string().min(1, 'JWT Secret is required'),
+
+    USE_DEVELOPMENT_QUEUE: z
+        .string()
+        .transform(val => val === 'true')
+        .default('false'),
 });
 
 // Parse and validate environment variables

@@ -22,6 +22,7 @@ export interface CampaignInput {
     leadListId?: string;
     maxConcurrentLeads?: number;
     leadProcessingDelay?: number;
+    taskQueue?: string; // Task queue name for child workflows
 }
 
 // Type alias for compatibility with CampaignOrchestratorInput
@@ -54,7 +55,7 @@ async function shouldContinueCampaign(campaignId: string): Promise<boolean> {
  * Runs daily batches of lead processing based on campaign configuration
  */
 export async function parentWorkflow(input: CampaignInput): Promise<void> {
-    const { campaignId, organizationId } = input;
+    const { campaignId, organizationId, taskQueue = 'campaign-task-queue' } = input;
 
     log.info('Starting campaign workflow', { campaignId, organizationId });
 
@@ -205,7 +206,7 @@ export async function parentWorkflow(input: CampaignInput): Promise<void> {
                     timezone: campaignFetch.timezone,
                 }],
                 workflowId: `lead-${lead.id}-day-${Math.floor(processedLeads / leadsPerDay) + 1}`,
-                taskQueue: 'campaign-task-queue',
+                taskQueue,
             });
 
             allChildWorkflowHandles.push(childHandle);

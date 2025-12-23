@@ -2,6 +2,8 @@ import { TemporalClientService } from '../temporal/services/temporal-client.serv
 import { leadMonitorWorkflow, LeadMonitorWorkflowInput } from '../temporal/workflows';
 import { ReporterLeadRepository } from '../repositories/reporterRepositories/LeadRepository';
 import logger from '../utils/logger';
+import { getLeadMonitorTaskQueue, getCampaignTaskQueue } from '../utils/queueUtil';
+import { TemporalService } from './TemporalService';
 
 export interface StartMonitoringInput {
     leadId: string;
@@ -51,7 +53,7 @@ export class ReporterLeadMonitorService {
 
             const handle = await client.workflow.start(leadMonitorWorkflow, {
                 args: [workflowInput],
-                taskQueue: 'lead-monitor-task-queue',
+                taskQueue: getLeadMonitorTaskQueue(),
                 workflowId,
             });
 
@@ -289,7 +291,7 @@ export class ReporterLeadMonitorService {
 
                 const handle = await client.workflow.start(leadMonitorWorkflow, {
                     args: [workflowInput],
-                    taskQueue: 'campaign-task-queue',
+                    taskQueue: getCampaignTaskQueue(),
                     workflowId,
                 });
 
@@ -370,7 +372,7 @@ export class ReporterLeadMonitorService {
 
                 const handle = await client.workflow.start(leadMonitorWorkflow, {
                     args: [workflowInput],
-                    taskQueue: 'campaign-task-queue',
+                    taskQueue: getCampaignTaskQueue(),
                     workflowId,
                 });
 
