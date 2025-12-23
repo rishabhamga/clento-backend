@@ -3,6 +3,7 @@ import ClentoAPI from '../../utils/apiUtil';
 import { ReporterLeadAlertRepository } from '../../repositories/reporterRepositories/LeadAlertRepository';
 import { EAlertPriority } from '../../dto/reporterDtos/leadAlerts.dto';
 import { ReporterLeadRepository } from '../../repositories/reporterRepositories/LeadRepository';
+import { ReporterCompanyLeadRepository } from '../../repositories/reporterRepositories/CompanyRepository';
 
 class API extends ClentoAPI {
     public path = '/api/reporter/alerts';
@@ -10,6 +11,7 @@ class API extends ClentoAPI {
 
     private alertRepository = new ReporterLeadAlertRepository();
     private leadRepository = new ReporterLeadRepository();
+    private companyLeadRepository = new ReporterCompanyLeadRepository();
 
     public GET = async (req: Request, res: Response) => {
         const userId = req.reporter.id;
@@ -24,13 +26,18 @@ class API extends ClentoAPI {
 
         const leadIds = result.alerts.map(it => it.lead_id);
         const leads = await this.leadRepository.findByIdIn(leadIds);
+        const companyLeads = await this.companyLeadRepository.findByIdIn(leadIds);
+
+        const leadMap = new Map(leads.map((lead: any) => [lead.id, lead]));
+        const companyLeadMap = new Map(companyLeads.map((company: any) => [company.id, company]));
 
         const alertsWithLeads = result.alerts.map(it => {
-            const lead = leads.find(lead => lead.id === it.lead_id);
+            const lead = leadMap.get(it.lead_id) || null;
+            const company = companyLeadMap.get(it.lead_id) || null;
             return {
                 ...it,
-                leadName: lead?.full_name || 'Unknown',
-                linkedinUrl: lead?.linkedin_url,
+                leadName: lead?.full_name || company?.name || 'Unknown',
+                linkedinUrl: lead?.linkedin_url || company?.linkedin_url,
             };
         });
 
