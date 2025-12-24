@@ -513,20 +513,20 @@ export async function updateReporterCompanyProfile(
         }
 
         // Employee count tracking
-        const employeeCountChanged = currentCompany.employee_count_current !== employeeCountCurrent;
+        const employeeCountChanged = Number(currentCompany.employee_count_current) !== Number(employeeCountCurrent);
         if (employeeCountChanged) {
             changes.employee_count_current = true;
             changes.employee_count_previous = true;
         }
-        if (currentCompany.employee_range_from !== employeeRangeFrom) {
+        if (Number(currentCompany.employee_range_from) !== Number(employeeRangeFrom)) {
             changes.employee_range_from = true;
         }
-        if (currentCompany.employee_range_to !== employeeRangeTo) {
+        if (Number(currentCompany.employee_range_to) !== Number(employeeRangeTo)) {
             changes.employee_range_to = true;
         }
 
         // Follower count tracking
-        const followersCountChanged = currentCompany.followers_count_current !== followersCountCurrent;
+        const followersCountChanged = Number(currentCompany.followers_count_current) !== Number(followersCountCurrent);
         if (followersCountChanged) {
             changes.followers_count_current = true;
             changes.followers_count_previous = true;
