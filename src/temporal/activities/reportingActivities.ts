@@ -561,44 +561,40 @@ export async function updateReporterCompanyProfile(
             updated_at: new Date().toISOString(),
         };
 
-        if (isInitialFetch) {
+        if (!isInitialFetch) {
             switch (true) {
                 case changes.name === true:
                     await AddAlert(currentCompany.id, 'Company Name Changed', `Company Name has changed from ${currentCompany.name} to ${name}`, userId, EAlertPriority.HIGH);
                 case changes.tagline === true:
-                    await AddAlert(currentCompany.id, 'Company Tagline Changed', `Company Tagline has changed from ${currentCompany.tagline} to ${tagline}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Tagline Changed', `Company Tagline has changed from ${currentCompany.tagline} to ${tagline}`, userId, EAlertPriority.MEDIUM);
                 case changes.description === true:
-                    await AddAlert(currentCompany.id, 'Company Description Changed', `Company Description has changed from ${currentCompany.description} to ${description}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Description Changed', `Company Description has changed from ${currentCompany.description} to ${description}`, userId, EAlertPriority.MEDIUM);
                 case changes.website === true:
-                    await AddAlert(currentCompany.id, 'Company Website Changed', `Company Website has changed from ${currentCompany.website} to ${website}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Website Changed', `Company Website has changed from ${currentCompany.website} to ${website}`, userId, EAlertPriority.MEDIUM);
                 case changes.industry === true:
-                    await AddAlert(currentCompany.id, 'Company Industry Changed', `Company Industry has changed from ${currentCompany.industry} to ${industry}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Industry Changed', `Company Industry has changed from ${currentCompany.industry} to ${industry}`, userId, EAlertPriority.HIGH);
                 case changes.hq_city === true:
-                    await AddAlert(currentCompany.id, 'Company HQ City Changed', `Company HQ City has changed from ${currentCompany.hq_city} to ${hqCity}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company HQ City Changed', `Company HQ City has changed from ${currentCompany.hq_city} to ${hqCity}`, userId, EAlertPriority.HIGH);
                 case changes.hq_country === true:
-                    await AddAlert(currentCompany.id, 'Company HQ Country Changed', `Company HQ Country has changed from ${currentCompany.hq_country} to ${hqCountry}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company HQ Country Changed', `Company HQ Country has changed from ${currentCompany.hq_country} to ${hqCountry}`, userId, EAlertPriority.HIGH);
                 case changes.hq_region === true:
-                    await AddAlert(currentCompany.id, 'Company HQ Region Changed', `Company HQ Region has changed from ${currentCompany.hq_region} to ${hqRegion}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company HQ Region Changed', `Company HQ Region has changed from ${currentCompany.hq_region} to ${hqRegion}`, userId, EAlertPriority.HIGH);
                 case changes.logo_url === true:
-                    await AddAlert(currentCompany.id, 'Company Logo Changed', `Company Logo has changed from ${currentCompany.logo_url} to ${logoUrl}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Logo Changed', `Company Logo has changed`, userId, EAlertPriority.LOW);
                 case changes.logo_large_url === true:
-                    await AddAlert(currentCompany.id, 'Company Logo Large Changed', `Company Logo Large has changed from ${currentCompany.logo_large_url} to ${logoLargeUrl}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Logo Large Changed', `Company Logo Large has changed`, userId, EAlertPriority.LOW);
                 case changes.employee_count_current === true:
-                    await AddAlert(currentCompany.id, 'Company Employee Count Changed', `Company Employee Count has changed from ${currentCompany.employee_count_current} to ${employeeCountCurrent}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Employee Count Changed', `Company Employee Count has changed from ${currentCompany.employee_count_current} to ${employeeCountCurrent}`, userId, EAlertPriority.MEDIUM);
                 case changes.employee_count_previous === true:
-                    await AddAlert(currentCompany.id, 'Company Employee Count Previous Changed', `Company Employee Count Previous has changed from ${currentCompany.employee_count_previous} to ${employeeCountChanged ? currentCompany.employee_count_current : currentCompany.employee_count_previous}`, userId, EAlertPriority.LOW);
-                case changes.employee_count_last_checked_at === true:
-                    await AddAlert(currentCompany.id, 'Company Employee Count Last Checked At Changed', `Company Employee Count Last Checked At has changed from ${currentCompany.employee_count_last_checked_at} to ${employeeCountChanged ? new Date().toISOString() : currentCompany.employee_count_last_checked_at}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Employee Count Previous Changed', `Company Employee Count Previous has changed from ${currentCompany.employee_count_previous} to ${employeeCountChanged ? currentCompany.employee_count_current : currentCompany.employee_count_previous}`, userId, EAlertPriority.MEDIUM);
                 case changes.employee_range_from === true:
-                    await AddAlert(currentCompany.id, 'Company Employee Range From Changed', `Company Employee Range From has changed from ${currentCompany.employee_range_from} to ${employeeRangeFrom}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Employee Range From Changed', `Company Employee Range From has changed from ${currentCompany.employee_range_from} to ${employeeRangeFrom}`, userId, EAlertPriority.MEDIUM);
                 case changes.employee_range_to === true:
-                    await AddAlert(currentCompany.id, 'Company Employee Range To Changed', `Company Employee Range To has changed from ${currentCompany.employee_range_to} to ${employeeRangeTo}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Employee Range To Changed', `Company Employee Range To has changed from ${currentCompany.employee_range_to} to ${employeeRangeTo}`, userId, EAlertPriority.MEDIUM);
                 case changes.followers_count_current === true:
                     await AddAlert(currentCompany.id, 'Company Followers Count Changed', `Company Followers Count has changed from ${currentCompany.followers_count_current} to ${followersCountCurrent}`, userId, EAlertPriority.LOW);
                 case changes.followers_count_previous === true:
                     await AddAlert(currentCompany.id, 'Company Followers Count Previous Changed', `Company Followers Count Previous has changed from ${currentCompany.followers_count_previous} to ${followersCountChanged ? currentCompany.followers_count_current : currentCompany.followers_count_previous}`, userId, EAlertPriority.LOW);
-                case changes.followers_count_last_checked_at === true:
-                    await AddAlert(currentCompany.id, 'Company Followers Count Last Checked At Changed', `Company Followers Count Last Checked At has changed from ${currentCompany.followers_count_last_checked_at} to ${followersCountChanged ? new Date().toISOString() : currentCompany.followers_count_last_checked_at}`, userId, EAlertPriority.LOW);
             }
         }
 
