@@ -48,6 +48,7 @@ export const CreateReporterLeadDto = z.object({
     last_company_size: z.string().nullable().optional(),
     last_company_industry: z.string().nullable().optional(),
     last_fetched_at: z.string().datetime().nullable().optional(),
+    last_7_posts_ids: z.array(z.string()).nullable().optional(),
     is_deleted: z.boolean().default(false).optional(),
 });
 
@@ -68,6 +69,7 @@ export const UpdateReporterLeadDto = z.object({
     last_company_size: z.string().nullable().optional(),
     last_company_industry: z.string().nullable().optional(),
     last_fetched_at: z.string().datetime().nullable().optional(),
+    last_7_posts_ids: z.array(z.string()).nullable().optional(),
     updated_at: z.string().datetime(),
     is_deleted: z.boolean().optional(),
 });
@@ -91,6 +93,7 @@ export const ReporterLeadResponseDto = z.object({
     last_company_size: z.string().nullable(),
     last_company_industry: z.string().nullable(),
     last_fetched_at: z.string().datetime().nullable(),
+    last_7_posts_ids: z.array(z.string()).nullable(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime(),
     is_deleted: z.boolean(),

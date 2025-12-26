@@ -2,7 +2,7 @@ import { log, proxyActivities, sleep, defineSignal, defineQuery, condition, setH
 import { Duration } from '@temporalio/common';
 import type * as reportingActivities from '../activities/reportingActivities';
 
-const { fetchReporterCompanyProfile, updateReporterCompanyProfile, getAnyReporterConnectedAccount, getReporterCompanyById } = proxyActivities<typeof reportingActivities>({
+const { fetchReporterCompanyProfile, updateReporterCompanyProfile, getAnyReporterConnectedAccount, getReporterCompanyById, updateCompanyPost } = proxyActivities<typeof reportingActivities>({
     startToCloseTimeout: '1 minute',
     retry: {
         maximumAttempts: 10,
@@ -55,9 +55,9 @@ export async function companyMonitorWorkflow(input: CompanyMonitorWorkflowInput)
     // Step 2: Initial fetch to establish baseline
     log.info('Performing initial profile fetch', { companyId, linkedinUrl: company.linkedin_url });
 
-    const initialProfile = await fetchReporterCompanyProfile(company.linkedin_url);
+    const { profile: initialProfileResult, posts } = await fetchReporterCompanyProfile(company.linkedin_url);
 
-    const initialUpdateResult = await updateReporterCompanyProfile(companyId, initialProfile, true, company.user_id);
+    const initialUpdateResult = await updateReporterCompanyProfile(companyId, initialProfileResult, true, company.user_id);
 
     log.info('Initial profile fetch completed', {
         companyId,
@@ -69,22 +69,17 @@ export async function companyMonitorWorkflow(input: CompanyMonitorWorkflowInput)
     while (true) {
         if (isPaused) {
             log.info('Workflow is paused, waiting for resume signal', { companyId });
-
             await condition(() => !isPaused);
-
             log.info('Workflow resumed, continuing immediately', { companyId });
         }
 
         log.info('Waiting 7 days before next profile fetch', { companyId });
-
-        const totalMs = 7 * 24 * 60 * 60 * 1000; // Total wait before the repeat (7 days)
-        const checkMs = 60 * 60 * 1000; // Wait before checking the pause status (1 hour)
-
+        // const totalMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+        const totalMs = 10 * 1000;
+        const checkMs = 60 * 60 * 1000; // 1 hour
         let remainingMs = totalMs;
-
         while (remainingMs > 0 && !isPaused) {
             const sleepMs = Math.min(checkMs, remainingMs);
-
             let sleepChunk: Duration;
             if (sleepMs >= 3600000) {
                 const hours = Math.floor(sleepMs / 3600000);
@@ -96,25 +91,24 @@ export async function companyMonitorWorkflow(input: CompanyMonitorWorkflowInput)
                 const seconds = Math.floor(sleepMs / 1000);
                 sleepChunk = `${seconds}s` as Duration;
             }
-
             await sleep(sleepChunk);
             remainingMs -= sleepMs;
-
             if (isPaused) {
                 log.info('Pause signal received during sleep, pausing workflow', { companyId });
                 break;
             }
         }
-
         if (isPaused) {
             log.info('Workflow is paused after sleep, waiting for resume signal', { companyId });
             await condition(() => !isPaused);
             log.info('Workflow resumed after pause, continuing immediately', { companyId });
         }
 
-        // Fetch profile
+        // Fetch profile and posts
         log.info('Fetching profile for weekly check', { companyId, linkedinUrl: company.linkedin_url });
-        const profile = await fetchReporterCompanyProfile(company.linkedin_url);
+        // --- Company post monitoring logic ---
+        // You need to implement fetchReporterCompanyProfile to also return posts (like fetchReporterLeadProfile)
+        const { profile, posts } = await fetchReporterCompanyProfile(company.linkedin_url);
 
         if (isPaused) {
             log.info('Workflow paused after profile fetch, waiting for resume', { companyId });
@@ -122,8 +116,15 @@ export async function companyMonitorWorkflow(input: CompanyMonitorWorkflowInput)
             log.info('Workflow resumed, continuing with profile update', { companyId });
         }
 
-        const updateResult = await updateReporterCompanyProfile(companyId, profile, false, company.user_id);
+        // Process company posts (mirroring lead logic)
+        // You need to implement updateCompanyPost in reportingActivities
+        await Promise.all(
+            posts?.map(async postId => {
+                await updateCompanyPost(companyId, false, company.user_id, postId);
+            }) ?? [],
+        );
 
+        const updateResult = await updateReporterCompanyProfile(companyId, profile, false, company.user_id);
         const hasChanges = Object.values(updateResult.changes).some(v => v);
         if (hasChanges) {
             log.info('Profile changes detected', {

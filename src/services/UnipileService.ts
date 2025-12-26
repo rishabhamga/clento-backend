@@ -534,7 +534,18 @@ export class UnipileService {
         }
     }
 
-    async getRecentPosts(params: { accountId: string; linkedInUrn: string; lastDays: number }) {
+    async getPost(params: { accountId: string; postId: string }) {
+        if (!UnipileClient) {
+            throw new ServiceUnavailableError('Unipile service not configured');
+        }
+        const response = await UnipileService.client?.users.getPost({
+            account_id: params.accountId,
+            post_id: params.postId,
+        });
+        return response;
+    }
+
+    async getRecentPosts(params: { accountId: string; linkedInUrn: string; lastDays: number; limit?: number; isCompany?: boolean }) {
         if (!UnipileClient) {
             throw new ServiceUnavailableError('Unipile service not configured');
         }
@@ -542,7 +553,8 @@ export class UnipileService {
             const response = await UnipileService.client?.users.getAllPosts({
                 account_id: params.accountId,
                 identifier: params.linkedInUrn,
-                limit: 5,
+                limit: params.limit ?? 5,
+                is_company: params.isCompany ?? false,
             });
             // Filter posts to only those created within the last X days
             if (Array.isArray(response?.items)) {

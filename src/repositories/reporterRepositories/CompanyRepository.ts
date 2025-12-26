@@ -52,7 +52,7 @@ export class ReporterCompanyLeadRepository extends BaseRepository<ReporterCompan
      */
     public async getUserCompanies(userId: string): Promise<ReporterCompanyLeadResponseDto[]> {
         try {
-            const {data, error} = await this.client.from(this.tableName).select('*').eq('user_id', userId);
+            const { data, error } = await this.client.from(this.tableName).select('*').eq('user_id', userId).neq('is_deleted', true);
             if (error) {
                 logger.error('Error getting reporter user companies', { error, userId });
                 throw error;
@@ -84,7 +84,7 @@ export class ReporterCompanyLeadRepository extends BaseRepository<ReporterCompan
      */
     public async bulkCreate(companies: CreateReporterCompanyLeadDto[]): Promise<ReporterCompanyLeadResponseDto[]> {
         try {
-            const {data, error} = await this.client.from(this.tableName).insert(companies).select();
+            const { data, error } = await this.client.from(this.tableName).insert(companies).select();
             if (error) {
                 logger.error('Error bulk creating reporter companies', { error, companies });
                 throw error;
