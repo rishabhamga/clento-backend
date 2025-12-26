@@ -23,6 +23,8 @@ export const CreateReporterCompanyLeadDto = z.object({
     followers_count_previous: z.number().int().nullable().optional(),
     followers_count_last_checked_at: z.string().datetime().nullable().optional(),
     last_profile_hash: z.string().nullable().optional(),
+    last_7_posts_ids: z.array(z.string()).nullable().optional(),
+    is_deleted: z.boolean().default(false).optional(),
     last_fetched_at: z.string().datetime().nullable().optional(),
 });
 
@@ -49,6 +51,8 @@ export const UpdateReporterCompanyLeadDto = z.object({
     followers_count_last_checked_at: z.string().datetime().nullable().optional(),
     last_profile_hash: z.string().nullable().optional(),
     last_fetched_at: z.string().datetime().nullable().optional(),
+    last_7_posts_ids: z.array(z.string()).nullable().optional(),
+    is_deleted: z.boolean().optional(),
     updated_at: z.string().datetime(),
 });
 
@@ -77,8 +81,10 @@ export const ReporterCompanyLeadResponseDto = z.object({
     followers_count_last_checked_at: z.string().datetime().nullable(),
     last_profile_hash: z.string().nullable(),
     last_fetched_at: z.string().datetime().nullable(),
+    last_7_posts_ids: z.array(z.string()).nullable(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime(),
+    is_deleted: z.boolean()
 });
 
 // Type exports

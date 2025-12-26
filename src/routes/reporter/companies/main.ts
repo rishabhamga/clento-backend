@@ -60,7 +60,7 @@ class API extends ClentoAPI {
 
         const accounts = await this.connectedAccountService.getAnyConnectedLinkedInAccount();
 
-        if(!accounts) {
+        if (!accounts) {
             throw new DisplayError('You need to connect your LinkedIn account first to resume company monitoring');
         }
 
@@ -103,7 +103,7 @@ class API extends ClentoAPI {
         await this.monitorService.stopMonitoring(companyId);
         // Note: Since there's no is_deleted field, we'll just update the timestamp
         // If soft delete is needed, add is_deleted field to schema
-        await this.companyRepository.update(companyId, { updated_at: new Date().toISOString() });
+        await this.companyRepository.update(companyId, { is_deleted: true, updated_at: new Date().toISOString() });
         return res.sendOKResponse({ success: true, message: 'Company deleted successfully', companyId });
     };
 
@@ -162,7 +162,7 @@ class API extends ClentoAPI {
                 const createdCompanies = await this.companyRepository.bulkCreate(companies);
 
                 // Automatically start monitoring workflows for all newly created companies
-                const monitoringPromises = createdCompanies.map(async (company) => {
+                const monitoringPromises = createdCompanies.map(async company => {
                     try {
                         await this.monitorService.startMonitoring({ companyId: company.id });
                     } catch (monitorError: any) {
@@ -175,7 +175,7 @@ class API extends ClentoAPI {
                 });
 
                 // Start all monitoring workflows in parallel (don't await to avoid blocking response)
-                Promise.all(monitoringPromises).catch((error) => {
+                Promise.all(monitoringPromises).catch(error => {
                     logger.error('Error starting monitoring workflows', { error });
                 });
 

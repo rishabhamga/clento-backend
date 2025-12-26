@@ -14,13 +14,18 @@ import logger from '../../utils/logger';
 import { isDeepStrictEqual } from 'node:util';
 import { ReporterLeadAlertRepository } from '../../repositories/reporterRepositories/LeadAlertRepository';
 import { EAlertPriority, CreateReporterLeadAlertDto } from '../../dto/reporterDtos/leadAlerts.dto';
+import { deepStrictEqual } from 'node:assert';
+import { UnipileClient } from 'unipile-node-sdk';
+import { post } from 'axios';
+import { ConnectedAccountRepository } from '../../repositories/ConnectedAccountRepository';
+import { OpenAiManager } from '../../services/OpenAiManager';
 
 /**
  * Fetch LinkedIn profile for a reporter lead
  * Throws ApplicationFailure.retryable() on errors to allow Temporal retries
  * This activity is idempotent - same accountId + linkedinUrl always returns same profile
  */
-export async function fetchReporterLeadProfile(linkedinUrl: string): Promise<any> {
+export async function fetchReporterLeadProfile(linkedinUrl: string): Promise<{ profile: any; posts: string[] | undefined }> {
     try {
         const unipileService = new UnipileService();
 
@@ -33,11 +38,17 @@ export async function fetchReporterLeadProfile(linkedinUrl: string): Promise<any
 
         const profile = await unipileService.getUserProfile(accountId, identifier);
 
+        if (profile?.provider !== 'LINKEDIN') {
+            throw ApplicationFailure.nonRetryable('Invalid Provider used');
+        }
+        const posts = await unipileService.getRecentPosts({ accountId, linkedInUrn: profile.provider_id, lastDays: 7, limit: 7, isCompany: false });
+        const postIDs = posts?.sort((a, b) => new Date(b.parsed_datetime).getTime() - new Date(a.parsed_datetime).getTime()).map(it => it.id);
+
         if (!profile) {
             throw ApplicationFailure.retryable('Failed to fetch profile from Unipile', 'UnipileProfileFetchFailed');
         }
 
-        return profile;
+        return { profile, posts: postIDs };
     } catch (error: any) {
         // If it's already an ApplicationFailure, rethrow it
         if (error instanceof ApplicationFailure) {
@@ -60,6 +71,101 @@ const AddAlert = async (leadId: string, title: string, description: string, user
     const alert = await alertRepository.create({ lead_id: leadId, title, description, reporter_user_id: userId, priority });
     return alert;
 };
+
+export async function updateLeadPost(leadId: string, isInitialFetch: boolean = false, userId: string, postId: string) {
+    const leadRepository = new ReporterLeadRepository();
+    const leadService = new ReporterLeadService();
+    const openAiManager = new OpenAiManager();
+    const currentLead = await leadRepository.findById(leadId);
+    if (!currentLead) {
+        logger.error('Lead not found when updating post', { leadId });
+        return;
+    }
+
+    const lastPosts = currentLead.last_7_posts_ids || [];
+
+    if (isInitialFetch) {
+        // Always add postId to last_7_posts_ids (if not already present), no fetch needed
+        if (!lastPosts.includes(postId)) {
+            const updatedPosts = [postId, ...lastPosts].slice(0, 7);
+            await leadService.updateLead(leadId, { last_7_posts_ids: updatedPosts, updated_at: new Date().toISOString() }, currentLead.user_id);
+            logger.info('Initial fetch: post added to lead', { leadId, postId });
+        } else {
+            logger.info('Initial fetch: post already present, skipping', { leadId, postId });
+        }
+        return;
+    }
+
+    // Not initial fetch: check and fetch post if needed
+    if (lastPosts.includes(postId)) {
+        logger.info('Post already present in last_7_posts_ids, skipping', { leadId, postId });
+        return;
+    }
+    const unipileService = new UnipileService();
+    const accountId = await getAnyReporterConnectedAccount();
+    const post = await unipileService.getPost({ accountId, postId });
+    logger.info('New post detected, adding to last_7_posts_ids', { leadId, postId });
+    //need to add Ai evaluation
+    if (post) {
+        const { summary, isCritical } = await openAiManager.summarize(post.text);
+
+        if (isCritical) {
+            await AddAlert(leadId, 'New Post By Lead', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.HIGH);
+        } else {
+            await AddAlert(leadId, 'New Post By Lead', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.LOW);
+        }
+    }
+    const updatedPosts = [postId, ...lastPosts].slice(0, 7);
+    await leadService.updateLead(leadId, { last_7_posts_ids: updatedPosts, updated_at: new Date().toISOString() }, currentLead.user_id);
+    logger.info('Post added to lead', { leadId, postId, post });
+}
+export async function updateCompanyPost(leadId: string, isInitialFetch: boolean = false, userId: string, postId: string) {
+    const companyLeadRepository = new ReporterCompanyLeadRepository();
+    const companyLeadService = new ReporterCompanyLeadService();
+    const openAiManager = new OpenAiManager();
+    const currentLead = await companyLeadRepository.findById(leadId);
+    if (!currentLead) {
+        logger.error('Lead not found when updating post', { leadId });
+        return;
+    }
+
+    const lastPosts = currentLead.last_7_posts_ids || [];
+
+    if (isInitialFetch) {
+        // Always add postId to last_7_posts_ids (if not already present), no fetch needed
+        if (!lastPosts.includes(postId)) {
+            const updatedPosts = [postId, ...lastPosts].slice(0, 7);
+            await companyLeadService.updateCompany(leadId, { last_7_posts_ids: updatedPosts, updated_at: new Date().toISOString() }, currentLead.user_id);
+            logger.info('Initial fetch: post added to Company', { leadId, postId });
+        } else {
+            logger.info('Initial fetch: post already present, skipping', { leadId, postId });
+        }
+        return;
+    }
+
+    // Not initial fetch: check and fetch post if needed
+    if (lastPosts.includes(postId)) {
+        logger.info('Post already present in last_7_posts_ids, skipping', { leadId, postId });
+        return;
+    }
+    const unipileService = new UnipileService();
+    const accountId = await getAnyReporterConnectedAccount();
+    const post = await unipileService.getPost({ accountId, postId });
+    logger.info('New post detected, adding to last_7_posts_ids', { leadId, postId });
+    //need to add Ai evaluation
+    if (post) {
+        const { summary, isCritical } = await openAiManager.summarize(post.text);
+
+        if (isCritical) {
+            await AddAlert(leadId, 'New Post By Company', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.HIGH);
+        } else {
+            await AddAlert(leadId, 'New Post By Company', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.LOW);
+        }
+    }
+    const updatedPosts = [postId, ...lastPosts].slice(0, 7);
+    await companyLeadService.updateCompany(leadId, { last_7_posts_ids: updatedPosts, updated_at: new Date().toISOString() }, currentLead.user_id);
+    logger.info('Post added to company', { leadId, postId, post });
+}
 export async function updateReporterLeadProfile(
     leadId: string,
     profileData: any,
@@ -112,43 +218,49 @@ export async function updateReporterLeadProfile(
 
         let changes: Partial<Record<keyof ReporterLeadResponseDto, boolean>> = {};
 
-        if (currentLead.full_name !== fullName) {
+        function hasRealChange(prev: any, next: any) {
+            if (prev === next) return false;
+            if (prev == null && next == null) return false;
+            return true;
+        }
+
+        if (hasRealChange(currentLead.full_name, fullName)) {
             changes.full_name = true;
         }
-        if (currentLead.profile_image_url !== profileImageUrl) {
+        if (hasRealChange(currentLead.profile_image_url, profileImageUrl)) {
             changes.profile_image_url = true;
         }
-        if (currentLead.headline !== headline) {
+        if (hasRealChange(currentLead.headline, headline)) {
             changes.headline = true;
         }
-        if (currentLead.location !== location) {
+        if (hasRealChange(currentLead.location, location)) {
             changes.location = true;
         }
-        if (currentLead.last_job_title !== lastJobTitle) {
+        if (hasRealChange(currentLead.last_job_title, lastJobTitle)) {
             changes.last_job_title = true;
         }
-        if (currentLead.last_company_name !== lastCompanyName) {
+        if (hasRealChange(currentLead.last_company_name, lastCompanyName)) {
             changes.last_company_name = true;
         }
-        if (currentLead.last_company_id !== lastCompanyId) {
+        if (hasRealChange(currentLead.last_company_id, lastCompanyId)) {
             changes.last_company_id = true;
         }
-        if (!isDeepStrictEqual(currentLead.last_experience, lastExperience)) {
+        if (!isDeepStrictEqual(currentLead.last_experience, lastExperience) && !(currentLead.last_experience == null && lastExperience == null)) {
             changes.last_experience = true;
         }
-        if (!isDeepStrictEqual(currentLead.last_education, lastEducation)) {
+        if (!isDeepStrictEqual(currentLead.last_education, lastEducation) && !(currentLead.last_education == null && lastEducation == null)) {
             changes.last_education = true;
         }
-        if (currentLead.last_profile_hash !== profileHash) {
+        if (hasRealChange(currentLead.last_profile_hash, profileHash)) {
             changes.last_profile_hash = true;
         }
-        if (currentLead.last_company_domain !== lastCompanyDomain) {
+        if (hasRealChange(currentLead.last_company_domain, lastCompanyDomain)) {
             changes.last_company_domain = true;
         }
-        if (currentLead.last_company_size !== lastCompanySize) {
+        if (hasRealChange(currentLead.last_company_size, lastCompanySize)) {
             changes.last_company_size = true;
         }
-        if (currentLead.last_company_industry !== lastCompanyIndustry) {
+        if (hasRealChange(currentLead.last_company_industry, lastCompanyIndustry)) {
             changes.last_company_industry = true;
         }
 
@@ -176,28 +288,40 @@ export async function updateReporterLeadProfile(
             switch (true) {
                 case changes.full_name === true:
                     await AddAlert(leadId, 'Full Name Changed', `Lead Full Name has changed from ${currentLead.full_name} to ${fullName}`, userId, EAlertPriority.MEDIUM);
+                    break;
                 case changes.profile_image_url === true:
                     await AddAlert(leadId, 'Profile Photo Changed', `Lead Profile Photo has changed from ${currentLead.profile_image_url} to ${profileImageUrl}`, userId, EAlertPriority.LOW);
+                    break;
                 case changes.headline === true:
                     await AddAlert(leadId, 'HeadLine Changed', `Lead HeadLine has changed from ${currentLead.headline} to ${headline}`, userId, EAlertPriority.MEDIUM);
+                    break;
                 case changes.location === true:
                     await AddAlert(leadId, 'Location Changed', `Lead Location has changed from ${currentLead.location} to ${location}`, userId, EAlertPriority.HIGH);
+                    break;
                 case changes.last_job_title === true:
                     await AddAlert(leadId, 'Job Title Changed', `Lead Job Title has changed from ${currentLead.last_job_title} to ${lastJobTitle}`, userId, EAlertPriority.HIGH);
+                    break;
                 case changes.last_company_name === true:
                     await AddAlert(leadId, 'Company Name Changed', `Lead Company Name has changed from ${currentLead.last_company_name} to ${lastCompanyName}`, userId, EAlertPriority.HIGH);
+                    break;
                 case changes.last_company_id === true:
                     await AddAlert(leadId, 'Company Id Changed', `Lead Company Id has changed from ${currentLead.last_company_id} to ${lastCompanyId} Check for company changes`, userId, EAlertPriority.HIGH);
+                    break;
                 case changes.last_experience === true:
                     await AddAlert(leadId, 'Experience Changed', `Lead Experience has changed from ${currentLead.last_experience} to ${lastExperience}`, userId, EAlertPriority.HIGH);
+                    break;
                 case changes.last_education === true:
                     await AddAlert(leadId, 'Education Changed', `Lead Education has changed from ${currentLead.last_education} to ${lastEducation}`, userId, EAlertPriority.LOW);
+                    break;
                 case changes.last_company_domain === true:
                     await AddAlert(leadId, 'Company Domain Changed', `Lead Company Domain has changed from ${currentLead.last_company_domain} to ${lastCompanyDomain}`, userId, EAlertPriority.MEDIUM);
+                    break;
                 case changes.last_company_size === true:
                     await AddAlert(leadId, 'Company Size Changed', `Lead Company Size has changed from ${currentLead.last_company_size} to ${lastCompanySize}`, userId, EAlertPriority.LOW);
+                    break;
                 case changes.last_company_industry === true:
                     await AddAlert(leadId, 'Company Industry Changed', `Lead Company Industry has changed from ${currentLead.last_company_industry} to ${lastCompanyIndustry}`, userId, EAlertPriority.LOW);
+                    break;
             }
         }
         // ABHI KE LIYE NOT UPDATING KYUNKI NEED TO KEEP TRACK OF CHANGES AND THEN UPDATE
@@ -388,7 +512,7 @@ export async function getReporterLeadById(leadId: string): Promise<{
  * Throws ApplicationFailure.retryable() on errors to allow Temporal retries
  * This activity is idempotent - same accountId + linkedinUrl always returns same profile
  */
-export async function fetchReporterCompanyProfile(linkedinUrl: string): Promise<any> {
+export async function fetchReporterCompanyProfile(linkedinUrl: string) {
     try {
         const unipileService = new UnipileService();
 
@@ -402,10 +526,17 @@ export async function fetchReporterCompanyProfile(linkedinUrl: string): Promise<
         const profile = await unipileService.getCompanyProfile(accountId, identifier);
 
         if (!profile) {
-            throw ApplicationFailure.retryable('Failed to fetch company profile from Unipile', 'UnipileCompanyProfileFetchFailed');
+            throw ApplicationFailure.retryable('Failed to fetch company profile from Unipile', 'UnipileProfileFetchFailed');
         }
 
-        return profile;
+        const posts = await unipileService.getRecentPosts({ accountId, linkedInUrn: profile?.id, lastDays: 7, limit: 7, isCompany: true });
+        const postIDs = posts?.sort((a, b) => new Date(b.parsed_datetime).getTime() - new Date(a.parsed_datetime).getTime()).map(it => it.id);
+
+        if (!profile) {
+            throw ApplicationFailure.retryable('Failed to fetch profile from Unipile', 'UnipileProfileFetchFailed');
+        }
+
+        return { profile, posts: postIDs };
     } catch (error: any) {
         // If it's already an ApplicationFailure, rethrow it
         if (error instanceof ApplicationFailure) {
@@ -479,60 +610,68 @@ export async function updateReporterCompanyProfile(
         });
 
         // Track changes
+
         let changes: Partial<Record<keyof ReporterCompanyLeadResponseDto, boolean>> = {};
 
-        if (currentCompany.name !== name) {
+        function hasRealChange(prev: any, next: any) {
+            // Only true if values are different and not both null/undefined
+            if (prev === next) return false;
+            if (prev == null && next == null) return false;
+            return true;
+        }
+
+        if (hasRealChange(currentCompany.name, name)) {
             changes.name = true;
         }
-        if (currentCompany.tagline !== tagline) {
+        if (hasRealChange(currentCompany.tagline, tagline)) {
             changes.tagline = true;
         }
-        if (currentCompany.description !== description) {
+        if (hasRealChange(currentCompany.description, description)) {
             changes.description = true;
         }
-        if (currentCompany.website !== website) {
+        if (hasRealChange(currentCompany.website, website)) {
             changes.website = true;
         }
-        if (!isDeepStrictEqual(currentCompany.industry, industry)) {
+        if (!isDeepStrictEqual(currentCompany.industry, industry) && !(currentCompany.industry == null && industry == null)) {
             changes.industry = true;
         }
-        if (currentCompany.hq_city !== hqCity) {
+        if (hasRealChange(currentCompany.hq_city, hqCity)) {
             changes.hq_city = true;
         }
-        if (currentCompany.hq_country !== hqCountry) {
+        if (hasRealChange(currentCompany.hq_country, hqCountry)) {
             changes.hq_country = true;
         }
-        if (currentCompany.hq_region !== hqRegion) {
+        if (hasRealChange(currentCompany.hq_region, hqRegion)) {
             changes.hq_region = true;
         }
-        if (currentCompany.logo_url !== logoUrl) {
+        if (hasRealChange(currentCompany.logo_url, logoUrl)) {
             changes.logo_url = true;
         }
-        if (currentCompany.logo_large_url !== logoLargeUrl) {
+        if (hasRealChange(currentCompany.logo_large_url, logoLargeUrl)) {
             changes.logo_large_url = true;
         }
 
         // Employee count tracking
-        const employeeCountChanged = Number(currentCompany.employee_count_current) !== Number(employeeCountCurrent);
+        const employeeCountChanged = hasRealChange(Number(currentCompany.employee_count_current), Number(employeeCountCurrent));
         if (employeeCountChanged) {
             changes.employee_count_current = true;
             changes.employee_count_previous = true;
         }
-        if (Number(currentCompany.employee_range_from) !== Number(employeeRangeFrom)) {
+        if (hasRealChange(Number(currentCompany.employee_range_from), Number(employeeRangeFrom))) {
             changes.employee_range_from = true;
         }
-        if (Number(currentCompany.employee_range_to) !== Number(employeeRangeTo)) {
+        if (hasRealChange(Number(currentCompany.employee_range_to), Number(employeeRangeTo))) {
             changes.employee_range_to = true;
         }
 
         // Follower count tracking
-        const followersCountChanged = Number(currentCompany.followers_count_current) !== Number(followersCountCurrent);
+        const followersCountChanged = hasRealChange(Number(currentCompany.followers_count_current), Number(followersCountCurrent));
         if (followersCountChanged) {
             changes.followers_count_current = true;
             changes.followers_count_previous = true;
         }
 
-        if (currentCompany.last_profile_hash !== profileHash) {
+        if (hasRealChange(currentCompany.last_profile_hash, profileHash)) {
             changes.last_profile_hash = true;
         }
 
