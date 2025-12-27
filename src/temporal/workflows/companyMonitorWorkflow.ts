@@ -1,4 +1,4 @@
-import { log, proxyActivities, sleep, defineSignal, defineQuery, condition, setHandler } from '@temporalio/workflow';
+import { log, proxyActivities, sleep, defineSignal, defineQuery, condition, setHandler, continueAsNew } from '@temporalio/workflow';
 import { Duration } from '@temporalio/common';
 import type * as reportingActivities from '../activities/reportingActivities';
 
@@ -74,8 +74,8 @@ export async function companyMonitorWorkflow(input: CompanyMonitorWorkflowInput)
         }
 
         log.info('Waiting 7 days before next profile fetch', { companyId });
-        // const totalMs = 7 * 24 * 60 * 60 * 1000; // 7 days
-        const totalMs = 10 * 1000;
+        const totalMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+        // const totalMs = 10 * 1000;
         const checkMs = 60 * 60 * 1000; // 1 hour
         let remainingMs = totalMs;
         while (remainingMs > 0 && !isPaused) {
@@ -134,5 +134,6 @@ export async function companyMonitorWorkflow(input: CompanyMonitorWorkflowInput)
         } else {
             log.info('No profile changes detected', { companyId });
         }
+        await continueAsNew(input);
     }
 }

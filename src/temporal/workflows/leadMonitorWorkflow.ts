@@ -1,4 +1,4 @@
-import { log, proxyActivities, sleep, defineSignal, defineQuery, condition, setHandler } from '@temporalio/workflow';
+import { log, proxyActivities, sleep, defineSignal, defineQuery, condition, setHandler, continueAsNew } from '@temporalio/workflow';
 import { Duration } from '@temporalio/common';
 import type * as reportingActivities from '../activities/reportingActivities';
 
@@ -81,9 +81,9 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
 
         log.info('Waiting 24 hours before next profile fetch', { leadId });
 
-        // const totalMs = 24 * 60 * 60 * 1000; // Total wait before the repeat
+        const totalMs = 24 * 60 * 60 * 1000; // Total wait before the repeat
         // TEST TOTAL MS
-        const totalMs = 10 * 1000; // 10 seconds
+        // const totalMs = 10 * 1000; // 10 seconds
 
         const checkMs = 60 * 60 * 1000; // Wait before checking the pause status
 
@@ -146,5 +146,6 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
         } else {
             log.info('No profile changes detected', { leadId });
         }
+        await continueAsNew<typeof leadMonitorWorkflow>(input);
     }
 }
