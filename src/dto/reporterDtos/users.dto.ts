@@ -30,6 +30,7 @@ const UserResponseDto = z.object({
     password_md5: z.string(),
     updated_at: z.string().datetime().default(new Date().toISOString()),
     created_at: z.string().datetime().default(new Date().toISOString()),
+    is_superuser: z.boolean()
 });
 
 // Type exports

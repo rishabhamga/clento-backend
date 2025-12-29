@@ -42,7 +42,15 @@ class API extends ClentoAPI {
         });
 
         return res.sendOKResponse({
-            alerts: alertsWithLeads,
+            alerts: alertsWithLeads.map(it => ({
+                id: it.id,
+                title: it.title,
+                description: it.description,
+                priority: it.priority,
+                created_at: it.created_at,
+                leadName: it.leadName,
+                linkedinUrl: it.linkedinUrl,
+            })),
             pagination: {
                 page: result.page,
                 limit: result.limit,

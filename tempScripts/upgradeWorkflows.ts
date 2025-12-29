@@ -59,7 +59,11 @@ async function resetWorkflowGRPC() {
             const events = historyRes.history?.events ?? [];
 
             // Find the most recent resettable workflow task boundary
-            const lastTaskEvent = [...events].find(e => e.workflowTaskCompletedEventAttributes || e.workflowTaskTimedOutEventAttributes || e.workflowTaskFailedEventAttributes || e.workflowTaskStartedEventAttributes);
+            const lastTaskEvent = [...events].find(e => e.workflowTaskCompletedEventAttributes);
+
+            if (!lastTaskEvent) {
+                throw new Error(`No completed workflow task found for ${it.workflowId}`);
+            }
 
             if (!lastTaskEvent) {
                 throw new Error(`No resettable workflow task found for ${it.workflowId}`);
