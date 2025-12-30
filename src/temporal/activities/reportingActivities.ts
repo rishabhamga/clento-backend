@@ -308,7 +308,7 @@ export async function updateReporterLeadProfile(
                     await AddAlert(leadId, 'Company Id Changed', `Lead Company Id has changed from ${currentLead.last_company_id} to ${lastCompanyId} Check for company changes`, userId, EAlertPriority.HIGH);
                     break;
                 case changes.last_experience === true:
-                    await AddAlert(leadId, 'Experience Changed', `Lead Experience has changed from ${currentLead.last_experience} to ${lastExperience}`, userId, EAlertPriority.HIGH);
+                    await AddAlert(leadId, 'Experience Changed', `Lead Experience has changed`, userId, EAlertPriority.HIGH);
                     break;
                 case changes.last_education === true:
                     await AddAlert(leadId, 'Education Changed', `Lead Education has changed from ${currentLead.last_education} to ${lastEducation}`, userId, EAlertPriority.LOW);
