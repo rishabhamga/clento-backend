@@ -15,6 +15,7 @@ const { fetchReporterLeadProfile, updateReporterLeadProfile, getReporterLeadById
 // Signals allow external systems to communicate with the workflow without polling
 const pauseSignal = defineSignal('pause-lead-monitoring');
 const resumeSignal = defineSignal('resume-lead-monitoring');
+const rotateRunSignal = defineSignal('rotate-run');
 
 // Query definition to check monitoring status
 // Queries allow external systems to read workflow state without affecting execution
@@ -29,7 +30,13 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
 
     log.info('Starting lead monitor workflow', { leadId });
 
+    let rotateRequested = false;
     let isPaused = false;
+
+    const rotateHandler = () => {
+        rotateRequested = true;
+        log.info('Continue-as-new rotation requested', { leadId });
+    };
 
     const pauseHandler = () => {
         isPaused = true;
@@ -51,6 +58,7 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
     setHandler(pauseSignal, pauseHandler);
     setHandler(resumeSignal, resumeHandler);
     setHandler(monitoringStatusQuery, statusQueryHandler);
+    setHandler(rotateRunSignal, rotateHandler);
 
     // Step 1: Get lead details from database
     const lead = await getReporterLeadById(leadId);
@@ -81,9 +89,9 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
 
         log.info('Waiting 24 hours before next profile fetch', { leadId });
 
-        const totalMs = 24 * 60 * 60 * 1000; // Total wait before the repeat
+        // const totalMs = 24 * 60 * 60 * 1000; // Total wait before the repeat
         // TEST TOTAL MS
-        // const totalMs = 10 * 1000; // 10 seconds
+        const totalMs = 10 * 1000; // 10 seconds
 
         const checkMs = 60 * 60 * 1000; // Wait before checking the pause status
 
@@ -146,6 +154,9 @@ export async function leadMonitorWorkflow(input: LeadMonitorWorkflowInput): Prom
         } else {
             log.info('No profile changes detected', { leadId });
         }
-        await continueAsNew<typeof leadMonitorWorkflow>(input);
+        if (rotateRequested) {
+            log.info('Rotate signal received, continuing as new', { leadId });
+            await continueAsNew<typeof leadMonitorWorkflow>(input);
+        }
     }
 }

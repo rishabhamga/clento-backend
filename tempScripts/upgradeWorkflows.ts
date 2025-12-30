@@ -3,21 +3,19 @@ process.env.USE_DEVELOPMENT_QUEUE = 'false';
 
 import { TemporalClientService } from '../src/temporal/services/temporal-client.service';
 import logger from '../src/utils/logger';
-import { temporal } from '@temporalio/proto';
-import Long from 'long';
 import { getLeadMonitorTaskQueue } from '../src/utils/queueUtil';
 import supabase from '../src/config/supabase';
-import '../src/utils/expressExtensions'; // Import express extensions
-import '../src/utils/arrayExtensions'; // Import array extensions globally
-import '../src/utils/mapExtensions'; // Import map extensions globally
-import { WorkflowExecutionInfo } from '@temporalio/client';
-import { randomUUID } from 'crypto';
 
-async function resetWorkflowGRPC() {
+import '../src/utils/expressExtensions';
+import '../src/utils/arrayExtensions';
+import '../src/utils/mapExtensions';
+
+import { WorkflowExecutionInfo } from '@temporalio/client';
+
+async function sendRotateSignals() {
     try {
-        // Verify production queue is being used
         const queueName = getLeadMonitorTaskQueue();
-        logger.info('Starting workflow restart script', {
+        logger.info('Starting workflow rotate script', {
             queue: queueName,
             useDevQueue: process.env.USE_DEVELOPMENT_QUEUE,
         });
@@ -27,18 +25,18 @@ async function resetWorkflowGRPC() {
             process.exit(1);
         }
 
-        // Initialize Supabase connection
+        // Initialize Supabase
         logger.info('Initializing Supabase connection...');
         await supabase.initSupabase();
 
-        // Initialize Temporal client
+        // Initialize Temporal Client
         logger.info('Initializing Temporal client...');
         const temporalClient = TemporalClientService.getInstance();
         await temporalClient.initialize();
         const client = temporalClient.getClient();
 
-        // Step 1: List and terminate all running lead workflows
-        logger.info('Step 1: Finding and terminating all running lead workflows');
+        // List all running lead workflows
+        logger.info('Finding all running lead monitor workflows...');
         const leadWorkflowQuery = `WorkflowType = 'leadMonitorWorkflow' AND ExecutionStatus = 'Running'`;
         const leadWorkflowList = client.workflow.list({ query: leadWorkflowQuery });
 
@@ -47,46 +45,35 @@ async function resetWorkflowGRPC() {
             leadWorkflows.push(wf);
         }
 
+        logger.info(`Found ${leadWorkflows.length} workflows. Sending rotate signals...`);
+
         await leadWorkflows.forEachAsyncOneByOne(async it => {
-            // Get history
-            const historyRes = await client.workflowService.getWorkflowExecutionHistoryReverse({
-                namespace: client.options.namespace,
-                execution: {
+            try {
+                const handle = client.workflow.getHandle(it.workflowId);
+
+                await handle.signal('rotate-run'); // 👈 send your signal here
+
+                logger.info('Rotate signal sent', {
                     workflowId: it.workflowId,
                     runId: it.runId,
-                },
-            });
-            const events = historyRes.history?.events ?? [];
-
-            // Find the most recent resettable workflow task boundary
-            const lastTaskEvent = [...events].find(e => e.workflowTaskCompletedEventAttributes);
-
-            if (!lastTaskEvent) {
-                throw new Error(`No completed workflow task found for ${it.workflowId}`);
+                });
+            } catch (err: any) {
+                logger.error('Failed to send rotate signal', {
+                    workflowId: it.workflowId,
+                    runId: it.runId,
+                    error: err?.message,
+                });
             }
-
-            if (!lastTaskEvent) {
-                throw new Error(`No resettable workflow task found for ${it.workflowId}`);
-            }
-            // Perform reset and capture new runId from response
-            const resetResp = await client.workflowService.resetWorkflowExecution({
-                requestId: randomUUID(),
-                namespace: client.options.namespace,
-                workflowExecution: { workflowId: it.workflowId, runId: it.runId },
-                workflowTaskFinishEventId: lastTaskEvent.eventId,
-                reason: 'Reset to last workflow task to use latest code',
-                resetReapplyType: temporal.api.enums.v1.ResetReapplyType.RESET_REAPPLY_TYPE_NONE,
-            });
-
-            console.log(`Reset issued for ${it.workflowId} old runId=${it.runId} -> new runId=${resetResp.runId}`);
         });
+
+        logger.info('All signals processed');
     } catch (error) {
-        console.log(error);
+        logger.error('Rotate script failed', { error });
     }
 }
 
 async function main() {
-    await resetWorkflowGRPC();
+    await sendRotateSignals();
     process.exit(0);
 }
 
