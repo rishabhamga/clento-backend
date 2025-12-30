@@ -21,6 +21,12 @@ class API extends ClentoAPI {
         const acknowledged = query.getParamAsBoolean('acknowledged', false);
         const priority = query.getParamAsEnumValue(EAlertPriority, 'priority', false);
         const leadId = query.getParamAsString('leadId', false);
+        const onlyHighPriorityAlerts = query.getParamAsBoolean('highAlerts', false);
+
+        if (onlyHighPriorityAlerts) {
+            const result = await this.alertRepository.hasHighAlerts(userId);
+            return res.sendOKResponse(result);
+        }
 
         const result = await this.alertRepository.getUserAlertsPaginated(userId, page ?? 1, limit ?? 20, acknowledged, priority, leadId);
 

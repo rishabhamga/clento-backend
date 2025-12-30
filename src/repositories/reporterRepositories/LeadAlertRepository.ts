@@ -20,7 +20,7 @@ export class ReporterLeadAlertRepository extends BaseRepository<ReporterLeadAler
         limit: number,
         acknowledged?: boolean | null,
         priority?: EAlertPriority | null,
-        leadId?: string | null
+        leadId?: string | null,
     ): Promise<{
         alerts: ReporterLeadAlertResponseDto[];
         count: number;
@@ -30,11 +30,7 @@ export class ReporterLeadAlertRepository extends BaseRepository<ReporterLeadAler
         has_more: boolean;
     }> {
         try {
-            let query = this.client
-                .from(this.tableName)
-                .select('*', { count: 'exact' })
-                .eq('reporter_user_id', userId)
-                .order('created_at', { ascending: false });
+            let query = this.client.from(this.tableName).select('*', { count: 'exact' }).eq('reporter_user_id', userId).order('created_at', { ascending: false });
 
             if (acknowledged !== undefined && acknowledged !== null) {
                 query = query.eq('acknowledged', acknowledged);
@@ -82,11 +78,7 @@ export class ReporterLeadAlertRepository extends BaseRepository<ReporterLeadAler
      */
     public async getLeadAlerts(leadId: string): Promise<ReporterLeadAlertResponseDto[]> {
         try {
-            const { data, error } = await this.client
-                .from(this.tableName)
-                .select('*')
-                .eq('lead_id', leadId)
-                .order('created_at', { ascending: false });
+            const { data, error } = await this.client.from(this.tableName).select('*').eq('lead_id', leadId).order('created_at', { ascending: false });
 
             if (error) {
                 logger.error('Error getting lead alerts', { error, leadId });
@@ -120,11 +112,7 @@ export class ReporterLeadAlertRepository extends BaseRepository<ReporterLeadAler
      */
     public async acknowledgeAlerts(alertIds: string[]): Promise<ReporterLeadAlertResponseDto[]> {
         try {
-            const { data, error } = await this.client
-                .from(this.tableName)
-                .update({ acknowledged: true })
-                .in('id', alertIds)
-                .select();
+            const { data, error } = await this.client.from(this.tableName).update({ acknowledged: true }).in('id', alertIds).select();
 
             if (error) {
                 logger.error('Error acknowledging alerts', { error, alertIds });
@@ -135,6 +123,23 @@ export class ReporterLeadAlertRepository extends BaseRepository<ReporterLeadAler
         } catch (error) {
             logger.error('Error acknowledging alerts', { error, alertIds });
             throw new DatabaseError('Failed to acknowledge alerts');
+        }
+    }
+
+    public async hasHighAlerts(userId: string): Promise<{ hasAlerts: boolean; amount: number }> {
+        try {
+            const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+            const { count, error } = await this.client.from(this.tableName).select('*', { count: 'exact', head: true }).eq('reporter_user_id', userId).eq('priority', EAlertPriority.HIGH).gte('created_at', twoDaysAgo);
+
+            if (error) {
+                logger.error('Error acknowledging alerts', { error, userId });
+                throw error;
+            }
+
+            return { hasAlerts: (count ?? 0) > 0, amount: count ?? 0 };
+        } catch (error) {
+            logger.error('Error While Fetching Alerts', { error, userId });
+            throw new DatabaseError('Error While Fetching Alerts');
         }
     }
 }
