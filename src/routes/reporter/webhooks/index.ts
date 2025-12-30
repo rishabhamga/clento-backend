@@ -51,6 +51,12 @@ class API extends ClentoAPI {
                     throw new ValidationError('Invalid URL format');
                 }
 
+                const webhooks = await this.webhookRepository.getUserWebhooks(reporterUserId);
+
+                if(webhooks.length >= 3){
+                    throw new DisplayError(`Only 3 webhooks are allowed at a time`);
+                }
+
                 const webhook = await this.webhookRepository.create({
                     reporter_user_id: reporterUserId,
                     name,

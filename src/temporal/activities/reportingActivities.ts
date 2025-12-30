@@ -1,30 +1,53 @@
 // REPORTER LEAD MONITORING ACTIVITIES
 
 import { ApplicationFailure } from '@temporalio/common';
-import { ReporterLeadResponseDto, UpdateReporterLeadDto } from '../../dto/reporterDtos/leads.dto';
+import { isDeepStrictEqual } from 'node:util';
 import { ReporterCompanyLeadResponseDto, UpdateReporterCompanyLeadDto } from '../../dto/reporterDtos/companies.dto';
-import { ReporterLeadRepository } from '../../repositories/reporterRepositories/LeadRepository';
+import { EAlertPriority } from '../../dto/reporterDtos/leadAlerts.dto';
+import { ReporterLeadResponseDto, UpdateReporterLeadDto } from '../../dto/reporterDtos/leads.dto';
 import { ReporterCompanyLeadRepository } from '../../repositories/reporterRepositories/CompanyRepository';
+import { ReporterLeadAlertRepository } from '../../repositories/reporterRepositories/LeadAlertRepository';
+import { ReporterLeadRepository } from '../../repositories/reporterRepositories/LeadRepository';
+import { ReporterWebhookRepository } from '../../repositories/reporterRepositories/WebhookRepository';
 import { CsvService } from '../../services/CsvService';
+import { OpenAiManager } from '../../services/OpenAiManager';
+import { ReporterCompanyLeadService } from '../../services/ReporterCompanyLeadService';
 import { ReporterConnectedAccountService } from '../../services/ReporterConnectedAccountService';
 import { ReporterLeadService } from '../../services/ReporterLeadService';
-import { ReporterCompanyLeadService } from '../../services/ReporterCompanyLeadService';
 import { UnipileService } from '../../services/UnipileService';
 import logger from '../../utils/logger';
-import { isDeepStrictEqual } from 'node:util';
-import { ReporterLeadAlertRepository } from '../../repositories/reporterRepositories/LeadAlertRepository';
-import { EAlertPriority, CreateReporterLeadAlertDto } from '../../dto/reporterDtos/leadAlerts.dto';
-import { deepStrictEqual } from 'node:assert';
-import { UnipileClient } from 'unipile-node-sdk';
-import { post } from 'axios';
-import { ConnectedAccountRepository } from '../../repositories/ConnectedAccountRepository';
-import { OpenAiManager } from '../../services/OpenAiManager';
+import axios from 'axios';
 
 /**
  * Fetch LinkedIn profile for a reporter lead
  * Throws ApplicationFailure.retryable() on errors to allow Temporal retries
  * This activity is idempotent - same accountId + linkedinUrl always returns same profile
  */
+const HitWebhook = async (type: 'COMPANY' | 'PERSON', leadId: string, userId: string, valueChanged: string, previousValue: any, updatedValue: any, alert: string) => {
+    const webhookRepository = new ReporterWebhookRepository();
+    const leadRepository = new ReporterLeadRepository();
+
+    const webhooks = await webhookRepository.getUserWebhooks(userId);
+    if (!webhooks || webhooks.length === 0) {
+        console.log('No webhooks skipping');
+        return;
+    }
+
+    const lead = await leadRepository.findById(leadId);
+
+    const postBody = {
+        type,
+        lead,
+        valueChanged,
+        previousValue,
+        updatedValue,
+        alert,
+    };
+
+    webhooks.forEachAsyncParallel(async it => {
+        axios.post(it.url, postBody).catch(it => console.log('Error While Hitting the Webhooks', it.response?.data));
+    });
+};
 export async function fetchReporterLeadProfile(linkedinUrl: string): Promise<{ profile: any; posts: string[] | undefined }> {
     try {
         const unipileService = new UnipileService();
@@ -66,9 +89,10 @@ export async function fetchReporterLeadProfile(linkedinUrl: string): Promise<{ p
  * This activity is idempotent - multiple calls with same data produce same result
  */
 
-const AddAlert = async (leadId: string, title: string, description: string, userId: string, priority: EAlertPriority) => {
+const AddAlert = async (leadId: string, title: string, description: string, userId: string, priority: EAlertPriority, type: 'COMPANY' | 'PERSON', previousValue: any, updatedValue: any, valueChanged: string) => {
     const alertRepository = new ReporterLeadAlertRepository();
     const alert = await alertRepository.create({ lead_id: leadId, title, description, reporter_user_id: userId, priority });
+    await HitWebhook(type, leadId, userId, valueChanged, previousValue, updatedValue, description);
     return alert;
 };
 
@@ -110,9 +134,9 @@ export async function updateLeadPost(leadId: string, isInitialFetch: boolean = f
         const { summary, isCritical } = await openAiManager.summarize(post.text);
 
         if (isCritical) {
-            await AddAlert(leadId, 'New Post By Lead', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.HIGH);
+            await AddAlert(leadId, 'New Post By Lead', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.HIGH, 'PERSON', {}, {}, 'post');
         } else {
-            await AddAlert(leadId, 'New Post By Lead', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.LOW);
+            await AddAlert(leadId, 'New Post By Lead', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.LOW, 'PERSON', {}, {}, 'post');
         }
     }
     const updatedPosts = [postId, ...lastPosts].slice(0, 7);
@@ -157,9 +181,9 @@ export async function updateCompanyPost(leadId: string, isInitialFetch: boolean 
         const { summary, isCritical } = await openAiManager.summarize(post.text);
 
         if (isCritical) {
-            await AddAlert(leadId, 'New Post By Company', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.HIGH);
+            await AddAlert(leadId, 'New Post By Company', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.HIGH, 'COMPANY', {}, {}, 'post');
         } else {
-            await AddAlert(leadId, 'New Post By Company', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.LOW);
+            await AddAlert(leadId, 'New Post By Company', summary ?? 'AI failed to summarize the post', userId, EAlertPriority.LOW, 'COMPANY', {}, {}, 'post');
         }
     }
     const updatedPosts = [postId, ...lastPosts].slice(0, 7);
@@ -287,40 +311,40 @@ export async function updateReporterLeadProfile(
         if (!isInitialFetch) {
             switch (true) {
                 case changes.full_name === true:
-                    await AddAlert(leadId, 'Full Name Changed', `Lead Full Name has changed from ${currentLead.full_name} to ${fullName}`, userId, EAlertPriority.MEDIUM);
+                    await AddAlert(leadId, 'Full Name Changed', `Lead Full Name has changed from ${currentLead.full_name} to ${fullName}`, userId, EAlertPriority.MEDIUM, 'PERSON', currentLead.full_name, fullName, 'full_name');
                     break;
                 case changes.profile_image_url === true:
-                    await AddAlert(leadId, 'Profile Photo Changed', `Lead Profile Photo has changed from ${currentLead.profile_image_url} to ${profileImageUrl}`, userId, EAlertPriority.LOW);
+                    await AddAlert(leadId, 'Profile Photo Changed', `Lead Profile Photo has changed`, userId, EAlertPriority.LOW, 'PERSON', currentLead.profile_image_url, profileImageUrl, 'profile_image_url');
                     break;
                 case changes.headline === true:
-                    await AddAlert(leadId, 'HeadLine Changed', `Lead HeadLine has changed from ${currentLead.headline} to ${headline}`, userId, EAlertPriority.MEDIUM);
+                    await AddAlert(leadId, 'HeadLine Changed', `Lead HeadLine has changed from ${currentLead.headline} to ${headline}`, userId, EAlertPriority.MEDIUM, 'PERSON', currentLead.headline, headline, 'headline');
                     break;
                 case changes.location === true:
-                    await AddAlert(leadId, 'Location Changed', `Lead Location has changed from ${currentLead.location} to ${location}`, userId, EAlertPriority.HIGH);
+                    await AddAlert(leadId, 'Location Changed', `Lead Location has changed from ${currentLead.location} to ${location}`, userId, EAlertPriority.HIGH, 'PERSON', currentLead.location, location, 'location');
                     break;
                 case changes.last_job_title === true:
-                    await AddAlert(leadId, 'Job Title Changed', `Lead Job Title has changed from ${currentLead.last_job_title} to ${lastJobTitle}`, userId, EAlertPriority.HIGH);
+                    await AddAlert(leadId, 'Job Title Changed', `Lead Job Title has changed from ${currentLead.last_job_title} to ${lastJobTitle}`, userId, EAlertPriority.HIGH, 'PERSON', currentLead.last_job_title, lastJobTitle, 'last_job_title');
                     break;
                 case changes.last_company_name === true:
-                    await AddAlert(leadId, 'Company Name Changed', `Lead Company Name has changed from ${currentLead.last_company_name} to ${lastCompanyName}`, userId, EAlertPriority.HIGH);
+                    await AddAlert(leadId, 'Company Name Changed', `Lead Company Name has changed from ${currentLead.last_company_name} to ${lastCompanyName}`, userId, EAlertPriority.HIGH, 'PERSON', currentLead.last_company_name, lastCompanyName, 'last_company_name');
                     break;
                 case changes.last_company_id === true:
-                    await AddAlert(leadId, 'Company Id Changed', `Lead Company Id has changed from ${currentLead.last_company_id} to ${lastCompanyId} Check for company changes`, userId, EAlertPriority.HIGH);
+                    await AddAlert(leadId, 'Company Id Changed', `Lead Company Id has changed from ${currentLead.last_company_id} to ${lastCompanyId} Check for company changes`, userId, EAlertPriority.HIGH, 'PERSON', currentLead.last_company_id, lastCompanyId, 'last_company_id');
                     break;
                 case changes.last_experience === true:
-                    await AddAlert(leadId, 'Experience Changed', `Lead Experience has changed`, userId, EAlertPriority.HIGH);
+                    await AddAlert(leadId, 'Experience Changed', `Lead Experience has changed`, userId, EAlertPriority.HIGH, 'PERSON', currentLead.last_experience, lastExperience, 'last_experience');
                     break;
                 case changes.last_education === true:
-                    await AddAlert(leadId, 'Education Changed', `Lead Education has changed from ${currentLead.last_education} to ${lastEducation}`, userId, EAlertPriority.LOW);
+                    await AddAlert(leadId, 'Education Changed', `Lead Education has changed from ${currentLead.last_education} to ${lastEducation}`, userId, EAlertPriority.LOW, 'PERSON', currentLead.last_education, lastEducation, 'last_education');
                     break;
                 case changes.last_company_domain === true:
-                    await AddAlert(leadId, 'Company Domain Changed', `Lead Company Domain has changed from ${currentLead.last_company_domain} to ${lastCompanyDomain}`, userId, EAlertPriority.MEDIUM);
+                    await AddAlert(leadId, 'Company Domain Changed', `Lead Company Domain has changed from ${currentLead.last_company_domain} to ${lastCompanyDomain}`, userId, EAlertPriority.MEDIUM, 'PERSON', currentLead.last_company_domain, lastCompanyDomain, 'last_company_domain');
                     break;
                 case changes.last_company_size === true:
-                    await AddAlert(leadId, 'Company Size Changed', `Lead Company Size has changed from ${currentLead.last_company_size} to ${lastCompanySize}`, userId, EAlertPriority.LOW);
+                    await AddAlert(leadId, 'Company Size Changed', `Lead Company Size has changed from ${currentLead.last_company_size} to ${lastCompanySize}`, userId, EAlertPriority.LOW, 'PERSON', currentLead.last_company_size, lastCompanySize, 'last_company_size');
                     break;
                 case changes.last_company_industry === true:
-                    await AddAlert(leadId, 'Company Industry Changed', `Lead Company Industry has changed from ${currentLead.last_company_industry} to ${lastCompanyIndustry}`, userId, EAlertPriority.LOW);
+                    await AddAlert(leadId, 'Company Industry Changed', `Lead Company Industry has changed from ${currentLead.last_company_industry} to ${lastCompanyIndustry}`, userId, EAlertPriority.LOW, 'PERSON', currentLead.last_company_industry, lastCompanyIndustry, 'last_company_industry');
                     break;
             }
         }
@@ -703,37 +727,37 @@ export async function updateReporterCompanyProfile(
         if (!isInitialFetch) {
             switch (true) {
                 case changes.name === true:
-                    await AddAlert(currentCompany.id, 'Company Name Changed', `Company Name has changed from ${currentCompany.name} to ${name}`, userId, EAlertPriority.HIGH);
+                    await AddAlert(currentCompany.id, 'Company Name Changed', `Company Name has changed from ${currentCompany.name} to ${name}`, userId, EAlertPriority.HIGH, 'COMPANY', currentCompany.name, name, 'name');
                 case changes.tagline === true:
-                    await AddAlert(currentCompany.id, 'Company Tagline Changed', `Company Tagline has changed from ${currentCompany.tagline} to ${tagline}`, userId, EAlertPriority.MEDIUM);
+                    await AddAlert(currentCompany.id, 'Company Tagline Changed', `Company Tagline has changed from ${currentCompany.tagline} to ${tagline}`, userId, EAlertPriority.MEDIUM, 'COMPANY', currentCompany.tagline, tagline, 'tagline');
                 case changes.description === true:
-                    await AddAlert(currentCompany.id, 'Company Description Changed', `Company Description has changed from ${currentCompany.description} to ${description}`, userId, EAlertPriority.MEDIUM);
+                    await AddAlert(currentCompany.id, 'Company Description Changed', `Company Description has changed from ${currentCompany.description} to ${description}`, userId, EAlertPriority.MEDIUM, 'COMPANY', currentCompany.description, description, 'description');
                 case changes.website === true:
-                    await AddAlert(currentCompany.id, 'Company Website Changed', `Company Website has changed from ${currentCompany.website} to ${website}`, userId, EAlertPriority.MEDIUM);
+                    await AddAlert(currentCompany.id, 'Company Website Changed', `Company Website has changed from ${currentCompany.website} to ${website}`, userId, EAlertPriority.MEDIUM, 'COMPANY', currentCompany.website, website, 'website');
                 case changes.industry === true:
-                    await AddAlert(currentCompany.id, 'Company Industry Changed', `Company Industry has changed from ${currentCompany.industry} to ${industry}`, userId, EAlertPriority.HIGH);
+                    await AddAlert(currentCompany.id, 'Company Industry Changed', `Company Industry has changed from ${currentCompany.industry} to ${industry}`, userId, EAlertPriority.HIGH, 'COMPANY', currentCompany.industry, industry, 'industry');
                 case changes.hq_city === true:
-                    await AddAlert(currentCompany.id, 'Company HQ City Changed', `Company HQ City has changed from ${currentCompany.hq_city} to ${hqCity}`, userId, EAlertPriority.HIGH);
+                    await AddAlert(currentCompany.id, 'Company HQ City Changed', `Company HQ City has changed from ${currentCompany.hq_city} to ${hqCity}`, userId, EAlertPriority.HIGH, 'COMPANY', currentCompany.hq_city, hqCity, 'hq_city');
                 case changes.hq_country === true:
-                    await AddAlert(currentCompany.id, 'Company HQ Country Changed', `Company HQ Country has changed from ${currentCompany.hq_country} to ${hqCountry}`, userId, EAlertPriority.HIGH);
+                    await AddAlert(currentCompany.id, 'Company HQ Country Changed', `Company HQ Country has changed from ${currentCompany.hq_country} to ${hqCountry}`, userId, EAlertPriority.HIGH, 'COMPANY', currentCompany.hq_country, hqCountry, 'hq_country');
                 case changes.hq_region === true:
-                    await AddAlert(currentCompany.id, 'Company HQ Region Changed', `Company HQ Region has changed from ${currentCompany.hq_region} to ${hqRegion}`, userId, EAlertPriority.HIGH);
+                    await AddAlert(currentCompany.id, 'Company HQ Region Changed', `Company HQ Region has changed from ${currentCompany.hq_region} to ${hqRegion}`, userId, EAlertPriority.HIGH, 'COMPANY', currentCompany.hq_region, hqRegion, 'hq_region');
                 case changes.logo_url === true:
-                    await AddAlert(currentCompany.id, 'Company Logo Changed', `Company Logo has changed`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Logo Changed', `Company Logo has changed`, userId, EAlertPriority.LOW, 'COMPANY', currentCompany.logo_url, logoUrl, 'logo_url');
                 case changes.logo_large_url === true:
-                    await AddAlert(currentCompany.id, 'Company Logo Large Changed', `Company Logo Large has changed`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Logo Large Changed', `Company Logo Large has changed`, userId, EAlertPriority.LOW, 'COMPANY', currentCompany.logo_large_url, logoLargeUrl, 'logo_large_url');
                 case changes.employee_count_current === true:
-                    await AddAlert(currentCompany.id, 'Company Employee Count Changed', `Company Employee Count has changed from ${currentCompany.employee_count_current} to ${employeeCountCurrent}`, userId, EAlertPriority.MEDIUM);
+                    await AddAlert(currentCompany.id, 'Company Employee Count Changed', `Company Employee Count has changed from ${currentCompany.employee_count_current} to ${employeeCountCurrent}`, userId, EAlertPriority.MEDIUM, 'COMPANY', currentCompany.employee_count_current, employeeCountCurrent, 'employee_count_current');
                 case changes.employee_count_previous === true:
-                    await AddAlert(currentCompany.id, 'Company Employee Count Previous Changed', `Company Employee Count Previous has changed from ${currentCompany.employee_count_previous} to ${employeeCountChanged ? currentCompany.employee_count_current : currentCompany.employee_count_previous}`, userId, EAlertPriority.MEDIUM);
+                    await AddAlert(currentCompany.id, 'Company Employee Count Previous Changed', `Company Employee Count Previous has changed from ${currentCompany.employee_count_previous} to ${employeeCountChanged ? currentCompany.employee_count_current : currentCompany.employee_count_previous}`, userId, EAlertPriority.MEDIUM, 'COMPANY', currentCompany.employee_count_previous, employeeCountChanged ? currentCompany.employee_count_current : currentCompany.employee_count_previous, 'employee_count_previous');
                 case changes.employee_range_from === true:
-                    await AddAlert(currentCompany.id, 'Company Employee Range From Changed', `Company Employee Range From has changed from ${currentCompany.employee_range_from} to ${employeeRangeFrom}`, userId, EAlertPriority.MEDIUM);
+                    await AddAlert(currentCompany.id, 'Company Employee Range From Changed', `Company Employee Range From has changed from ${currentCompany.employee_range_from} to ${employeeRangeFrom}`, userId, EAlertPriority.MEDIUM, 'COMPANY', currentCompany.employee_range_from, employeeRangeFrom, 'employee_range_from');
                 case changes.employee_range_to === true:
-                    await AddAlert(currentCompany.id, 'Company Employee Range To Changed', `Company Employee Range To has changed from ${currentCompany.employee_range_to} to ${employeeRangeTo}`, userId, EAlertPriority.MEDIUM);
+                    await AddAlert(currentCompany.id, 'Company Employee Range To Changed', `Company Employee Range To has changed from ${currentCompany.employee_range_to} to ${employeeRangeTo}`, userId, EAlertPriority.MEDIUM, 'COMPANY', currentCompany.employee_range_to, employeeRangeTo, 'employee_range_to');
                 case changes.followers_count_current === true:
-                    await AddAlert(currentCompany.id, 'Company Followers Count Changed', `Company Followers Count has changed from ${currentCompany.followers_count_current} to ${followersCountCurrent}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Followers Count Changed', `Company Followers Count has changed from ${currentCompany.followers_count_current} to ${followersCountCurrent}`, userId, EAlertPriority.LOW, 'COMPANY', currentCompany.followers_count_current, followersCountCurrent, 'followers_count_current');
                 case changes.followers_count_previous === true:
-                    await AddAlert(currentCompany.id, 'Company Followers Count Previous Changed', `Company Followers Count Previous has changed from ${currentCompany.followers_count_previous} to ${followersCountChanged ? currentCompany.followers_count_current : currentCompany.followers_count_previous}`, userId, EAlertPriority.LOW);
+                    await AddAlert(currentCompany.id, 'Company Followers Count Previous Changed', `Company Followers Count Previous has changed from ${currentCompany.followers_count_previous} to ${followersCountChanged ? currentCompany.followers_count_current : currentCompany.followers_count_previous}`, userId, EAlertPriority.LOW, 'COMPANY', currentCompany.followers_count_previous, followersCountChanged ? currentCompany.followers_count_current : currentCompany.followers_count_previous, 'followers_count_previous');
             }
         }
 
