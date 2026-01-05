@@ -91,7 +91,7 @@ export async function fetchReporterLeadProfile(linkedinUrl: string): Promise<{ p
 
 const AddAlert = async (leadId: string, title: string, description: string, userId: string, priority: EAlertPriority, type: 'COMPANY' | 'PERSON', previousValue: any, updatedValue: any, valueChanged: string) => {
     const alertRepository = new ReporterLeadAlertRepository();
-    const alert = await alertRepository.create({ lead_id: leadId, title, description, reporter_user_id: userId, priority });
+    const alert = await alertRepository.create({ lead_id: leadId, title, description, reporter_user_id: userId, priority, previous_value: { previousValue }, updated_value: { updatedValue } });
     await HitWebhook(type, leadId, userId, valueChanged, previousValue, updatedValue, description);
     return alert;
 };

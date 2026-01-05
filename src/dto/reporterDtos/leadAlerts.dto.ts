@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-export enum EAlertPriority{
+export enum EAlertPriority {
     LOW = 'LOW',
     MEDIUM = 'MEDIUM',
-    HIGH = 'HIGH'
+    HIGH = 'HIGH',
 }
 
 // Create Reporter Lead Alert DTO
@@ -14,6 +14,8 @@ export const CreateReporterLeadAlertDto = z.object({
     description: z.string().min(1),
     priority: z.nativeEnum(EAlertPriority),
     acknowledged: z.boolean().default(false).optional(),
+    previous_value: z.record(z.string(), z.any()).optional(),
+    updated_value: z.record(z.string(), z.any()).optional()
 });
 
 // Update Reporter Lead Alert DTO
@@ -22,6 +24,8 @@ export const UpdateReporterLeadAlertDto = z.object({
     description: z.string().min(1).optional(),
     priority: z.nativeEnum(EAlertPriority).optional(),
     acknowledged: z.boolean().optional(),
+    previous_value: z.record(z.string(), z.any()).optional(),
+    updated_value: z.record(z.string(), z.any()).optional()
 });
 
 // Reporter Lead Alert Response DTO
@@ -34,6 +38,8 @@ export const ReporterLeadAlertResponseDto = z.object({
     priority: z.nativeEnum(EAlertPriority),
     acknowledged: z.boolean(),
     created_at: z.string().datetime(),
+    previous_value: z.record(z.string(), z.any()).nullable(),
+    updated_value: z.record(z.string(), z.any()).nullable(),
 });
 
 // Type exports
