@@ -12,6 +12,16 @@ class API extends ClentoAPI {
 
     private userRepository = new UserRepository();
 
+    public GET = async (req: Request, res: Response) => {
+        const userId = req.reporter.id;
+        const user = await this.userRepository.findById(userId);
+
+        if(!user){
+            throw new DisplayError('User not found');
+        }
+        return res.sendOKResponse({ allowed: user?.is_superuser });
+    }
+
     public POST = async (req: Request, res: Response) => {
         const csvFile = req.getFiles().getFile('file');
         const prompt = req.getBody().getParamAsString('prompt');
