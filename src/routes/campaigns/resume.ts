@@ -1,15 +1,16 @@
 import { Request, Response } from 'express';
-import { TemporalService } from '../../services/TemporalService';
+import { CampaignManager } from '../../services/crons/CampaignWorkflows';
 import { CampaignService } from '../../services/CampaignService';
-import { ForbiddenError, NotFoundError } from '../../errors/AppError';
+import { DisplayError, ForbiddenError, NotFoundError } from '../../errors/AppError';
 import ClentoAPI from '../../utils/apiUtil';
 import '../../utils/expressExtensions';
+import { CampaignStatus } from '../../dto/campaigns.dto';
 
 class ResumeCampaignAPI extends ClentoAPI {
     public path = '/api/campaigns/resume';
     public authType: 'DASHBOARD' = 'DASHBOARD';
 
-    private temporalService = TemporalService.getInstance();
+    private campaignManager = new CampaignManager();
     private campaignService = new CampaignService();
 
     public POST = async (req: Request, res: Response): Promise<Response> => {
@@ -26,7 +27,15 @@ class ResumeCampaignAPI extends ClentoAPI {
             throw new ForbiddenError('You are not allowed to access this campaign');
         }
 
-        await this.temporalService.resumeCampaign(campaignId);
+        if (campaign?.status === CampaignStatus.COMPLETED) {
+            throw new DisplayError('Campaign is Completed');
+        }
+
+        if (campaign?.status === CampaignStatus.IN_PROGRESS) {
+            throw new DisplayError('Campaign is already running');
+        }
+
+        await this.campaignManager.resumeCampaign(campaignId);
 
         return res.sendOKResponse({ message: 'Campaign resumed successfully' });
     };

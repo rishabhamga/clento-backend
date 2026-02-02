@@ -1,15 +1,16 @@
 import { Request, Response } from 'express';
-import { TemporalService } from '../../services/TemporalService';
+import { CampaignManager } from '../../services/crons/CampaignWorkflows';
 import { CampaignService } from '../../services/CampaignService';
-import { ForbiddenError, NotFoundError } from '../../errors/AppError';
+import { DisplayError, ForbiddenError, NotFoundError } from '../../errors/AppError';
 import ClentoAPI from '../../utils/apiUtil';
 import '../../utils/expressExtensions';
+import { CampaignStatus } from '../../dto/campaigns.dto';
 
 class PauseCampaignAPI extends ClentoAPI {
     public path = '/api/campaigns/pause';
     public authType: 'DASHBOARD' = 'DASHBOARD';
 
-    private temporalService = TemporalService.getInstance();
+    private campaignManager = new CampaignManager();
     private campaignService = new CampaignService();
 
     public POST = async (req: Request, res: Response): Promise<Response> => {
@@ -26,7 +27,15 @@ class PauseCampaignAPI extends ClentoAPI {
             throw new ForbiddenError('You are not allowed to access this campaign');
         }
 
-        await this.temporalService.pauseCampaign(campaignId);
+        if (campaign?.status === CampaignStatus.COMPLETED) {
+            throw new DisplayError('Campaign is Completed');
+        }
+
+        if (campaign?.status === CampaignStatus.PAUSED) {
+            throw new DisplayError('Campaign is already PAUSED');
+        }
+
+        await this.campaignManager.pauseCampaign(campaignId);
 
         return res.sendOKResponse({ message: 'Campaign paused successfully' });
     };

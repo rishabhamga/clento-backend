@@ -1,15 +1,16 @@
 import { Request, Response } from 'express';
-import { TemporalService } from '../../services/TemporalService';
+import { CampaignManager } from '../../services/crons/CampaignWorkflows';
 import ClentoAPI from '../../utils/apiUtil';
 import '../../utils/expressExtensions';
 import { CampaignService } from '../../services/CampaignService';
 import { DisplayError } from '../../errors/AppError';
+import { CampaignStatus } from '../../dto/campaigns.dto';
 
 class StartCampaignAPI extends ClentoAPI {
     public path = '/api/campaigns/start';
     public authType: 'DASHBOARD' = 'DASHBOARD';
 
-    private temporalService = TemporalService.getInstance();
+    private campaignManager = new CampaignManager();
     private campaignService = new CampaignService();
 
     public POST = async (req: Request, res: Response): Promise<Response> => {
@@ -19,8 +20,16 @@ class StartCampaignAPI extends ClentoAPI {
         if(campaign?.organization_id !== req.organizationId) {
             throw new DisplayError('You are not allowed to access this campaign');
         }
-        
-        await this.temporalService.startCampaign(campaignId);
+
+        if(campaign?.status === CampaignStatus.COMPLETED) {
+            throw new DisplayError('Campaign is Completed');
+        }
+
+        if(campaign?.status === CampaignStatus.IN_PROGRESS) {
+            throw new DisplayError('Campaign is already running');
+        }
+
+        await this.campaignManager.startCampaign(campaignId);
 
         return res.sendOKResponse({ message: 'Campaign Started' });
     };
